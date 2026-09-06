@@ -64,11 +64,14 @@ if (Test-Backend) {
 if ($SkipWorkbook) {
   Write-Host '[workbook] スキップ'
 } else {
-  try {
-    & $py (Join-Path $root 'bridge\build_workbook.py') --set-id $SetId
+  $wbOut = & $py (Join-Path $root 'bridge\build_workbook.py') --set-id $SetId 2>&1
+  if ($LASTEXITCODE -eq 0) {
     Write-Host "[workbook] 生成: $workbook"
-  } catch {
-    Write-Warning "[workbook] 生成に失敗（Excel で開いたまま？）。既存の $workbook を使います。 $_"
+  } elseif (Test-Path $workbook) {
+    Write-Warning '[workbook] 作り直せませんでした（Excel で開いたまま？）。既存のブックを使います。銘柄を変えたら Excel を閉じて再実行してください。'
+  } else {
+    $wbOut | ForEach-Object { Write-Host $_ }
+    throw '[workbook] 生成に失敗し、既存のブックもありません。Excel を閉じて再実行してください。'
   }
 }
 if (-not (Test-Path $workbook)) { throw "RSS ブックがありません: $workbook" }
