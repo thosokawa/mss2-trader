@@ -30,7 +30,7 @@
 | | 内容 | 状態 |
 |---|---|---|
 | P0 | 雛形・DB・銘柄セットUI・履歴取得・バックテスター | 済 |
-| P1 | `bridge/` 実装、tick→足 集約、ライブ気配画面 | 済（Windows 実機での RSS 疎通確認が残り） |
+| P1 | `bridge/` 実装、tick→足 集約、ライブ気配画面 | 済（Windows 実機で RSS 疎通確認まで完了 2026-09） |
 | P2 | live エンジンで足確定→Slack 通知（＝通知だけ完成） | 済（Slack Webhook を設定して実疎通確認が残り） |
 | P3 | PaperBroker でペーパートレード、成績表示 | ← 次 |
 | P4 | RssBroker で実発注、risk.py 完全実装、少額試験運用 | 未 |
@@ -70,11 +70,32 @@ cp config/config.example.toml config/config.toml   # 任意（無くても examp
 
 ### Windows 実機（RSS）
 
+初回セットアップ:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt -r requirements-bridge.txt
+Copy-Item config\config.example.toml config\config.toml
+# config.toml の [bridge] workbook_path を .\bridge\rss_bridge.xlsx の絶対パスに
 ```
-py -3.13 -m venv .venv && .venv\Scripts\pip install -r requirements-bridge.txt
-python bridge\build_workbook.py --set-id 1        # rss_bridge.xlsx 生成
-# マーケットスピードII にログイン → rss_bridge.xlsx を Excel で開く
-python bridge\bridge.py                            # xlwings で読み取り → backend へ
+
+日常運用（PowerShell を2つ使う）:
+
+```powershell
+# ターミナル1: backend（起動しっぱなし）
+.venv\Scripts\python -m app.main                   # http://127.0.0.1:8000
+
+# 銘柄セットは Web UI (/symbol-sets) で編集。変更したらブックを作り直す:
+.venv\Scripts\python bridge\build_workbook.py --set-id 1     # bridge\rss_bridge.xlsx
+
+# マーケットスピードII にログイン（RSS 有効）→ rss_bridge.xlsx を Excel で開く
+
+# ターミナル2: bridge（xlwings で読み取り → backend へ）
+.venv\Scripts\python bridge\bridge.py
+
+# RSS 項目名を実機確認したいとき:
+.venv\Scripts\python bridge\build_workbook.py --probe 7203  # rss_probe.xlsx を Excel で開く
+.venv\Scripts\python bridge\bridge.py --dump                # quotes シートの生値を表示
 ```
 
 Web UI:
