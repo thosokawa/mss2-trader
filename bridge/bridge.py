@@ -24,6 +24,12 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+# Windows のコンソール（cp932）でも日本語フィールド名を print できるように
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:  # noqa: BLE001
+    pass
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -39,10 +45,21 @@ FIELD_KEY = {"現在値": "price", "出来高": "volume", "最良買気配値": 
 # ---- 通常モード: Excel から読む ------------------------------------------------
 
 
-def read_quotes_via_xlwings(workbook_path: str) -> list[dict]:
+def _open_book(workbook_path: str):
     import xlwings as xw  # Windows のみ
 
-    book = xw.Book(workbook_path)
+    p = Path(workbook_path)
+    for b in xw.books:
+        try:
+            if Path(b.fullname).resolve() == p.resolve():
+                return b
+        except Exception:  # noqa: BLE001
+            continue
+    return xw.Book(workbook_path)
+
+
+def read_quotes_via_xlwings(workbook_path: str) -> list[dict]:
+    book = _open_book(workbook_path)
     ws = book.sheets["quotes"]
     table = ws.range("A2").expand().value or []
     if table and not isinstance(table[0], list):
@@ -63,6 +80,22 @@ def read_quotes_via_xlwings(workbook_path: str) -> list[dict]:
         if q.get("price"):
             quotes.append(q)
     return quotes
+
+
+def dump_workbook(workbook_path: str) -> None:
+    """quotes シートの生の値を型付きで表示する（RSS フィールド名の実地確認用）。"""
+    book = _open_book(workbook_path)
+    ws = book.sheets["quotes"]
+    rng = ws.used_range
+    print(f"workbook : {book.fullname}")
+    print(f"used_range: {rng.address}")
+    vals = rng.value
+    if vals and not isinstance(vals[0], list):
+        vals = [vals]
+    for r, row in enumerate(vals, start=1):
+        cells = "  ".join(f"C{c}={v!r}({type(v).__name__})" for c, v in enumerate(row, start=1))
+        print(f"  R{r}: {cells}")
+    print("\nheader 行(R1)が RSS の項目名。数値が返っていない列は項目名が違う可能性大。")
 
 
 # ---- シミュレーションモード -------------------------------------------------
@@ -117,12 +150,18 @@ def main() -> None:
     cfg = get_config().bridge
     ap = argparse.ArgumentParser()
     ap.add_argument("--simulate", action="store_true")
+    ap.add_argument("--dump", action="store_true", help="Excel の生の値を表示して終了（RSS 項目名の確認用）")
     ap.add_argument("--codes", help="カンマ区切り 例: 7203,6501")
     ap.add_argument("--set-id", type=int)
     ap.add_argument("--once", action="store_true")
     ap.add_argument("--interval", type=float, default=cfg.poll_interval_sec)
     ap.add_argument("--ingest-url", default=cfg.ingest_url)
+    ap.add_argument("--workbook", default=cfg.workbook_path, help="rss_bridge.xlsx のパス")
     args = ap.parse_args()
+
+    if args.dump:
+        dump_workbook(args.workbook)
+        return
 
     if args.simulate:
         codes = (
@@ -139,8 +178,8 @@ def main() -> None:
         source = lambda: sim.poll()  # noqa: E731
         print(f"bridge (simulate): {codes} -> {args.ingest_url} ({args.interval}s)")
     else:
-        source = lambda: read_quotes_via_xlwings(cfg.workbook_path)  # noqa: E731
-        print(f"bridge: {cfg.workbook_path} -> {args.ingest_url} ({args.interval}s)")
+        source = lambda: read_quotes_via_xlwings(args.workbook)  # noqa: E731
+        print(f"bridge: {args.workbook} -> {args.ingest_url} ({args.interval}s)")
 
     client = httpx.Client(timeout=10)
     while True:

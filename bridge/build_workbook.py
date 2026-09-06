@@ -32,6 +32,18 @@ from app.models import SymbolSet, SymbolSetItem  # noqa: E402
 # bridge.py の FIELDS と必ず一致させること
 FIELDS = ["現在値", "出来高", "前日比", "最良買気配値", "最良売気配値"]
 
+# --probe 用。RssMarket の項目名候補を総当たりで並べ、Windows で開いてどれが
+# 数値を返すか目視確認する（楽天証券 RSS リファレンス未確定のため）。
+PROBE_FIELDS = [
+    "銘柄名称", "現在値", "現在値時刻", "出来高", "売買代金",
+    "始値", "高値", "安値", "前日終値", "前日比", "前日比率",
+    "最良売気配値", "最良買気配値",
+    "最良売気配値1", "最良買気配値1",
+    "売気配値1", "買気配値1",
+    "最良売気配数量", "最良買気配数量",
+    "VWAP", "約定回数", "市場コード",
+]
+
 
 def load_codes(set_id: int) -> list[str]:
     init_db()
@@ -71,19 +83,48 @@ def build(codes: list[str], out_path: Path) -> None:
     print("Windows の Excel で開くと RSS 関数が評価されます（マーケットスピードII ログイン必須）。")
 
 
+def build_probe(code: str, out_path: Path) -> None:
+    """1銘柄ぶん、項目名候補を縦に並べたブックを生成する。"""
+    try:
+        from openpyxl import Workbook
+    except ImportError as e:
+        raise SystemExit("openpyxl が必要です: pip install openpyxl") from e
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "probe"
+    ws.append(["項目名", f'RssMarket("{code}", 項目名)'])
+    for i, f in enumerate(PROBE_FIELDS, start=2):
+        ws.cell(row=i, column=1, value=f)
+        ws.cell(row=i, column=2, value=f'=RssMarket("{code}","{f}")')
+    ws.column_dimensions["A"].width = 18
+    ws.column_dimensions["B"].width = 22
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(out_path)
+    print(f"生成: {out_path}  (probe: {code}, {len(PROBE_FIELDS)} 項目)")
+    print("Excel で開き、B列に数値/文字が返る項目名をメモ → FIELDS を修正する。")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--set-id", type=int)
     ap.add_argument("--codes", help="カンマ区切り 例: 7203,6501")
+    ap.add_argument("--probe", help="項目名の実地確認用ブックを作る（1銘柄コード）")
     ap.add_argument("--out", default=str(Path(__file__).parent / "rss_bridge.xlsx"))
     args = ap.parse_args()
+
+    if args.probe:
+        default_out = Path(__file__).parent / "rss_probe.xlsx"
+        out = Path(args.out) if args.out != str(Path(__file__).parent / "rss_bridge.xlsx") else default_out
+        build_probe(args.probe.strip(), out)
+        return
 
     if args.codes:
         codes = [c.strip() for c in args.codes.split(",") if c.strip()]
     elif args.set_id:
         codes = load_codes(args.set_id)
     else:
-        raise SystemExit("--set-id か --codes を指定してください")
+        raise SystemExit("--set-id か --codes か --probe を指定してください")
     build(codes, Path(args.out))
 
 
