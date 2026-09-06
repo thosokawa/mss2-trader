@@ -76,8 +76,10 @@ def read_quotes_via_xlwings(workbook_path: str) -> list[dict]:
         q = {"code": code, "ts": now}
         for jp, key in FIELD_KEY.items():
             v = mapping.get(jp)
-            q[key] = float(v) if isinstance(v, (int, float)) else None
-        if q.get("price"):
+            q[key] = float(v) if isinstance(v, (int, float)) and v else None
+        # 現在値がまだ 0（寄り付き前）でも、気配があれば送る＝ブリッジ生存が分かる。
+        # 足は約定（price>0）が出るまで作られない（backend 側で除外）。
+        if q.get("price") or q.get("bid") or q.get("ask"):
             quotes.append(q)
     return quotes
 

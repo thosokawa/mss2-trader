@@ -41,9 +41,11 @@ function Test-Backend {
 }
 
 # バックグラウンドで Python を起動し、全出力をログファイルへ（隠しウィンドウ）
+# -u = 出力を即フラッシュ（でないとログが溜まるまで書かれない）
 function Start-Bg([string]$scriptArgs, [string]$logPath) {
+  $env:PYTHONUNBUFFERED = '1'
   Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -WorkingDirectory $root -ArgumentList @(
-    '-NoProfile', '-Command', "& '$py' $scriptArgs *> '$logPath'"
+    '-NoProfile', '-Command', "& '$py' -u $scriptArgs *> '$logPath'"
   )
 }
 

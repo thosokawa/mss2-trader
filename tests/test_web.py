@@ -70,3 +70,15 @@ def test_healthz(client):
 def test_ingest(client):
     r = client.post("/api/ingest", json={"quotes": [{"code": "7203", "price": 2810.0, "volume": 100}]})
     assert r.json()["received"] == 1
+
+
+def test_ingest_preopen_bid_ask_only(client):
+    # 寄り付き前: 現在値なしでも気配があれば受け取る
+    r = client.post(
+        "/api/ingest",
+        json={"quotes": [{"code": "7203", "price": 0, "bid": 2805.0, "ask": 2806.0}]},
+    )
+    assert r.json()["received"] == 1
+    # 完全に空なら弾く
+    r = client.post("/api/ingest", json={"quotes": [{"code": "7203"}]})
+    assert r.json()["received"] == 0

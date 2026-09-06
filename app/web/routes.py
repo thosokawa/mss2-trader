@@ -436,7 +436,7 @@ async def ingest(request: Request, s: Session = Depends(get_session)):
             ts = dt.astimezone(UTC).replace(tzinfo=None) if dt.tzinfo else dt
         else:
             ts = _now_utc()
-        if not q.get("price"):
+        if not (q.get("price") or q.get("bid") or q.get("ask")):
             continue
         s.add(
             Tick(
