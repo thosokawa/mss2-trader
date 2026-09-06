@@ -105,9 +105,14 @@ Copy-Item config\config.example.toml config\config.toml
 .\bridge\run_all.ps1 -SkipWorkbook   # 銘柄セット未変更ならブック再生成を省略
 .\bridge\stop_all.ps1                # backend / bridge を停止（Excel は手動）
 
-.\bridge\install_autostart.ps1       # ログオン時に run_all.ps1 を走らせるタスクを登録
-Start-ScheduledTask -TaskName mss2-trader                       # 手動実行
-Unregister-ScheduledTask -TaskName mss2-trader -Confirm:$false  # 解除
+.\bridge\install_autostart.ps1            # ログオン時に run_all.ps1 を自動実行（スタートアップに登録・管理者不要）
+.\bridge\install_autostart.ps1 -Uninstall # 解除
+```
+
+初回だけ ExecutionPolicy を緩める（`.\...ps1` の直接実行を許可・管理者不要）:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 ```
 
 マーケットスピードII のログイン（＋「次回から自動ログイン」）だけ手動。

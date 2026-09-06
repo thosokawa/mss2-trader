@@ -1,46 +1,49 @@
 ﻿<#
 .SYNOPSIS
-  Windows ログオン時に run_all.ps1 を実行するタスクスケジューラ登録。
-  管理者権限は不要（今ログオンしているユーザーの対話セッションで動く）。
+  Windows ログオン時に run_all.ps1 を自動実行する。
+  スタートアップフォルダにショートカットを置くだけなので管理者権限は不要。
 
 .PARAMETER SetId
   run_all.ps1 に渡す銘柄セットID（既定 1）。
 
-.PARAMETER DelaySec
-  ログオンしてから起動するまでの遅延秒数（デスクトップ / ネットワークが整うまで、既定 60）。
+.PARAMETER Uninstall
+  登録を解除する（ショートカットを削除）。
 
 .EXAMPLE
   .\bridge\install_autostart.ps1
-  .\bridge\install_autostart.ps1 -SetId 2 -DelaySec 90
-
-  # 手動で今すぐ実行:   Start-ScheduledTask -TaskName mss2-trader
-  # 解除:               Unregister-ScheduledTask -TaskName mss2-trader -Confirm:$false
+  .\bridge\install_autostart.ps1 -SetId 2
+  .\bridge\install_autostart.ps1 -Uninstall
 #>
 param(
   [int]$SetId = 1,
-  [int]$DelaySec = 60
+  [switch]$Uninstall
 )
 
 $ErrorActionPreference = 'Stop'
-$script = Join-Path $PSScriptRoot 'run_all.ps1'
+$root    = Split-Path -Parent $PSScriptRoot
+$script  = Join-Path $PSScriptRoot 'run_all.ps1'
+$startup = [Environment]::GetFolderPath('Startup')
+$lnk     = Join-Path $startup 'mss2-trader.lnk'
+
+if ($Uninstall) {
+  if (Test-Path $lnk) { Remove-Item $lnk; Write-Host "解除しました: $lnk" }
+  else { Write-Host '登録されていません。' }
+  return
+}
+
 if (-not (Test-Path $script)) { throw "run_all.ps1 が見つかりません: $script" }
 
-$taskName = 'mss2-trader'
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' `
-  -Argument ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -SetId {1}' -f $script, $SetId)
+$psExe = (Get-Command powershell.exe).Source
+$ws = New-Object -ComObject WScript.Shell
+$s  = $ws.CreateShortcut($lnk)
+$s.TargetPath       = $psExe
+$s.Arguments        = ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -SetId {1}' -f $script, $SetId)
+$s.WorkingDirectory = $root
+$s.WindowStyle      = 7          # 7 = 最小化
+$s.Description       = 'mss2-trader 自動起動 (backend + Excel/RSS + bridge)'
+$s.Save()
 
-$trigger = New-ScheduledTaskTrigger -AtLogOn
-try { $trigger.Delay = ('PT{0}S' -f $DelaySec) } catch { }
-
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-  -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero)
-
-$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
-
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
-  -Settings $settings -Principal $principal -Force | Out-Null
-
-Write-Host "登録しました： タスク '$taskName'（ログオン $DelaySec 秒後 / SetId=$SetId）"
-Write-Host "今すぐ試す：   Start-ScheduledTask -TaskName $taskName"
-Write-Host "状態確認：     Get-ScheduledTask -TaskName $taskName ; Get-ScheduledTaskInfo -TaskName $taskName"
-Write-Host "解除：         Unregister-ScheduledTask -TaskName $taskName -Confirm:`$false"
+Write-Host "登録しました: $lnk"
+Write-Host "  → 次回ログオン時に run_all.ps1 -SetId $SetId が走ります（マーケットスピードII のログインだけ手動）"
+Write-Host "今すぐ試す: & `"$psExe`" -NoProfile -ExecutionPolicy Bypass -File `"$script`""
+Write-Host "解除:       .\bridge\install_autostart.ps1 -Uninstall"
