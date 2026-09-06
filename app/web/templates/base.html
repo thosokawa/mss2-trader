@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}mss2-trader{% endblock %}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="container">
+  <nav>
+    <ul><li><strong>mss2-trader</strong></li></ul>
+    <ul>
+      <li><a href="/">ダッシュボード</a></li>
+      <li><a href="/symbol-sets">銘柄セット</a></li>
+      <li><a href="/live">ライブ</a></li>
+      <li><a href="/data">データ</a></li>
+      <li><a href="/backtest">バックテスト</a></li>
+      <li><a href="/backtests">履歴</a></li>
+      <li><a href="/signals">シグナル</a></li>
+    </ul>
+  </nav>
+</header>
+<main class="container">
+  {% if error %}<article class="err">⚠ {{ error }}</article>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+<footer class="container"><small>P0 開発中 — 発注機能は未実装（通知/バックテストのみ）</small></footer>
+</body>
+</html>

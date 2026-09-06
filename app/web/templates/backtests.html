@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>バックテスト履歴</h2>
+{% if runs %}
+<table>
+  <thead><tr><th>#</th><th>日時</th><th>戦略</th><th>銘柄</th><th>足</th><th>取引</th><th>勝率</th><th>合計損益</th><th></th></tr></thead>
+  <tbody>
+  {% for r, m in runs %}
+    <tr>
+      <td>{{ r.id }}</td><td>{{ r.created_at.strftime('%m/%d %H:%M') }}</td>
+      <td>{{ r.strategy_name }}</td><td>{{ r.symbol_code }}</td><td>{{ r.timeframe }}</td>
+      <td>{{ m.get('trades', '-') }}</td><td>{{ m.get('win_rate_pct', '-') }}</td>
+      <td class="{{ 'pos' if (m.get('total_pnl') or 0)>=0 else 'neg' }}">{{ m.get('total_pnl', '-') }}</td>
+      <td><a href="/backtests/{{ r.id }}">詳細</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p>まだありません。</p>{% endif %}
+{% endblock %}

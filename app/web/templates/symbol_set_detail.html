@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="/symbol-sets">← 銘柄セット一覧</a></p>
+<h2>{{ ss.name }}</h2>
+{% if ss.note %}<p>{{ ss.note }}</p>{% endif %}
+
+<article>
+  <form method="post" action="/symbol-sets/{{ ss.id }}/items" class="grid">
+    <input name="code" placeholder="証券コード（例: 7203）" required pattern="[0-9A-Za-z]+">
+    <input name="name" placeholder="銘柄名（任意）">
+    <button type="submit">追加</button>
+  </form>
+</article>
+
+{% if items %}
+<table>
+  <thead><tr><th>コード</th><th>銘柄名</th><th>市場</th><th></th></tr></thead>
+  <tbody>
+  {% for item, sym in items %}
+    <tr>
+      <td>{{ sym.code }}</td><td>{{ sym.name }}</td><td>{{ sym.market }}</td>
+      <td>
+        <form method="post" action="/symbol-sets/{{ ss.id }}/items/{{ item.id }}/delete">
+          <button class="secondary outline" type="submit">外す</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p>銘柄が未登録です。</p>{% endif %}
+{% endblock %}

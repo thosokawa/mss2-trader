@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>銘柄セット</h2>
+<article>
+  <form method="post" action="/symbol-sets" class="grid">
+    <input name="name" placeholder="セット名（例: デイトレ候補）" required>
+    <input name="note" placeholder="メモ（任意）">
+    <button type="submit">作成</button>
+  </form>
+</article>
+
+{% if sets %}
+<table>
+  <thead><tr><th>名前</th><th>銘柄数</th><th>メモ</th><th></th></tr></thead>
+  <tbody>
+  {% for ss in sets %}
+    <tr>
+      <td><a href="/symbol-sets/{{ ss.id }}">{{ ss.name }}</a></td>
+      <td>{{ counts[ss.id] }}</td>
+      <td>{{ ss.note }}</td>
+      <td>
+        <form method="post" action="/symbol-sets/{{ ss.id }}/delete" onsubmit="return confirm('削除しますか？')">
+          <button class="secondary outline" type="submit">削除</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p>まだセットがありません。</p>{% endif %}
+{% endblock %}

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>ダッシュボード</h2>
+
+<article>
+  <strong>ブリッジ状態</strong>
+  {% if bridge.last_tick %}
+    最終受信 {{ bridge.last_tick | jst('%m/%d %H:%M:%S') }}
+    （{{ '%.0f'|format(bridge.age_sec) }}秒前 —
+    {% if bridge.age_sec > 30 %}<span class="neg">遅延</span>{% else %}<span class="pos">稼働中</span>{% endif %}）
+    / 直近1時間の受信 {{ bridge.ticks_1h }} 件
+  {% else %}
+    <span class="neg">未受信</span> — bridge.py 未起動、または銘柄未登録
+  {% endif %}
+  <a href="/live">ライブ気配 →</a>
+</article>
+
+<div class="cardgrid">
+  <a href="/symbol-sets"><div class="n">{{ counts.symbol_sets }}</div>銘柄セット</a>
+  <a href="/data"><div class="n">{{ counts.symbols }}</div>銘柄</a>
+  <a href="/data"><div class="n">{{ counts.bars }}</div>足データ</a>
+  <a href="/backtests"><div class="n">{{ counts.backtests }}</div>バックテスト</a>
+</div>
+
+<h3 style="margin-top:2rem">最近のシグナル</h3>
+{% if recent_signals %}
+<table>
+  <thead><tr><th>時刻</th><th>銘柄</th><th>方向</th><th>価格</th><th>戦略</th><th>根拠</th><th>種別</th></tr></thead>
+  <tbody>
+  {% for s in recent_signals %}
+    <tr><td>{{ s.ts | jst }}</td><td>{{ s.symbol_code }}</td><td>{{ s.side }}</td>
+        <td>{{ '%.1f'|format(s.price) }}</td><td>{{ s.strategy_name }}</td><td>{{ s.reason }}</td><td>{{ s.origin }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p>まだありません。</p>{% endif %}
+
+<h3 style="margin-top:2rem">最近のバックテスト</h3>
+{% if recent_bt %}
+<table>
+  <thead><tr><th>日時</th><th>戦略</th><th>銘柄</th><th>足</th><th></th></tr></thead>
+  <tbody>
+  {% for r in recent_bt %}
+    <tr><td>{{ r.created_at | jst }}</td><td>{{ r.strategy_name }}</td>
+        <td>{{ r.symbol_code }}</td><td>{{ r.timeframe }}</td>
+        <td><a href="/backtests/{{ r.id }}">詳細</a></td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p>まだありません。</p>{% endif %}
+{% endblock %}

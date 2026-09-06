@@ -1,0 +1,21 @@
+{% if rows %}
+<table>
+  <thead><tr><th>コード</th><th>銘柄名</th><th>現在値</th><th>買気配</th><th>売気配</th><th>出来高</th><th>気配時刻</th><th>受信</th><th>状態</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td>{{ r.code }}</td><td>{{ r.name }}</td>
+      <td>{{ '{:,.1f}'.format(r.price) }}</td>
+      <td>{{ '{:,.1f}'.format(r.bid) if r.bid else '-' }}</td>
+      <td>{{ '{:,.1f}'.format(r.ask) if r.ask else '-' }}</td>
+      <td>{{ '{:,.0f}'.format(r.volume) }}</td>
+      <td>{{ r.ts | jst('%H:%M:%S') }}</td>
+      <td>{{ r.age_sec }}秒前</td>
+      <td>{% if r.stale %}<span class="neg">遅延</span>{% else %}<span class="pos">OK</span>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>まだ気配を受信していません。Windows 側で <code>bridge.py</code> を起動してください（Mac では <code>--simulate</code> で試せます）。</p>
+{% endif %}

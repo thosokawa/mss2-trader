@@ -1,0 +1,10 @@
+.err { background: #5c1a1a; color: #fff; padding: .6rem 1rem; border-radius: 6px; }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; }
+.metrics div { background: var(--pico-card-background-color); border: 1px solid var(--pico-muted-border-color); border-radius: 8px; padding: .6rem .8rem; }
+.metrics .k { font-size: .75rem; color: var(--pico-muted-color); }
+.metrics .v { font-size: 1.15rem; font-weight: 600; }
+.pos { color: #2e9e57; } .neg { color: #d94a4a; }
+table { font-size: .9rem; }
+.cardgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 1rem; }
+.cardgrid a { display:block; padding:1rem; border:1px solid var(--pico-muted-border-color); border-radius:8px; text-decoration:none; }
+.cardgrid .n { font-size:1.6rem; font-weight:700; }

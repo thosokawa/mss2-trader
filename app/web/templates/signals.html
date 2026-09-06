@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>シグナル履歴</h2>
+<p><small>P2 で live エンジンが書き込みます。バックテストのシグナルはここには出しません（<a href="/backtests">履歴</a>を参照）。</small></p>
+{% if rows %}
+<table>
+  <thead><tr><th>時刻</th><th>銘柄</th><th>方向</th><th>価格</th><th>戦略</th><th>根拠</th><th>種別</th></tr></thead>
+  <tbody>
+  {% for s in rows %}
+    <tr><td>{{ s.ts | jst('%Y-%m-%d %H:%M') }}</td><td>{{ s.symbol_code }}</td><td>{{ s.side }}</td>
+        <td>{{ '%.1f'|format(s.price) }}</td><td>{{ s.strategy_name }}</td><td>{{ s.reason }}</td><td>{{ s.origin }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p>まだありません。</p>{% endif %}
+{% endblock %}

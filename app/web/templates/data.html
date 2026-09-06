@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>取得済みデータ</h2>
+<p><small>足データは <code>scripts/fetch_history.py</code> で取得します（例: <code>python scripts/fetch_history.py 7203 --interval 5m</code>）。P1 以降は RSS ブリッジからも蓄積されます。</small></p>
+{% if rows %}
+<table>
+  <thead><tr><th>コード</th><th>銘柄名</th><th>足</th><th>本数</th><th>開始</th><th>終了</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr><td>{{ r.symbol_code }}</td><td>{{ names.get(r.symbol_code, '') }}</td><td>{{ r.timeframe }}</td>
+        <td>{{ r.n }}</td><td>{{ r.start | jst('%Y-%m-%d %H:%M') }}</td><td>{{ r.end | jst('%Y-%m-%d %H:%M') }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p>まだ足データがありません。</p>{% endif %}
+{% endblock %}

@@ -1,0 +1,36 @@
+[project]
+name = "mss2-trader"
+version = "0.1.0"
+description = "MarketSpeed II RSS 連携の自作売買シグナル/自動売買ツール"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "sqlmodel>=0.0.22",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.12",
+    "pandas>=2.2",
+    "yfinance>=0.2.40",
+    "pydantic-settings>=2.5",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.7"]
+# bridge/ は Windows 上でのみ使用する。Mac の開発環境には入れない。
+bridge = ["xlwings>=0.32", "pywin32>=306"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["B008"]  # FastAPI の Depends() を既定引数に置くのは慣用
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*" = ["E402"]  # sys.path 追加後に import するため
+"bridge/*" = ["E402"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

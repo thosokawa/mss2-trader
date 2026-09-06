@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="/backtests">← 履歴</a></p>
+<h2>バックテスト #{{ run.id }}</h2>
+<p>{{ run.strategy_name }} — {{ run.symbol_code }} / {{ run.timeframe }}<br>
+<small>{{ run.class_path }} — params {{ run.params_json }}</small><br>
+<small>期間: {{ run.start | jst('%Y-%m-%d %H:%M') }} 〜 {{ run.end | jst('%Y-%m-%d %H:%M') }} (JST)</small></p>
+
+{% if metrics.get('trades') %}
+<div class="metrics">
+  <div><div class="k">取引数</div><div class="v">{{ metrics.trades }}</div></div>
+  <div><div class="k">勝率</div><div class="v">{{ metrics.win_rate_pct }}%</div></div>
+  <div><div class="k">合計損益</div><div class="v {{ 'pos' if metrics.total_pnl>=0 else 'neg' }}">{{ '{:,.0f}'.format(metrics.total_pnl) }}</div></div>
+  <div><div class="k">PF</div><div class="v">{{ metrics.profit_factor }}</div></div>
+  <div><div class="k">最大DD</div><div class="v neg">{{ '{:,.0f}'.format(metrics.max_drawdown) }}</div></div>
+  <div><div class="k">最良 / 最悪</div><div class="v">{{ '{:,.0f}'.format(metrics.best) }} / {{ '{:,.0f}'.format(metrics.worst) }}</div></div>
+</div>
+{% else %}<p>{{ metrics.get('note') or metrics.get('error') or '約定なし' }}</p>{% endif %}
+
+{% if trades %}
+<table style="margin-top:1rem">
+  <thead><tr><th>建</th><th>建値</th><th>仕切</th><th>仕切値</th><th>株数</th><th>損益</th><th>%</th></tr></thead>
+  <tbody>
+  {% for t in trades %}
+    <tr>
+      <td>{{ t.entry_ts | jst }}</td><td>{{ '%.1f'|format(t.entry_price) }}</td>
+      <td>{{ t.exit_ts | jst }}</td><td>{{ '%.1f'|format(t.exit_price) }}</td>
+      <td>{{ t.qty }}</td>
+      <td class="{{ 'pos' if t.pnl>=0 else 'neg' }}">{{ '{:,.0f}'.format(t.pnl) }}</td>
+      <td class="{{ 'pos' if t.return_pct>=0 else 'neg' }}">{{ '%.2f'|format(t.return_pct) }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}
