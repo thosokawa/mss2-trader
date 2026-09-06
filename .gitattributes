@@ -1,0 +1,3 @@
+# PowerShell スクリプトは CRLF 固定（Windows PowerShell 5.1 対策）。
+# 中身は UTF-8 BOM 付き（BOM 無し UTF-8 だと 5.1 が cp932 扱いして文字化けする）。
+*.ps1 text eol=crlf

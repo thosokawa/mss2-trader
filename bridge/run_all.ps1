@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   mss2-trader を一括起動する： backend → Excel(RSS ブック) → bridge。
   Windows ログオン時のタスクに登録して使う（install_autostart.ps1）。

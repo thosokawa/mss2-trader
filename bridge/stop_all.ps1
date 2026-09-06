@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   run_all.ps1 で起動した backend / bridge を止める。Excel は手動で閉じる。
 #>
