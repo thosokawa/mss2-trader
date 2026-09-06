@@ -19,6 +19,7 @@
       <li><a href="/data">データ</a></li>
       <li><a href="/backtest">バックテスト</a></li>
       <li><a href="/backtests">履歴</a></li>
+      <li><a href="/strategies">戦略</a></li>
       <li><a href="/signals">シグナル</a></li>
     </ul>
   </nav>
@@ -27,6 +28,6 @@
   {% if error %}<article class="err">⚠ {{ error }}</article>{% endif %}
   {% block content %}{% endblock %}
 </main>
-<footer class="container"><small>P0 開発中 — 発注機能は未実装（通知/バックテストのみ）</small></footer>
+<footer class="container"><small>P2 — 確定足シグナルの Slack 通知まで。発注機能（P4）は未実装。</small></footer>
 </body>
 </html>

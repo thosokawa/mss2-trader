@@ -4,6 +4,8 @@ db_url = "sqlite:///data/mss2.db"
 timezone = "Asia/Tokyo"
 agg_interval_sec = 15.0
 agg_timeframes = ["1m", "5m"]
+# live エンジン（確定足 -> on_bar -> シグナル通知）を回す間隔（秒）。0 で無効。
+live_interval_sec = 20.0
 
 [notify]
 # Slack Incoming Webhook URL。P2 でシグナル通知に使用。

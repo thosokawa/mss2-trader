@@ -90,6 +90,21 @@ class Signal(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+class LiveCursor(SQLModel, table=True):
+    """live エンジンが (戦略, 銘柄) ごとに「どの足まで評価したか」を記録する。
+
+    初回は最新の確定足の時刻で初期化するだけで発火させない（有効化した瞬間に
+    過去足ぶんのシグナルがまとめて飛ぶのを防ぐ）。以降は last_bar_ts より新しい
+    足だけを評価する。
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    strategy_id: int = Field(foreign_key="strategy.id", index=True)
+    symbol_code: str = Field(index=True)
+    last_bar_ts: datetime
+    updated_at: datetime = Field(default_factory=utcnow)
+
+
 class BacktestRun(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     strategy_name: str = ""

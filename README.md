@@ -30,9 +30,9 @@
 | | 内容 | 状態 |
 |---|---|---|
 | P0 | 雛形・DB・銘柄セットUI・履歴取得・バックテスター | 済 |
-| P1 | `bridge/` 実装、tick→足 集約、ライブ気配画面 | ← いまここ（Windows 実機での RSS 疎通確認が残り） |
-| P2 | live エンジンで足確定→Slack 通知（＝通知だけ完成） | 未 |
-| P3 | PaperBroker でペーパートレード、成績表示 | 未 |
+| P1 | `bridge/` 実装、tick→足 集約、ライブ気配画面 | 済（Windows 実機での RSS 疎通確認が残り） |
+| P2 | live エンジンで足確定→Slack 通知（＝通知だけ完成） | 済（Slack Webhook を設定して実疎通確認が残り） |
+| P3 | PaperBroker でペーパートレード、成績表示 | ← 次 |
 | P4 | RssBroker で実発注、risk.py 完全実装、少額試験運用 | 未 |
 
 ## セットアップ（Mac）
@@ -47,7 +47,7 @@ cp config/config.example.toml config/config.toml   # 任意（無くても examp
 ## 使い方
 
 ```bash
-# Web UI（バックグラウンドで tick→足 の集約ループも回る）
+# Web UI（バックグラウンドで tick→足 集約ループ と live シグナルループも回る）
 .venv/bin/python -m app.main       # http://127.0.0.1:8000
 
 # 過去足を取得（yfinance。日本株は自動で .T を付与）
@@ -81,7 +81,16 @@ Web UI:
 - **銘柄セット** … RSS で監視する銘柄グループ。`build_workbook.py` / `bridge.py --set-id` が参照
 - **ライブ** … bridge から届く最新気配と生存監視（5秒自動更新、30秒無受信で「遅延」）
 - **データ** … 蓄積済み足のカバレッジ（時刻は JST 表示、DB は UTC）
-- **バックテスト / 履歴 / シグナル** … 戦略検証と（P2 以降の）ライブシグナル
+- **バックテスト / 履歴** … 戦略検証
+- **戦略** … live エンジンで回すロジックの登録。有効化すると `live_interval_sec` ごとに
+  対象銘柄セットの確定足へ `on_bar()` を流し、シグナルを記録して Slack 通知（発注はしない）。
+  有効化した時点より後の足だけが対象
+- **シグナル** … live エンジンが記録したシグナル履歴
+
+### Slack 通知の設定
+
+`config/config.toml` の `[notify]` に Incoming Webhook URL を入れて `dry_run = false`。
+未設定・`dry_run = true` のときは送信せずログ出力のみ（`[notify dry_run] ...`）。
 
 ## テスト
 

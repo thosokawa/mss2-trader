@@ -32,6 +32,37 @@ def test_symbol_set_crud(client):
     assert "7203" in r.text and "トヨタ自動車" in r.text
 
 
+def test_strategy_crud(client):
+    import re
+
+    client.post("/symbol-sets", data={"name": "戦略用セット", "note": ""})
+    r = client.get("/symbol-sets")
+    set_id = max(int(x) for x in re.findall(r"/symbol-sets/(\d+)\"", r.text))
+
+    client.post(
+        "/strategies",
+        data={
+            "name": "SMAテスト戦略",
+            "class_path": "app.strategy.examples.sma_cross:SmaCross",
+            "symbol_set_id": str(set_id),
+            "timeframe": "5m",
+            "params_json": '{"fast": 5, "slow": 20, "qty": 100}',
+            "mode": "notify",
+        },
+        follow_redirects=True,
+    )
+    r = client.get("/strategies")
+    assert "SMAテスト戦略" in r.text
+    assert "停止" in r.text  # 既定は無効
+
+    strategy_id = max(int(x) for x in re.findall(r"/strategies/(\d+)/toggle", r.text))
+    r = client.post(f"/strategies/{strategy_id}/toggle", follow_redirects=True)
+    assert "稼働中" in r.text
+
+    r = client.post(f"/strategies/{strategy_id}/delete", follow_redirects=True)
+    assert "SMAテスト戦略" not in r.text
+
+
 def test_healthz(client):
     assert client.get("/healthz").json() == {"ok": True}
 

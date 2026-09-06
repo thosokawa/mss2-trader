@@ -19,7 +19,9 @@ from app.models import (
     BacktestRun,
     BacktestTrade,
     Bar,
+    LiveCursor,
     Signal,
+    Strategy,
     Symbol,
     SymbolSet,
     SymbolSetItem,
@@ -68,6 +70,9 @@ def dashboard(request: Request, s: Session = Depends(get_session)):
         "symbol_sets": s.exec(select(func.count()).select_from(SymbolSet)).one(),
         "bars": s.exec(select(func.count()).select_from(Bar)).one(),
         "backtests": s.exec(select(func.count()).select_from(BacktestRun)).one(),
+        "strategies_enabled": s.exec(
+            select(func.count()).select_from(Strategy).where(Strategy.enabled == True)  # noqa: E712
+        ).one(),
     }
     recent_signals = s.exec(select(Signal).order_by(Signal.ts.desc()).limit(20)).all()
     recent_bt = s.exec(select(BacktestRun).order_by(BacktestRun.created_at.desc()).limit(10)).all()
@@ -340,6 +345,77 @@ def backtest_detail(run_id: int, request: Request, s: Session = Depends(get_sess
 def signals(request: Request, s: Session = Depends(get_session)):
     rows = s.exec(select(Signal).order_by(Signal.ts.desc()).limit(300)).all()
     return templates.TemplateResponse(request, "signals.html", _ctx(request, rows=rows))
+
+
+# ---- 戦略（live エンジンで回す） -------------------------------------------
+
+
+@router.get("/strategies", response_class=HTMLResponse)
+def strategies(request: Request, s: Session = Depends(get_session)):
+    rows = s.exec(select(Strategy).order_by(Strategy.created_at.desc())).all()
+    sets = s.exec(select(SymbolSet).order_by(SymbolSet.name)).all()
+    set_names = {ss.id: ss.name for ss in sets}
+    return templates.TemplateResponse(
+        request, "strategies.html", _ctx(request, rows=rows, sets=sets, set_names=set_names)
+    )
+
+
+@router.post("/strategies")
+def create_strategy(
+    name: str = Form(...),
+    class_path: str = Form(...),
+    symbol_set_id: str = Form(""),
+    timeframe: str = Form("5m"),
+    params_json: str = Form("{}"),
+    mode: str = Form("notify"),
+    s: Session = Depends(get_session),
+):
+    name = name.strip()
+    if not name:
+        return RedirectResponse("/strategies", status_code=303)
+    try:
+        json.loads(params_json or "{}")
+    except json.JSONDecodeError:
+        return RedirectResponse("/strategies?error=params", status_code=303)
+    s.add(
+        Strategy(
+            name=name,
+            class_path=class_path.strip(),
+            params_json=params_json.strip() or "{}",
+            symbol_set_id=int(symbol_set_id) if symbol_set_id else None,
+            timeframe=timeframe,
+            mode=mode,
+            enabled=False,
+        )
+    )
+    s.commit()
+    return RedirectResponse("/strategies", status_code=303)
+
+
+@router.post("/strategies/{strategy_id}/toggle")
+def toggle_strategy(strategy_id: int, s: Session = Depends(get_session)):
+    st = s.get(Strategy, strategy_id)
+    if st:
+        st.enabled = not st.enabled
+        s.add(st)
+        if st.enabled:
+            # 有効化時はカーソルを捨てて「今より後の足だけ」に揃える
+            # （無効中に溜まった足でまとめて発火するのを防ぐ）
+            for c in s.exec(select(LiveCursor).where(LiveCursor.strategy_id == strategy_id)).all():
+                s.delete(c)
+        s.commit()
+    return RedirectResponse("/strategies", status_code=303)
+
+
+@router.post("/strategies/{strategy_id}/delete")
+def delete_strategy(strategy_id: int, s: Session = Depends(get_session)):
+    for c in s.exec(select(LiveCursor).where(LiveCursor.strategy_id == strategy_id)).all():
+        s.delete(c)
+    st = s.get(Strategy, strategy_id)
+    if st:
+        s.delete(st)
+    s.commit()
+    return RedirectResponse("/strategies", status_code=303)
 
 
 # ---- bridge 受信 (P1) -------------------------------------------------------

@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>シグナル履歴</h2>
-<p><small>P2 で live エンジンが書き込みます。バックテストのシグナルはここには出しません（<a href="/backtests">履歴</a>を参照）。</small></p>
+<p><small>有効化した<a href="/strategies">戦略</a>の確定足シグナルを live エンジンが書き込みます（同時に Slack 通知）。
+バックテストのシグナルはここには出しません（<a href="/backtests">履歴</a>を参照）。</small></p>
 {% if rows %}
 <table>
   <thead><tr><th>時刻</th><th>銘柄</th><th>方向</th><th>価格</th><th>戦略</th><th>根拠</th><th>種別</th></tr></thead>

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>戦略</h2>
+<p><small>有効にすると live エンジンが {{ '設定間隔ごと' }}に対象銘柄セットの確定足へ <code>on_bar()</code> を流し、
+シグナルを <a href="/signals">シグナル</a> 履歴に記録して Slack へ通知します（発注はしません）。
+有効化した時点より後の足だけが対象です。</small></p>
+
+<article>
+  <form method="post" action="/strategies">
+    <div class="grid">
+      <label>名前<input name="name" placeholder="例: トヨタ 5分SMA" required></label>
+      <label>ロジック
+        <select name="class_path" required>
+          {% for label, cp in builtin.items() %}<option value="{{ cp }}">{{ label }} ({{ cp }})</option>{% endfor %}
+        </select>
+      </label>
+      <label>銘柄セット
+        <select name="symbol_set_id" required>
+          <option value="">— 選択 —</option>
+          {% for ss in sets %}<option value="{{ ss.id }}">{{ ss.name }}</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+    <div class="grid">
+      <label>足<select name="timeframe"><option>5m</option><option>1m</option><option>15m</option></select></label>
+      <label>モード
+        <select name="mode">
+          <option value="notify">notify（通知のみ）</option>
+          <option value="paper">paper（P3）</option>
+          <option value="live">live（P4）</option>
+        </select>
+      </label>
+      <label>パラメータ (JSON)<input name="params_json" value='{"fast": 5, "slow": 20, "qty": 100}'></label>
+    </div>
+    <button type="submit">追加</button>
+  </form>
+</article>
+
+{% if rows %}
+<table>
+  <thead><tr><th>名前</th><th>ロジック</th><th>銘柄セット</th><th>足</th><th>モード</th><th>状態</th><th></th></tr></thead>
+  <tbody>
+  {% for st in rows %}
+    <tr>
+      <td>{{ st.name }}<br><small>{{ st.params_json }}</small></td>
+      <td><small>{{ st.class_path }}</small></td>
+      <td>{{ set_names.get(st.symbol_set_id, '—') }}</td>
+      <td>{{ st.timeframe }}</td>
+      <td>{{ st.mode }}</td>
+      <td>{% if st.enabled %}<span class="pos">稼働中</span>{% else %}<span class="neg">停止</span>{% endif %}</td>
+      <td style="white-space:nowrap">
+        <form method="post" action="/strategies/{{ st.id }}/toggle" style="display:inline">
+          <button class="outline" type="submit">{{ '停止' if st.enabled else '有効化' }}</button>
+        </form>
+        <form method="post" action="/strategies/{{ st.id }}/delete" style="display:inline" onsubmit="return confirm('削除しますか？')">
+          <button class="secondary outline" type="submit">削除</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p>まだ戦略がありません。</p>{% endif %}
+{% endblock %}

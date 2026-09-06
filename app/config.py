@@ -19,6 +19,8 @@ class AppCfg:
     agg_interval_sec: float = 15.0
     # 集約する足種
     agg_timeframes: list[str] = field(default_factory=lambda: ["1m", "5m"])
+    # live エンジン（確定足 -> on_bar -> シグナル通知）を回す間隔（秒）。0 で無効。
+    live_interval_sec: float = 20.0
 
 
 @dataclass

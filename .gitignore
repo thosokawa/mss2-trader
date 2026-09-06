@@ -12,3 +12,4 @@ config/config.toml
 .DS_Store
 *.xlsm
 !bridge/templates/*.xlsm
+.claude/settings.local.json

@@ -12,6 +12,7 @@ from sqlmodel import Session
 from app.aggregator import build_bars
 from app.config import get_config
 from app.db import engine, init_db
+from app.engine import live
 from app.web.routes import router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -36,17 +37,36 @@ async def _aggregator_loop() -> None:
             log.exception("aggregator loop error")
 
 
+async def _live_loop() -> None:
+    cfg = get_config().app
+    loop = asyncio.get_running_loop()
+    while True:
+        await asyncio.sleep(cfg.live_interval_sec)
+        try:
+            def _run() -> int:
+                with Session(engine) as s:
+                    return len(live.run_once(s))
+
+            n = await loop.run_in_executor(None, _run)
+            if n:
+                log.info("live: %d signal(s) fired", n)
+        except Exception:  # noqa: BLE001
+            log.exception("live loop error")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    task: asyncio.Task | None = None
+    tasks: list[asyncio.Task] = []
     if get_config().app.agg_interval_sec > 0:
-        task = asyncio.create_task(_aggregator_loop())
+        tasks.append(asyncio.create_task(_aggregator_loop()))
+    if get_config().app.live_interval_sec > 0:
+        tasks.append(asyncio.create_task(_live_loop()))
     try:
         yield
     finally:
-        if task:
-            task.cancel()
+        for t in tasks:
+            t.cancel()
 
 
 app = FastAPI(title="mss2-trader", lifespan=lifespan)
