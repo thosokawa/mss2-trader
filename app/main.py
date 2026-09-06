@@ -75,9 +75,13 @@ app.include_router(router)
 
 
 def main() -> None:
+    import os
+
     import uvicorn
 
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
+    # 自動起動（run_all.ps1）では MSS2_RELOAD=0 を渡してリローダを止める
+    reload = os.environ.get("MSS2_RELOAD", "1").lower() not in ("0", "false", "no", "")
+    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=reload)
 
 
 if __name__ == "__main__":

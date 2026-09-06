@@ -13,3 +13,6 @@ config/config.toml
 *.xlsm
 !bridge/templates/*.xlsm
 .claude/settings.local.json
+logs/
+bridge/rss_bridge.xlsx
+bridge/rss_probe.xlsx

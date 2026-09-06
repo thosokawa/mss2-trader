@@ -98,6 +98,21 @@ Copy-Item config\config.example.toml config\config.toml
 .venv\Scripts\python bridge\bridge.py --dump                # quotes シートの生値を表示
 ```
 
+#### 一括起動 / 自動起動
+
+```powershell
+.\bridge\run_all.ps1                 # backend → Excel(RSS) → bridge をまとめて起動
+.\bridge\run_all.ps1 -SkipWorkbook   # 銘柄セット未変更ならブック再生成を省略
+.\bridge\stop_all.ps1                # backend / bridge を停止（Excel は手動）
+
+.\bridge\install_autostart.ps1       # ログオン時に run_all.ps1 を走らせるタスクを登録
+Start-ScheduledTask -TaskName mss2-trader                       # 手動実行
+Unregister-ScheduledTask -TaskName mss2-trader -Confirm:$false  # 解除
+```
+
+マーケットスピードII のログイン（＋「次回から自動ログイン」）だけ手動。
+ログは `logs\backend-*.log` / `logs\bridge-*.log`。
+
 Web UI:
 - **銘柄セット** … RSS で監視する銘柄グループ。`build_workbook.py` / `bridge.py --set-id` が参照
 - **ライブ** … bridge から届く最新気配と生存監視（5秒自動更新、30秒無受信で「遅延」）
