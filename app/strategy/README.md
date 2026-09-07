@@ -73,6 +73,9 @@ Signal(side, qty=None, reason="", order_type="MKT", limit_price=None)
 
 - `examples/sma_cross.py` — 短期/長期 SMA のゴールデン/デッドクロス
 - `examples/ma_rsi.py` — 移動平均と終値の関係（上抜け/上方）+ 傾き + RSI 帯でエントリー
+- `examples/trend_rsi_reclaim.py` — 短期MA>中期MAでRSIが40を回復→買い / 短期MA<中期MAで
+  RSIが60を割れ→売り（ポジションを見ない純粋なアラート戦略。`mode=notify` 向け。
+  売り側は現エンジンでは paper/backtest 非対応）
 
 ## 調整のしかた
 

@@ -26,7 +26,8 @@
 バックテストとライブが同じコードを呼ぶので挙動が一致する。書き方と指標ヘルパー
 （`ema` `rsi` `atr` `macd` `deviation_pct` `slope_pct` `crossed_up` …）は
 [app/strategy/README.md](app/strategy/README.md)。同梱例: `sma_cross`（SMAクロス）,
-`ma_rsi`（移動平均と終値の関係 + 傾き + RSI帯）。
+`ma_rsi`（移動平均と終値の関係 + 傾き + RSI帯）,
+`trend_rsi_reclaim`（トレンド方向 × RSI 40/60 出戻りの通知）。
 
 ## フェーズ
 

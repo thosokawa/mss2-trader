@@ -9,6 +9,7 @@ from app.strategy.base import Strategy
 BUILTIN = {
     "SMAクロス": "app.strategy.examples.sma_cross:SmaCross",
     "移動平均+RSI": "app.strategy.examples.ma_rsi:MaRsi",
+    "トレンド×RSI出戻り": "app.strategy.examples.trend_rsi_reclaim:TrendRsiReclaim",
 }
 
 
