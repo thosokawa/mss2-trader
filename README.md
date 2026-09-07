@@ -23,7 +23,10 @@
 ```
 
 売買ロジックは `app/strategy/` に `Strategy.on_bar()` を実装するだけ。
-バックテストとライブが同じコードを呼ぶので挙動が一致する。
+バックテストとライブが同じコードを呼ぶので挙動が一致する。書き方と指標ヘルパー
+（`ema` `rsi` `atr` `macd` `deviation_pct` `slope_pct` `crossed_up` …）は
+[app/strategy/README.md](app/strategy/README.md)。同梱例: `sma_cross`（SMAクロス）,
+`ma_rsi`（移動平均と終値の関係 + 傾き + RSI帯）。
 
 ## フェーズ
 

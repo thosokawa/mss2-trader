@@ -10,7 +10,7 @@
     <div class="grid">
       <label>名前<input name="name" placeholder="例: トヨタ 5分SMA" required></label>
       <label>ロジック
-        <select name="class_path" required>
+        <select name="class_path" id="class_path" required>
           {% for label, cp in builtin.items() %}<option value="{{ cp }}">{{ label }} ({{ cp }})</option>{% endfor %}
         </select>
       </label>
@@ -30,11 +30,20 @@
           <option value="live">live（実発注・P4）</option>
         </select>
       </label>
-      <label>パラメータ (JSON)<input name="params_json" value='{"fast": 5, "slow": 20, "qty": 100}'></label>
+      <label>パラメータ (JSON)<input name="params_json" id="params_json" value='{"fast": 5, "slow": 20, "qty": 100}'></label>
     </div>
     <button type="submit">追加</button>
   </form>
 </article>
+
+<script>
+  const STRAT_PARAMS = {{ builtin_params | tojson }};
+  const _sel = document.getElementById('class_path'), _pj = document.getElementById('params_json');
+  _sel.addEventListener('change', () => {
+    const d = STRAT_PARAMS[_sel.value];
+    if (d) _pj.value = JSON.stringify(d);
+  });
+</script>
 
 {% if rows %}
 <table>

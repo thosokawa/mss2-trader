@@ -5,7 +5,7 @@
   <form method="post" action="/backtest">
     <div class="grid">
       <label>戦略
-        <select name="class_path" required>
+        <select name="class_path" id="class_path" required>
           {% for label, cp in builtin.items() %}<option value="{{ cp }}">{{ label }} ({{ cp }})</option>{% endfor %}
         </select>
       </label>
@@ -17,12 +17,22 @@
       <label>足<select name="timeframe"><option>5m</option><option>1m</option><option>15m</option><option>1d</option></select></label>
     </div>
     <div class="grid">
-      <label>パラメータ (JSON)<input name="params_json" value='{"fast": 5, "slow": 20, "qty": 100}'></label>
+      <label>パラメータ (JSON)<input name="params_json" id="params_json" value='{"fast": 5, "slow": 20, "qty": 100}'></label>
       <label>1取引あたり手数料(円)<input name="commission_per_trade" type="number" value="0" step="1"></label>
     </div>
     <button type="submit">実行</button>
   </form>
 </article>
+
+<script>
+  const STRAT_PARAMS = {{ builtin_params | tojson }};
+  const _sel = document.getElementById('class_path'), _pj = document.getElementById('params_json');
+  function _fillParams() {
+    const d = STRAT_PARAMS[_sel.value];
+    if (d) _pj.value = JSON.stringify(d);
+  }
+  _sel.addEventListener('change', _fillParams);
+</script>
 
 {% if result %}
   <h3>結果 — {{ result.symbol }} / {{ result.timeframe }} <a href="/backtests/{{ run_id }}"><small>保存済み #{{ run_id }}</small></a></h3>

@@ -29,7 +29,7 @@ from app.models import (
     SymbolSetItem,
     Tick,
 )
-from app.strategy.registry import BUILTIN, load_strategy_class
+from app.strategy.registry import BUILTIN, builtin_params, load_strategy_class
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -62,7 +62,7 @@ def _now_utc() -> datetime:
 
 
 def _ctx(request: Request, **kw):
-    return {"request": request, "builtin": BUILTIN, **kw}
+    return {"request": request, "builtin": BUILTIN, "builtin_params": builtin_params(), **kw}
 
 
 @router.get("/", response_class=HTMLResponse)

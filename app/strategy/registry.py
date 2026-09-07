@@ -8,6 +8,7 @@ from app.strategy.base import Strategy
 # UI のプルダウン用の既知ストラテジー一覧
 BUILTIN = {
     "SMAクロス": "app.strategy.examples.sma_cross:SmaCross",
+    "移動平均+RSI": "app.strategy.examples.ma_rsi:MaRsi",
 }
 
 
@@ -20,3 +21,14 @@ def load_strategy_class(class_path: str) -> type[Strategy]:
     if not issubclass(cls, Strategy):
         raise TypeError(f"{class_path} は Strategy のサブクラスではありません")
     return cls
+
+
+def builtin_params() -> dict[str, dict]:
+    """class_path -> default_params。UI のパラメータ欄の初期値に使う。"""
+    out: dict[str, dict] = {}
+    for cp in BUILTIN.values():
+        try:
+            out[cp] = dict(load_strategy_class(cp).default_params)
+        except Exception:  # noqa: BLE001
+            out[cp] = {}
+    return out
