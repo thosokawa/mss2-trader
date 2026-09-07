@@ -19,7 +19,7 @@ def _add_bars(s: Session, code: str, closes: list[float], start: datetime, tf: s
     s.commit()
 
 
-def _make_strategy(s: Session, code: str, enabled: bool = True) -> Strategy:
+def _make_strategy(s: Session, code: str, enabled: bool = True, mode: str = "notify") -> Strategy:
     s.add(Symbol(code=code, name="テスト銘柄"))
     ss = SymbolSet(name=f"set-{code}")
     s.add(ss)
@@ -32,7 +32,7 @@ def _make_strategy(s: Session, code: str, enabled: bool = True) -> Strategy:
         params_json='{"fast": 5, "slow": 20, "qty": 100}',
         symbol_set_id=ss.id,
         timeframe="5m",
-        mode="notify",
+        mode=mode,
         enabled=enabled,
     )
     s.add(st)
@@ -88,3 +88,22 @@ def test_disabled_strategy_does_not_run():
         fired = live.run_once(s, notify=False)
         assert [f for f in fired if f.symbol_code == "9802"] == []
         assert s.exec(select(Signal).where(Signal.symbol_code == "9802")).all() == []
+
+
+def test_paper_mode_records_trades():
+    init_db()
+    from app.models import PaperTrade
+
+    with Session(engine) as s:
+        st = _make_strategy(s, "9803", mode="paper")
+        _add_bars(s, "9803", DECLINE, BASE)
+        live.run_once(s, notify=False)  # カーソル初期化
+
+        _add_bars(s, "9803", RISE, BASE + timedelta(minutes=5 * len(DECLINE)))
+        live.run_once(s, notify=False)
+
+        trades = s.exec(select(PaperTrade).where(PaperTrade.strategy_id == st.id)).all()
+        assert len(trades) >= 1
+        assert trades[0].entry_price > 0
+        # BUY で建玉ができ、live の ctx.position も PaperTrade 由来
+        assert live.paper.current_position(s, st.id, "9803").is_long

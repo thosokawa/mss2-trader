@@ -30,6 +30,12 @@ class NotifyCfg:
 
 
 @dataclass
+class PaperCfg:
+    # ペーパートレードの約定価格に乗せるスリッページ（bps）。買いは +、売りは -。
+    slippage_bps: float = 3.0
+
+
+@dataclass
 class BridgeCfg:
     ingest_url: str = "http://127.0.0.1:8000/api/ingest"
     workbook_path: str = ""
@@ -49,6 +55,7 @@ class TradingCfg:
 class Config:
     app: AppCfg
     notify: NotifyCfg
+    paper: PaperCfg
     bridge: BridgeCfg
     trading: TradingCfg
 
@@ -70,6 +77,7 @@ def get_config() -> Config:
     return Config(
         app=AppCfg(**app_raw),
         notify=NotifyCfg(**raw.get("notify", {})),
+        paper=PaperCfg(**raw.get("paper", {})),
         bridge=BridgeCfg(**raw.get("bridge", {})),
         trading=TradingCfg(**raw.get("trading", {})),
     )

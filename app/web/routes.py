@@ -14,12 +14,14 @@ from sqlmodel import Session, func, select
 from app.bars import load_bars
 from app.config import get_config
 from app.db import get_session
+from app.engine import paper
 from app.engine.backtest import run_backtest
 from app.models import (
     BacktestRun,
     BacktestTrade,
     Bar,
     LiveCursor,
+    PaperTrade,
     Signal,
     Strategy,
     Symbol,
@@ -77,6 +79,12 @@ def dashboard(request: Request, s: Session = Depends(get_session)):
     recent_signals = s.exec(select(Signal).order_by(Signal.ts.desc()).limit(20)).all()
     recent_bt = s.exec(select(BacktestRun).order_by(BacktestRun.created_at.desc()).limit(10)).all()
 
+    paper_closed = s.exec(select(PaperTrade).where(PaperTrade.status == "closed")).all()
+    paper_realized = round(sum(t.pnl or 0 for t in paper_closed), 0)
+    paper_open_n = s.exec(
+        select(func.count()).select_from(PaperTrade).where(PaperTrade.status == "open")
+    ).one()
+
     last_tick = s.exec(select(func.max(Tick.received_at))).one()
     bridge = {
         "last_tick": last_tick,
@@ -85,10 +93,18 @@ def dashboard(request: Request, s: Session = Depends(get_session)):
             select(func.count()).select_from(Tick).where(Tick.received_at >= _now_utc() - timedelta(hours=1))
         ).one(),
     }
+    paper = {"realized": paper_realized, "open_n": paper_open_n}
     return templates.TemplateResponse(
         request,
         "dashboard.html",
-        _ctx(request, counts=counts, recent_signals=recent_signals, recent_bt=recent_bt, bridge=bridge),
+        _ctx(
+            request,
+            counts=counts,
+            recent_signals=recent_signals,
+            recent_bt=recent_bt,
+            bridge=bridge,
+            paper=paper,
+        ),
     )
 
 
@@ -416,6 +432,47 @@ def delete_strategy(strategy_id: int, s: Session = Depends(get_session)):
         s.delete(st)
     s.commit()
     return RedirectResponse("/strategies", status_code=303)
+
+
+# ---- 成績（ペーパートレード） --------------------------------------------
+
+
+@router.get("/performance", response_class=HTMLResponse)
+def performance(request: Request, s: Session = Depends(get_session)):
+    strategies = s.exec(
+        select(Strategy).where(Strategy.mode == "paper").order_by(Strategy.created_at.desc())
+    ).all()
+    names = {sym.code: sym.name for sym in s.exec(select(Symbol)).all()}
+
+    cards = []
+    for st in strategies:
+        trades = s.exec(
+            select(PaperTrade).where(PaperTrade.strategy_id == st.id).order_by(PaperTrade.entry_ts.desc())
+        ).all()
+        closed = [t for t in trades if t.status == "closed"]
+        opens = []
+        unrealized = 0.0
+        for t in (t for t in trades if t.status == "open"):
+            last = paper.latest_price(s, t.symbol_code)
+            u = (last - t.entry_price) * t.qty if last else 0.0
+            unrealized += u
+            opens.append({"t": t, "last": last, "unrealized": u})
+        m = paper.summarize(closed)
+        realized = m.get("realized_pnl", 0) or 0
+        cards.append(
+            {
+                "st": st,
+                "metrics": m,
+                "opens": opens,
+                "realized": realized,
+                "unrealized": round(unrealized, 0),
+                "total": round(realized + unrealized, 0),
+                "trades": trades[:50],
+            }
+        )
+    return templates.TemplateResponse(
+        request, "performance.html", _ctx(request, cards=cards, names=names)
+    )
 
 
 # ---- bridge 受信 (P1) -------------------------------------------------------

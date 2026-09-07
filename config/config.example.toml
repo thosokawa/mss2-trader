@@ -13,6 +13,10 @@ slack_webhook_url = ""
 # 通知を実際に送らずログ出力だけにする
 dry_run = true
 
+[paper]
+# ペーパートレードの約定価格に乗せるスリッページ（bps）
+slippage_bps = 3.0
+
 [bridge]
 # backend の受信エンドポイント（同一PCなら localhost）
 ingest_url = "http://127.0.0.1:8000/api/ingest"

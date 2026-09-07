@@ -22,6 +22,7 @@ import pandas as pd
 from sqlmodel import Session, select
 
 from app.bars import load_bars
+from app.engine import paper
 from app.models import LiveCursor, Signal, Strategy, Symbol, SymbolSetItem, utcnow
 from app.notify import format_signal, send_slack
 from app.strategy.base import Context, Position
@@ -109,7 +110,11 @@ def _run_strategy_symbol(
         return []
 
     qty_hint = int(strat.params.get("qty", 100))
-    pos = position_from_signals(session, strat_row.id, symbol_code, qty_hint)
+    is_paper = strat_row.mode == "paper"
+    if is_paper:
+        pos = paper.current_position(session, strat_row.id, symbol_code)
+    else:
+        pos = position_from_signals(session, strat_row.id, symbol_code, qty_hint)
     name = getattr(session.get(Symbol, symbol_code), "name", "") or ""
 
     all_ts = [pd.Timestamp(t).to_pydatetime() for t in bars.index]
@@ -139,7 +144,10 @@ def _run_strategy_symbol(
         session.add(row)
         session.commit()
         fired.append(row)
-        if sig.side == "BUY":
+        if is_paper:
+            paper.on_signal(session, strat_row, symbol_code, sig.side, price, sig.reason, ts, qty_hint)
+            pos = paper.current_position(session, strat_row.id, symbol_code)
+        elif sig.side == "BUY":
             pos = Position(qty=qty_hint, avg_price=price)
         elif sig.side in ("EXIT", "SELL"):
             pos = Position()

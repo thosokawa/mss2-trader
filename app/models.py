@@ -90,6 +90,27 @@ class Signal(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+class PaperTrade(SQLModel, table=True):
+    """ペーパートレードの1往復。live エンジンが mode=paper の戦略のシグナルから記録する
+    （BUY で建て、EXIT/SELL で仕切る）。BacktestTrade のライブ版。現物ロング only。"""
+
+    id: int | None = Field(default=None, primary_key=True)
+    strategy_id: int = Field(foreign_key="strategy.id", index=True)
+    strategy_name: str = ""
+    symbol_code: str = Field(index=True)
+    qty: int = 0
+    entry_ts: datetime
+    entry_price: float
+    entry_reason: str = ""
+    exit_ts: datetime | None = None
+    exit_price: float | None = None
+    exit_reason: str = ""
+    pnl: float | None = None
+    return_pct: float | None = None
+    status: str = Field(default="open", index=True, description="open / closed")
+    created_at: datetime = Field(default_factory=utcnow)
+
+
 class LiveCursor(SQLModel, table=True):
     """live エンジンが (戦略, 銘柄) ごとに「どの足まで評価したか」を記録する。
 

@@ -63,6 +63,12 @@ def test_strategy_crud(client):
     assert "SMAテスト戦略" not in r.text
 
 
+def test_performance_page(client):
+    r = client.get("/performance")
+    assert r.status_code == 200
+    assert "成績" in r.text
+
+
 def test_healthz(client):
     assert client.get("/healthz").json() == {"ok": True}
 

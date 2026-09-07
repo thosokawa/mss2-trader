@@ -21,6 +21,7 @@
   <a href="/data"><div class="n">{{ counts.bars }}</div>足データ</a>
   <a href="/backtests"><div class="n">{{ counts.backtests }}</div>バックテスト</a>
   <a href="/strategies"><div class="n">{{ counts.strategies_enabled }}</div>稼働中の戦略</a>
+  <a href="/performance"><div class="n {{ 'pos' if paper.realized>=0 else 'neg' }}">{{ '{:,.0f}'.format(paper.realized) }}</div>ペーパー実現損益{% if paper.open_n %} / 建玉{{ paper.open_n }}{% endif %}</a>
 </div>
 
 <h3 style="margin-top:2rem">最近のシグナル</h3>

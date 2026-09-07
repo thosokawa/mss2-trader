@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>成績（ペーパートレード）</h2>
+<p><small>mode=<code>paper</code> の<a href="/strategies">戦略</a>が live エンジンでシグナルを出すと PaperBroker で擬似約定します。
+実発注はしません。含み損益は最新ティック価格で評価。</small></p>
+
+{% if not cards %}
+<p>ペーパートレードの戦略がありません。<a href="/strategies">戦略</a>を <code>paper</code> モードで登録して有効化してください。</p>
+{% endif %}
+
+{% for c in cards %}
+<article>
+  <h3 style="margin-bottom:.2rem">
+    {{ c.st.name }}
+    {% if not c.st.enabled %}<small class="neg">（停止中）</small>{% endif %}
+  </h3>
+  <p><small>{{ c.st.timeframe }} / slippage 概算込み</small></p>
+
+  <div class="metrics">
+    <div><div class="k">実現損益</div><div class="v {{ 'pos' if c.realized>=0 else 'neg' }}">{{ '{:,.0f}'.format(c.realized) }}</div></div>
+    <div><div class="k">含み損益</div><div class="v {{ 'pos' if c.unrealized>=0 else 'neg' }}">{{ '{:,.0f}'.format(c.unrealized) }}</div></div>
+    <div><div class="k">合計</div><div class="v {{ 'pos' if c.total>=0 else 'neg' }}">{{ '{:,.0f}'.format(c.total) }}</div></div>
+    <div><div class="k">往復数</div><div class="v">{{ c.metrics.trades }}</div></div>
+    {% if c.metrics.trades %}
+    <div><div class="k">勝率</div><div class="v">{{ c.metrics.win_rate_pct }}%</div></div>
+    <div><div class="k">PF</div><div class="v">{{ c.metrics.profit_factor }}</div></div>
+    <div><div class="k">最良 / 最悪</div><div class="v">{{ '{:,.0f}'.format(c.metrics.best) }} / {{ '{:,.0f}'.format(c.metrics.worst) }}</div></div>
+    {% endif %}
+  </div>
+
+  {% if c.opens %}
+  <h4 style="margin-top:1rem">建玉</h4>
+  <table>
+    <thead><tr><th>銘柄</th><th>株数</th><th>建値</th><th>現在値</th><th>含み損益</th><th>建てた根拠</th></tr></thead>
+    <tbody>
+    {% for o in c.opens %}
+      <tr>
+        <td>{{ o.t.symbol_code }} {{ names.get(o.t.symbol_code, '') }}</td>
+        <td>{{ o.t.qty }}</td>
+        <td>{{ '%.1f'|format(o.t.entry_price) }}</td>
+        <td>{{ '%.1f'|format(o.last) if o.last else '—' }}</td>
+        <td class="{{ 'pos' if o.unrealized>=0 else 'neg' }}">{{ '{:,.0f}'.format(o.unrealized) }}</td>
+        <td><small>{{ o.t.entry_reason }}</small></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if c.trades %}
+  <h4 style="margin-top:1rem">トレード</h4>
+  <table>
+    <thead><tr><th>状態</th><th>銘柄</th><th>建</th><th>建値</th><th>仕切</th><th>仕切値</th><th>株数</th><th>損益</th><th>%</th></tr></thead>
+    <tbody>
+    {% for t in c.trades %}
+      <tr>
+        <td>{{ '確定' if t.status == 'closed' else '建玉' }}</td>
+        <td>{{ t.symbol_code }}</td>
+        <td>{{ t.entry_ts | jst }}</td><td>{{ '%.1f'|format(t.entry_price) }}</td>
+        <td>{{ t.exit_ts | jst if t.exit_ts else '—' }}</td>
+        <td>{{ '%.1f'|format(t.exit_price) if t.exit_price else '—' }}</td>
+        <td>{{ t.qty }}</td>
+        <td class="{{ 'pos' if (t.pnl or 0)>=0 else 'neg' }}">{{ '{:,.0f}'.format(t.pnl) if t.pnl is not none else '—' }}</td>
+        <td class="{{ 'pos' if (t.return_pct or 0)>=0 else 'neg' }}">{{ '%.2f'|format(t.return_pct) if t.return_pct is not none else '—' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</article>
+{% endfor %}
+{% endblock %}
