@@ -66,7 +66,13 @@ if (Test-Backend) {
 if ($SkipWorkbook) {
   Write-Host '[workbook] スキップ'
 } else {
+  # $ErrorActionPreference='Stop' のままだと、python の stderr 出力（例外の
+  # traceback）を PowerShell が即座に致命的エラー扱いしてスクリプト全体を
+  # 止めてしまう。ここだけ緩めて $LASTEXITCODE で判定する。
+  $prevEAP = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
   $wbOut = & $py (Join-Path $root 'bridge\build_workbook.py') --set-id $SetId 2>&1
+  $ErrorActionPreference = $prevEAP
   if ($LASTEXITCODE -eq 0) {
     Write-Host "[workbook] 生成: $workbook"
   } elseif (Test-Path $workbook) {
