@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>ヘルプ / 使い方</h2>
+
+<article>
+  <strong>目次</strong>
+  <ul>
+    <li><a href="#screens">画面一覧</a></li>
+    <li><a href="#windows">Windows 日次運用（起動・停止・自動起動）</a></li>
+    <li><a href="#trouble">トラブルシューティング</a></li>
+    <li><a href="#history">過去データの取得（fetch_history.py）</a></li>
+    <li><a href="#backtest">バックテスト</a></li>
+    <li><a href="#optimize">最適化（パラメータ探索）</a></li>
+    <li><a href="#strategy">戦略</a></li>
+    <li><a href="#notify">Slack 通知の設定</a></li>
+  </ul>
+</article>
+
+<h3 id="screens">画面一覧</h3>
+<table>
+  <tbody>
+    <tr><td><a href="/">ダッシュボード</a></td><td>ブリッジ状態・銘柄/足/戦略の件数・最近のシグナル/バックテスト</td></tr>
+    <tr><td><a href="/symbol-sets">銘柄セット</a></td><td>RSSで監視する銘柄グループ。<code>build_workbook.py</code> が参照</td></tr>
+    <tr><td><a href="/live">ライブ</a></td><td>bridgeから届く最新気配と生存監視（5秒更新、30秒無受信で「遅延」）</td></tr>
+    <tr><td><a href="/data">データ</a></td><td>蓄積済み足のカバレッジ</td></tr>
+    <tr><td><a href="/backtest">バックテスト</a> / <a href="/backtests">履歴</a></td><td>戦略を過去足で検証</td></tr>
+    <tr><td><a href="/optimize">最適化</a> / <a href="/optimizations">履歴</a></td><td>パラメータを総当たりで探索</td></tr>
+    <tr><td><a href="/strategies">戦略</a></td><td>liveエンジンで回すロジックの登録・有効化</td></tr>
+    <tr><td><a href="/signals">シグナル</a></td><td>liveエンジンが記録したシグナル履歴</td></tr>
+    <tr><td><a href="/performance">成績</a></td><td>paperモード戦略の擬似約定・損益</td></tr>
+  </tbody>
+</table>
+
+<h3 id="windows">Windows 日次運用</h3>
+<p><strong>通常（自動起動を設定済みなら）</strong>: Windows にログオン → 45〜60秒待つ → マーケットスピードII にログイン。以上。</p>
+<p><strong>手動で起動/停止したいとき</strong>（PowerShell）:</p>
+<pre><code>cd $HOME\mss2-trader
+git pull
+.\bridge\run_all.ps1        # backend → Excel(RSS) → bridge を一括起動
+.\bridge\stop_all.ps1       # 停止（Excel は手動で閉じる）</code></pre>
+<p><strong>自動起動の登録/解除</strong>（スタートアップフォルダに登録・管理者権限不要）:</p>
+<pre><code>.\bridge\install_autostart.ps1            # 登録
+.\bridge\install_autostart.ps1 -Uninstall # 解除</code></pre>
+<p><strong>ログの確認</strong>:</p>
+<pre><code>Get-Content .\logs\backend-$(Get-Date -Format yyyyMMdd).log -Tail 30
+Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
+<p><small>初回だけ <code>Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned</code> を実行すると
+<code>.\xxx.ps1</code> の直接実行ができるようになる（管理者不要）。</small></p>
+
+<h3 id="trouble">トラブルシューティング</h3>
+<table>
+  <thead><tr><th>症状</th><th>対処</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>ダッシュボードの「ブリッジ状態」が<span class="neg">遅延</span></td>
+      <td>
+        時間外（寄り付き前・引け後・週末）なら正常な場合が多い。場中に出るなら:<br>
+        1. bridge ログを確認（<code>sent N quotes</code> が続いているか）<br>
+        2. <code>.venv\Scripts\python bridge\bridge.py --dump</code> で Excel の生値を確認（
+        <code>#NAME?</code> や空なら MarketSpeed II のログイン切れ）<br>
+        3. 直らなければ <code>stop_all.ps1</code> → Excel を閉じてMS2に再ログイン → <code>run_all.ps1</code>
+      </td>
+    </tr>
+    <tr>
+      <td>ページで Internal Server Error</td>
+      <td>
+        <code>logs\backend-*.log</code> の末尾（<code>Traceback</code> 行以降）を確認。
+        コード更新（<code>git pull</code>）した直後は必ず <code>stop_all.ps1</code> → <code>run_all.ps1</code>
+        でバックエンドを再起動する（新しいテーブル等は再起動時に作られる）
+      </td>
+    </tr>
+    <tr>
+      <td>backend / bridge が重複して起動している</td>
+      <td><code>Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" | Select ProcessId, CommandLine</code>
+        で確認し、<code>stop_all.ps1</code> で一旦全部止めてから <code>run_all.ps1</code> を実行し直す</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="history">過去データの取得（scripts/fetch_history.py）</h3>
+<p>Yahoo Finance（yfinance）から過去足を取ってきて DB に保存する。ネットがあれば RSS 無しでも使える。</p>
+<pre><code>.venv\Scripts\python scripts\fetch_history.py 7203 --interval 5m --period 60d
+.venv\Scripts\python scripts\fetch_history.py 7203 6501 9984 --interval 5m --period 60d
+.venv\Scripts\python scripts\fetch_history.py 7203 --interval 1d --period 2y</code></pre>
+<table>
+  <thead><tr><th>interval</th><th>取得可能な期間の目安</th></tr></thead>
+  <tbody>
+    <tr><td><code>1m</code></td><td>直近7日ほど</td></tr>
+    <tr><td><code>5m</code> / <code>15m</code></td><td>直近60日ほど</td></tr>
+    <tr><td><code>1d</code></td><td>長期間OK（<code>2y</code> 等）</td></tr>
+  </tbody>
+</table>
+<p><small>コードは自動で <code>.T</code> を付けて照会（日本株前提）。取得した足は <a href="/data">データ</a>、
+<a href="/backtest">バックテスト</a>、<a href="/optimize">最適化</a> の対象になる。</small></p>
+
+<h3 id="backtest">バックテスト</h3>
+<p><a href="/backtest">/backtest</a> で戦略・銘柄・足・パラメータ(JSON)・手数料を指定して実行。
+戦略を選ぶとパラメータ欄がその戦略の既定値に自動で入る。結果は
+取引数・勝率・合計損益・PF・最大DDと、往復トレード一覧。過去分は <a href="/backtests">履歴</a> から見返せる。</p>
+
+<h3 id="optimize">最適化（パラメータ探索）</h3>
+<p><a href="/optimize">/optimize</a> はパラメータの組み合わせを総当たりでバックテストし、
+<strong>提案</strong>する機能。</p>
+<ol>
+  <li>戦略・銘柄・足を選ぶ</li>
+  <li>「パラメータ範囲 (JSON)」で、探索したい項目を配列にする。例:
+    <code>{"fast": [5, 10, 15], "slow": [20, 30, 40], "qty": 100}</code>（<code>qty</code>は固定のまま）</li>
+  <li>学習期間の割合（既定0.7 = 前半70%で探索）、ランキング指標（合計損益/PF/勝率/平均損益）を指定して実行</li>
+</ol>
+<p><strong>結果の見方が重要</strong>: ランキングは <strong>検証期間（探索に使っていない後半のデータ）の成績</strong>
+で決まる。同じ期間の成績だけで選ぶと過学習（その期間にだけ都合よく合わせた設定）になりやすいため。
+検証期間の取引が少ない行には ⚠ が付く — 信用しないこと。良さそうな行の「戦略登録」ボタンから
+そのパラメータのまま <a href="/strategies">戦略</a> に登録できる。過去の探索結果は
+<a href="/optimizations">履歴</a> から見返せる。</p>
+
+<h3 id="strategy">戦略</h3>
+<p>作れるロジックはトレンドフォロー・逆張り・ブレイクアウトなど7種類（<code>on_bar()</code> を実装するだけで
+自作も可能。詳しくはリポジトリの <code>app/strategy/README.md</code>）。</p>
+<table>
+  <thead><tr><th>戦略</th><th>系統</th><th>概要</th></tr></thead>
+  <tbody>
+    <tr><td>SMAクロス</td><td>トレンドフォロー</td><td>短期/長期SMAのゴールデン/デッドクロス</td></tr>
+    <tr><td>移動平均+RSI</td><td>トレンドフォロー</td><td>終値とMAの関係 + 傾き + RSI帯でエントリー</td></tr>
+    <tr><td>トレンド×RSI出戻り</td><td>アラート専用</td><td>短期MA/中期MAの上下 × RSIの40/60出戻りで通知（<code>notify</code>向け）</td></tr>
+    <tr><td>MACDクロス</td><td>モメンタム</td><td>MACD線がシグナル線を上抜け/下抜け</td></tr>
+    <tr><td>ボリンジャー逆張り</td><td>逆張り</td><td>下限バンド反発で買い、中心線/上限で手仕舞い</td></tr>
+    <tr><td>ドンチャンブレイクアウト</td><td>ブレイクアウト</td><td>N本高値ブレイクで買い、M本安値割れで手仕舞い</td></tr>
+    <tr><td>ADXフィルタ+MAクロス</td><td>フィルタ付きトレンド</td><td>ADXでトレンドの強さを確認してからSMAクロスに従う</td></tr>
+  </tbody>
+</table>
+<p>登録は <a href="/strategies">/strategies</a> から。モードは <code>notify</code>（通知のみ）/
+<code>paper</code>（擬似約定して<a href="/performance">成績</a>に反映）/ <code>live</code>（実発注・未実装）。</p>
+
+<h3 id="notify">Slack 通知の設定</h3>
+<p><code>config\config.toml</code> の <code>[notify]</code> に Incoming Webhook URL を入れて <code>dry_run = false</code>
+にすると、liveエンジンが出したシグナルが実際にSlackへ届く。未設定・<code>dry_run = true</code> のときは
+送信せずログ出力のみ（<code>[notify dry_run] ...</code>）。</p>
+
+{% endblock %}

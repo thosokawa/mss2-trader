@@ -644,6 +644,11 @@ async def ingest(request: Request, s: Session = Depends(get_session)):
     return JSONResponse({"ok": True, "received": n})
 
 
+@router.get("/help", response_class=HTMLResponse)
+def help_page(request: Request):
+    return templates.TemplateResponse(request, "help.html", _ctx(request))
+
+
 @router.get("/healthz")
 def healthz():
     return {"ok": True}

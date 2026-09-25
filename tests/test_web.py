@@ -202,6 +202,14 @@ def test_performance_page(client):
     assert "成績" in r.text
 
 
+def test_help_page(client):
+    r = client.get("/help")
+    assert r.status_code == 200
+    assert "ヘルプ" in r.text
+    assert "run_all.ps1" in r.text
+    assert "fetch_history.py" in r.text
+
+
 def test_healthz(client):
     assert client.get("/healthz").json() == {"ok": True}
 
