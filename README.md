@@ -55,7 +55,7 @@ cp config/config.example.toml config/config.toml   # 任意（無くても examp
 # Web UI（バックグラウンドで tick→足 集約ループ と live シグナルループも回る）
 .venv/bin/python -m app.main       # http://127.0.0.1:8000
 
-# 過去足を取得（yfinance。日本株は自動で .T を付与）
+# 過去足を取得（yfinance。日本株は自動で .T を付与）。Web UI の /data 画面からも同じことができる
 .venv/bin/python scripts/fetch_history.py 7203 6501 --interval 5m --period 60d
 
 # CLI でバックテスト
@@ -126,7 +126,9 @@ Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 Web UI:
 - **銘柄セット** … RSS で監視する銘柄グループ。`build_workbook.py` / `bridge.py --set-id` が参照
 - **ライブ** … bridge から届く最新気配と生存監視（5秒自動更新、30秒無受信で「遅延」）
-- **データ** … 蓄積済み足のカバレッジ（時刻は JST 表示、DB は UTC）
+- **データ** … 蓄積済み足のカバレッジ（時刻は JST 表示、DB は UTC）。
+  「過去データを取得」フォームから yfinance 取得も画面上で実行できる
+  （銘柄セットを選ぶとコード欄に自動反映。CLI と同じ `app/history.py` を使用）
 - **バックテスト / 履歴** … 戦略検証
 - **最適化** … 戦略のパラメータをJSONで範囲指定して総当たりバックテスト。期間を学習/検証に
   分割し、**検証期間（探索に使っていない後半）の成績**でランキング（過学習対策）。

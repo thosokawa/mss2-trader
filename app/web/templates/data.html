@@ -1,7 +1,65 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>取得済みデータ</h2>
-<p><small>足データは <code>scripts/fetch_history.py</code> で取得します（例: <code>python scripts/fetch_history.py 7203 --interval 5m</code>）。P1 以降は RSS ブリッジからも蓄積されます。</small></p>
+
+<article>
+  <h3 style="margin-top:0">過去データを取得</h3>
+  <form method="post" action="/data/fetch">
+    <div class="grid">
+      <label>銘柄セットから反映
+        <select id="set_picker">
+          <option value="">— 選択 —</option>
+          {% for ss in sets %}<option value="{{ ss.id }}">{{ ss.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>足
+        <select name="interval">
+          {% for tf in ["5m", "1m", "15m", "1d"] %}<option {% if tf==fetch_interval %}selected{% endif %}>{{ tf }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>期間<input name="period" value="{{ fetch_period or '60d' }}" placeholder="60d, 2y など"></label>
+    </div>
+    <label>銘柄コード（カンマ/スペース区切り）
+      <input type="text" name="codes" id="codes" placeholder="7203, 6501, 9984" required>
+    </label>
+    <button type="submit">取得</button>
+  </form>
+  <p><small>
+    yfinance の制約: <code>1m</code>=直近7日 / <code>5m</code> <code>15m</code>=直近60日ほど / <code>1d</code>は長期間OK。
+    日本株コードは自動で「.T」を付けて照会。恒久的な分足ヒストリは RSS ブリッジでも別途蓄積される。
+  </small></p>
+</article>
+
+<script>
+  const SET_CODES = {{ set_codes | tojson }};
+  const _picker = document.getElementById('set_picker'), _codes = document.getElementById('codes');
+  _picker.addEventListener('change', () => {
+    const c = SET_CODES[_picker.value];
+    if (c) _codes.value = c;
+  });
+</script>
+
+{% if fetch_results is not none %}
+<h3>取得結果</h3>
+<table>
+  <thead><tr><th>コード</th><th>結果</th><th>本数</th><th>期間 / メッセージ</th></tr></thead>
+  <tbody>
+  {% for r in fetch_results %}
+    <tr>
+      <td>{{ r.code }}</td>
+      <td>{% if r.ok %}<span class="pos">OK</span>{% else %}<span class="neg">失敗</span>{% endif %}</td>
+      <td>{{ r.n }}</td>
+      <td>
+        {% if r.ok %}{{ r.start | jst('%Y-%m-%d %H:%M') }} 〜 {{ r.end | jst('%Y-%m-%d %H:%M') }}
+        {% else %}<span class="neg">{{ r.message }}</span>{% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h3>カバレッジ</h3>
 {% if rows %}
 <table>
   <thead><tr><th>コード</th><th>銘柄名</th><th>足</th><th>本数</th><th>開始</th><th>終了</th></tr></thead>

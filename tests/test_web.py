@@ -202,6 +202,39 @@ def test_performance_page(client):
     assert "成績" in r.text
 
 
+def test_data_fetch_from_web(client):
+    from unittest.mock import patch
+
+    import pandas as pd
+
+    idx = pd.date_range("2026-01-01", periods=4, freq="5min", tz="UTC")
+    fake = pd.DataFrame(
+        {"Open": [1.0] * 4, "High": [1.0] * 4, "Low": [1.0] * 4, "Close": [1.0] * 4, "Volume": [1] * 4},
+        index=idx,
+    )
+    with patch("app.history.yf.download", return_value=fake):
+        r = client.post("/data/fetch", data={"codes": "9005, 9006", "interval": "5m", "period": "60d"})
+    assert r.status_code == 200
+    assert "取得結果" in r.text
+    assert "9005" in r.text and "9006" in r.text
+
+    r = client.get("/data")
+    assert r.status_code == 200
+    assert "9005" in r.text  # カバレッジ表に反映されている
+
+
+def test_data_fetch_reports_failure(client):
+    from unittest.mock import patch
+
+    import pandas as pd
+
+    with patch("app.history.yf.download", return_value=pd.DataFrame()):
+        r = client.post("/data/fetch", data={"codes": "9999", "interval": "5m", "period": "60d"})
+    assert r.status_code == 200
+    assert "失敗" in r.text
+    assert "データ取得できず" in r.text
+
+
 def test_help_page(client):
     r = client.get("/help")
     assert r.status_code == 200

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -17,6 +18,7 @@ from app.db import get_session
 from app.engine import paper
 from app.engine.backtest import run_backtest
 from app.engine.optimize import OptimizeRow, optimize
+from app.history import fetch_and_store
 from app.models import (
     BacktestRun,
     BacktestTrade,
@@ -197,11 +199,10 @@ def delete_set(set_id: int, s: Session = Depends(get_session)):
     return RedirectResponse("/symbol-sets", status_code=303)
 
 
-# ---- データ（足）カバレッジ ---------------------------------------------------
+# ---- データ（足）カバレッジ / 過去データ取得 ---------------------------------
 
 
-@router.get("/data", response_class=HTMLResponse)
-def data_coverage(request: Request, s: Session = Depends(get_session)):
+def _data_coverage_ctx(s: Session) -> dict:
     rows = s.exec(
         select(
             Bar.symbol_code,
@@ -212,7 +213,49 @@ def data_coverage(request: Request, s: Session = Depends(get_session)):
         ).group_by(Bar.symbol_code, Bar.timeframe)
     ).all()
     names = {sym.code: sym.name for sym in s.exec(select(Symbol)).all()}
-    return templates.TemplateResponse(request, "data.html", _ctx(request, rows=rows, names=names))
+    sets = s.exec(select(SymbolSet).order_by(SymbolSet.name)).all()
+    items = s.exec(
+        select(SymbolSetItem).order_by(SymbolSetItem.set_id, SymbolSetItem.sort_order)
+    ).all()
+    set_codes: dict[int, list[str]] = {}
+    for it in items:
+        set_codes.setdefault(it.set_id, []).append(it.symbol_code)
+    return {
+        "rows": rows,
+        "names": names,
+        "sets": sets,
+        "set_codes": {k: ",".join(v) for k, v in set_codes.items()},
+    }
+
+
+@router.get("/data", response_class=HTMLResponse)
+def data_coverage(request: Request, s: Session = Depends(get_session)):
+    return templates.TemplateResponse(
+        request, "data.html", _ctx(request, fetch_results=None, **_data_coverage_ctx(s))
+    )
+
+
+@router.post("/data/fetch", response_class=HTMLResponse)
+def data_fetch(
+    request: Request,
+    codes: str = Form(...),
+    interval: str = Form("5m"),
+    period: str = Form("60d"),
+    s: Session = Depends(get_session),
+):
+    code_list = [c for c in re.split(r"[,\s]+", codes.strip()) if c]
+    results = [fetch_and_store(s, code, interval, period) for code in code_list]
+    return templates.TemplateResponse(
+        request,
+        "data.html",
+        _ctx(
+            request,
+            fetch_results=results,
+            fetch_interval=interval,
+            fetch_period=period,
+            **_data_coverage_ctx(s),
+        ),
+    )
 
 
 # ---- ライブ気配（bridge 生存監視） -----------------------------------------

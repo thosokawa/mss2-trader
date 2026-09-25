@@ -8,7 +8,7 @@
     <li><a href="#screens">画面一覧</a></li>
     <li><a href="#windows">Windows 日次運用（起動・停止・自動起動）</a></li>
     <li><a href="#trouble">トラブルシューティング</a></li>
-    <li><a href="#history">過去データの取得（fetch_history.py）</a></li>
+    <li><a href="#history">過去データの取得</a></li>
     <li><a href="#backtest">バックテスト</a></li>
     <li><a href="#optimize">最適化（パラメータ探索）</a></li>
     <li><a href="#strategy">戦略</a></li>
@@ -22,7 +22,7 @@
     <tr><td><a href="/">ダッシュボード</a></td><td>ブリッジ状態・銘柄/足/戦略の件数・最近のシグナル/バックテスト</td></tr>
     <tr><td><a href="/symbol-sets">銘柄セット</a></td><td>RSSで監視する銘柄グループ。<code>build_workbook.py</code> が参照</td></tr>
     <tr><td><a href="/live">ライブ</a></td><td>bridgeから届く最新気配と生存監視（5秒更新、30秒無受信で「遅延」）</td></tr>
-    <tr><td><a href="/data">データ</a></td><td>蓄積済み足のカバレッジ</td></tr>
+    <tr><td><a href="/data">データ</a></td><td>蓄積済み足のカバレッジ、過去データ取得フォーム</td></tr>
     <tr><td><a href="/backtest">バックテスト</a> / <a href="/backtests">履歴</a></td><td>戦略を過去足で検証</td></tr>
     <tr><td><a href="/optimize">最適化</a> / <a href="/optimizations">履歴</a></td><td>パラメータを総当たりで探索</td></tr>
     <tr><td><a href="/strategies">戦略</a></td><td>liveエンジンで回すロジックの登録・有効化</td></tr>
@@ -77,8 +77,10 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
   </tbody>
 </table>
 
-<h3 id="history">過去データの取得（scripts/fetch_history.py）</h3>
-<p>Yahoo Finance（yfinance）から過去足を取ってきて DB に保存する。ネットがあれば RSS 無しでも使える。</p>
+<h3 id="history">過去データの取得</h3>
+<p>Yahoo Finance（yfinance）から過去足を取ってきて DB に保存する。ネットがあれば RSS 無しでも使える。
+<strong><a href="/data">/data</a> 画面の「過去データを取得」フォームから直接実行できる</strong>
+（銘柄セットを選ぶとコード欄に自動で入る）。CLI からも同じことができる:</p>
 <pre><code>.venv\Scripts\python scripts\fetch_history.py 7203 --interval 5m --period 60d
 .venv\Scripts\python scripts\fetch_history.py 7203 6501 9984 --interval 5m --period 60d
 .venv\Scripts\python scripts\fetch_history.py 7203 --interval 1d --period 2y</code></pre>
