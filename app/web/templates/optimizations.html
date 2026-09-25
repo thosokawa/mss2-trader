@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>最適化 履歴</h2>
+<p><small><a href="/optimize">→ 新しく探索する</a></small></p>
+{% if runs %}
+<table>
+  <thead><tr><th>#</th><th>日時</th><th>戦略</th><th>銘柄</th><th>足</th><th>ランキング</th><th>組合せ数</th><th></th></tr></thead>
+  <tbody>
+  {% for r in runs %}
+    <tr>
+      <td>{{ r.id }}</td><td>{{ r.created_at | jst }}</td>
+      <td>{{ r.strategy_name }}</td><td>{{ r.symbol_code }}</td><td>{{ r.timeframe }}</td>
+      <td>{{ r.rank_by }}</td><td>{{ r.combos }}</td>
+      <td><a href="/optimizations/{{ r.id }}">詳細</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p>まだありません。</p>{% endif %}
+{% endblock %}

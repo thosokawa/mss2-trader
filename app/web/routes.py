@@ -16,11 +16,13 @@ from app.config import get_config
 from app.db import get_session
 from app.engine import paper
 from app.engine.backtest import run_backtest
+from app.engine.optimize import OptimizeRow, optimize
 from app.models import (
     BacktestRun,
     BacktestTrade,
     Bar,
     LiveCursor,
+    OptimizationRun,
     PaperTrade,
     Signal,
     Strategy,
@@ -354,6 +356,116 @@ def backtest_detail(run_id: int, request: Request, s: Session = Depends(get_sess
     )
 
 
+# ---- 最適化（グリッドサーチ + ウォークフォワード検証） -----------------------
+
+
+@router.get("/optimize", response_class=HTMLResponse)
+def optimize_form(request: Request, s: Session = Depends(get_session)):
+    symbols = s.exec(select(Symbol).order_by(Symbol.code)).all()
+    return templates.TemplateResponse(
+        request, "optimize.html", _ctx(request, symbols=symbols, result=None, class_path=None)
+    )
+
+
+@router.post("/optimize", response_class=HTMLResponse)
+def optimize_run(
+    request: Request,
+    class_path: str = Form(...),
+    symbol_code: str = Form(...),
+    timeframe: str = Form("5m"),
+    grid_json: str = Form(...),
+    train_ratio: float = Form(0.7),
+    min_test_trades: int = Form(3),
+    rank_by: str = Form("total_pnl"),
+    commission_per_trade: float = Form(0.0),
+    s: Session = Depends(get_session),
+):
+    symbols = s.exec(select(Symbol).order_by(Symbol.code)).all()
+
+    def _error(msg: str):
+        return templates.TemplateResponse(
+            request,
+            "optimize.html",
+            _ctx(
+                request, symbols=symbols, result=None, error=msg,
+                class_path=class_path, selected_symbol=symbol_code, rank_by=rank_by,
+            ),
+        )
+
+    try:
+        grid = json.loads(grid_json or "{}")
+    except json.JSONDecodeError as e:
+        return _error(f"パラメータ範囲 JSON エラー: {e}")
+
+    cls = load_strategy_class(class_path)
+    bars = load_bars(s, symbol_code, timeframe)
+    try:
+        rows = optimize(
+            cls, bars, symbol_code, grid,
+            timeframe=timeframe, train_ratio=train_ratio, min_test_trades=min_test_trades,
+            rank_by=rank_by, commission_per_trade=commission_per_trade,
+        )
+    except ValueError as e:
+        return _error(str(e))
+
+    top = rows[:50]
+    run = OptimizationRun(
+        strategy_name=cls.__name__,
+        class_path=class_path,
+        symbol_code=symbol_code,
+        timeframe=timeframe,
+        grid_json=json.dumps(grid, ensure_ascii=False),
+        train_ratio=train_ratio,
+        rank_by=rank_by,
+        min_test_trades=min_test_trades,
+        combos=len(rows),
+        results_json=json.dumps(
+            [{"params": r.params, "train": r.train, "test": r.test, "warning": r.warning} for r in top],
+            ensure_ascii=False,
+            default=str,
+        ),
+    )
+    s.add(run)
+    s.commit()
+    s.refresh(run)
+    return templates.TemplateResponse(
+        request,
+        "optimize.html",
+        _ctx(
+            request, symbols=symbols, result=top, run_id=run.id, combos=len(rows),
+            class_path=class_path, selected_symbol=symbol_code, rank_by=rank_by,
+        ),
+    )
+
+
+@router.get("/optimizations", response_class=HTMLResponse)
+def optimizations(request: Request, s: Session = Depends(get_session)):
+    runs = s.exec(select(OptimizationRun).order_by(OptimizationRun.created_at.desc()).limit(100)).all()
+    return templates.TemplateResponse(request, "optimizations.html", _ctx(request, runs=runs))
+
+
+@router.get("/optimizations/{run_id}", response_class=HTMLResponse)
+def optimization_detail(run_id: int, request: Request, s: Session = Depends(get_session)):
+    run = s.get(OptimizationRun, run_id)
+    if not run:
+        return RedirectResponse("/optimizations", status_code=303)
+    parsed = json.loads(run.results_json or "[]")
+    result = [
+        OptimizeRow(params=r["params"], train=r["train"], test=r["test"], warning=r.get("warning", ""))
+        for r in parsed
+    ]
+    symbols = s.exec(select(Symbol).order_by(Symbol.code)).all()
+    return templates.TemplateResponse(
+        request,
+        "optimize.html",
+        _ctx(
+            request, symbols=symbols, result=result, run_id=run.id, combos=run.combos,
+            class_path=run.class_path, selected_symbol=run.symbol_code, rank_by=run.rank_by,
+            readonly=True,
+        ),
+    )
+
+
 # ---- シグナル履歴 -----------------------------------------------------------
 
 
@@ -371,8 +483,15 @@ def strategies(request: Request, s: Session = Depends(get_session)):
     rows = s.exec(select(Strategy).order_by(Strategy.created_at.desc())).all()
     sets = s.exec(select(SymbolSet).order_by(SymbolSet.name)).all()
     set_names = {ss.id: ss.name for ss in sets}
+    # /optimizations の「この設定で戦略登録」からの遷移でパラメータを事前入力する
+    prefill = {
+        "class_path": request.query_params.get("class_path", ""),
+        "params_json": request.query_params.get("params_json", ""),
+    }
     return templates.TemplateResponse(
-        request, "strategies.html", _ctx(request, rows=rows, sets=sets, set_names=set_names)
+        request,
+        "strategies.html",
+        _ctx(request, rows=rows, sets=sets, set_names=set_names, prefill=prefill),
     )
 
 

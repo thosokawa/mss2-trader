@@ -11,7 +11,7 @@
       <label>名前<input name="name" placeholder="例: トヨタ 5分SMA" required></label>
       <label>ロジック
         <select name="class_path" id="class_path" required>
-          {% for label, cp in builtin.items() %}<option value="{{ cp }}">{{ label }} ({{ cp }})</option>{% endfor %}
+          {% for label, cp in builtin.items() %}<option value="{{ cp }}" {% if prefill.class_path==cp %}selected{% endif %}>{{ label }} ({{ cp }})</option>{% endfor %}
         </select>
       </label>
       <label>銘柄セット
@@ -30,7 +30,7 @@
           <option value="live">live（実発注・P4）</option>
         </select>
       </label>
-      <label>パラメータ (JSON)<input name="params_json" id="params_json" value='{"fast": 5, "slow": 20, "qty": 100}'></label>
+      <label>パラメータ (JSON)<input name="params_json" id="params_json" value="{{ prefill.params_json or '{"fast": 5, "slow": 20, "qty": 100}' }}"></label>
     </div>
     <button type="submit">追加</button>
   </form>

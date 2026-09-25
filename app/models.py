@@ -139,6 +139,23 @@ class BacktestRun(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+class OptimizationRun(SQLModel, table=True):
+    """パラメータ最適化（グリッドサーチ）の1回分。上位 N 件の結果を JSON で保持。"""
+
+    id: int | None = Field(default=None, primary_key=True)
+    strategy_name: str = ""
+    class_path: str = ""
+    symbol_code: str = ""
+    timeframe: str = ""
+    grid_json: str = "{}"
+    train_ratio: float = 0.7
+    rank_by: str = "total_pnl"
+    min_test_trades: int = 3
+    combos: int = 0
+    results_json: str = "[]"
+    created_at: datetime = Field(default_factory=utcnow)
+
+
 class BacktestTrade(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     run_id: int = Field(foreign_key="backtestrun.id", index=True)

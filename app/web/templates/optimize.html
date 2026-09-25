@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>最適化（パラメータ探索）</h2>
+<p><small>
+  選んだ戦略のパラメータを総当たりでバックテストします。期間を「学習」と「検証」に分け、
+  <b>検証期間（探索に使っていない後半のデータ）の成績</b>でランキングします（過学習対策のウォークフォワード）。
+  学習期間だけ良く検証期間がダメな設定、検証取引が少ない設定は⚠付きで表示 — そのまま信用しないこと。
+  <a href="/optimizations">→ 履歴</a>
+</small></p>
+
+{% if error %}<article class="err">⚠ {{ error }}</article>{% endif %}
+
+{% if not readonly %}
+<article>
+  <form method="post" action="/optimize">
+    <div class="grid">
+      <label>戦略
+        <select name="class_path" id="class_path" required>
+          {% for label, cp in builtin.items() %}<option value="{{ cp }}" {% if class_path==cp %}selected{% endif %}>{{ label }} ({{ cp }})</option>{% endfor %}
+        </select>
+      </label>
+      <label>銘柄
+        <select name="symbol_code" required>
+          {% for sym in symbols %}<option value="{{ sym.code }}" {% if sym.code==selected_symbol %}selected{% endif %}>{{ sym.code }} {{ sym.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>足<select name="timeframe"><option>5m</option><option>1m</option><option>15m</option><option>1d</option></select></label>
+    </div>
+    <label>パラメータ範囲 (JSON) — 値を配列にすると総当たり。単値はそのまま固定
+      <input name="grid_json" id="grid_json" value="{{ '{"fast": [5, 10, 15], "slow": [20, 30, 40], "qty": 100}' }}">
+    </label>
+    <div class="grid">
+      <label>学習期間の割合<input name="train_ratio" type="number" step="0.05" min="0.3" max="0.9" value="0.7"></label>
+      <label>検証取引の最低本数<input name="min_test_trades" type="number" min="0" value="3"></label>
+      <label>ランキング指標
+        <select name="rank_by">
+          <option value="total_pnl" {% if rank_by=='total_pnl' %}selected{% endif %}>合計損益</option>
+          <option value="profit_factor" {% if rank_by=='profit_factor' %}selected{% endif %}>プロフィットファクター</option>
+          <option value="win_rate_pct" {% if rank_by=='win_rate_pct' %}selected{% endif %}>勝率</option>
+          <option value="avg_pnl" {% if rank_by=='avg_pnl' %}selected{% endif %}>平均損益</option>
+        </select>
+      </label>
+      <label>1取引あたり手数料(円)<input name="commission_per_trade" type="number" value="0" step="1"></label>
+    </div>
+    <button type="submit">探索を実行</button>
+  </form>
+</article>
+<script>
+  const STRAT_PARAMS = {{ builtin_params | tojson }};
+  const _sel = document.getElementById('class_path'), _gj = document.getElementById('grid_json');
+  _sel.addEventListener('change', () => {
+    const d = STRAT_PARAMS[_sel.value];
+    if (d) _gj.value = JSON.stringify(d);  // まず単値で入る。探索したい項目を [a, b, c] に書き換える
+  });
+</script>
+{% endif %}
+
+{% if result is not none %}
+<h3 style="margin-top:1.5rem">結果 {% if run_id %}<small>（<a href="/optimizations/{{ run_id }}">#{{ run_id }}</a>{% if combos %} — {{ combos }} 通り中、上位{{ result|length }}件{% endif %}）</small>{% endif %}</h3>
+{% if result %}
+<div style="overflow-x:auto">
+<table>
+  <thead>
+    <tr><th rowspan="2">#</th><th rowspan="2">パラメータ</th><th colspan="4">学習期間</th><th colspan="4">検証期間</th><th rowspan="2"></th></tr>
+    <tr><th>取引</th><th>勝率</th><th>損益</th><th>PF</th><th>取引</th><th>勝率</th><th>損益</th><th>PF</th></tr>
+  </thead>
+  <tbody>
+  {% for r in result %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td>
+        <small>{{ r.params | tojson }}</small>
+        {% if r.warning %}<br><small class="neg">⚠ {{ r.warning }}</small>{% endif %}
+      </td>
+      <td>{{ r.train.get('trades', 0) }}</td>
+      <td>{{ r.train.get('win_rate_pct', '—') }}</td>
+      <td class="{{ 'pos' if (r.train.get('total_pnl') or 0)>=0 else 'neg' }}">{{ '{:,.0f}'.format(r.train.get('total_pnl')) if r.train.get('total_pnl') is not none else '—' }}</td>
+      <td>{{ r.train.get('profit_factor', '—') }}</td>
+      <td>{{ r.test.get('trades', 0) }}</td>
+      <td>{{ r.test.get('win_rate_pct', '—') }}</td>
+      <td class="{{ 'pos' if (r.test.get('total_pnl') or 0)>=0 else 'neg' }}">{{ '{:,.0f}'.format(r.test.get('total_pnl')) if r.test.get('total_pnl') is not none else '—' }}</td>
+      <td>{{ r.test.get('profit_factor', '—') }}</td>
+      <td>
+        <form method="get" action="/strategies" style="display:inline">
+          <input type="hidden" name="class_path" value="{{ class_path }}">
+          <input type="hidden" name="params_json" value="{{ r.params | tojson }}">
+          <button type="submit" class="outline">戦略登録</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}<p>条件を満たす組み合わせがありませんでした。</p>{% endif %}
+{% endif %}
+{% endblock %}

@@ -32,6 +32,19 @@ def test_symbol_set_crud(client):
     assert "7203" in r.text and "トヨタ自動車" in r.text
 
 
+def test_strategies_prefill_from_query(client):
+    r = client.get(
+        "/strategies",
+        params={
+            "class_path": "app.strategy.examples.sma_cross:SmaCross",
+            "params_json": '{"fast": 7, "slow": 21, "qty": 50}',
+        },
+    )
+    assert r.status_code == 200
+    assert "fast&#34;: 7" in r.text
+    assert "slow&#34;: 21" in r.text
+
+
 def test_strategy_crud(client):
     import re
 
@@ -61,6 +74,72 @@ def test_strategy_crud(client):
 
     r = client.post(f"/strategies/{strategy_id}/delete", follow_redirects=True)
     assert "SMAテスト戦略" not in r.text
+
+
+def test_optimize_invalid_grid_json(client):
+    r = client.post(
+        "/optimize",
+        data={
+            "class_path": "app.strategy.examples.sma_cross:SmaCross",
+            "symbol_code": "7203",
+            "timeframe": "5m",
+            "grid_json": "not-json",
+            "train_ratio": "0.7",
+            "min_test_trades": "3",
+            "rank_by": "total_pnl",
+            "commission_per_trade": "0",
+        },
+    )
+    assert r.status_code == 200
+    assert "JSON エラー" in r.text
+
+
+def test_optimize_end_to_end(client):
+    import json
+    import re
+    from datetime import datetime, timedelta
+
+    from sqlmodel import Session
+
+    from app.db import engine
+    from app.models import Bar
+
+    with Session(engine) as s:
+        base = datetime(2026, 5, 1, 0, 0)
+        closes = [100 - i * 0.5 for i in range(40)] + [80 + i for i in range(40)]
+        for i, price in enumerate(closes):
+            s.add(
+                Bar(
+                    symbol_code="9999", timeframe="5m", ts=base + timedelta(minutes=5 * i),
+                    open=price, high=price, low=price, close=price, volume=100.0, source="test",
+                )
+            )
+        s.commit()
+
+    r = client.post(
+        "/optimize",
+        data={
+            "class_path": "app.strategy.examples.sma_cross:SmaCross",
+            "symbol_code": "9999",
+            "timeframe": "5m",
+            "grid_json": json.dumps({"fast": [5, 10], "slow": [20], "qty": 100}),
+            "train_ratio": "0.6",
+            "min_test_trades": "0",
+            "rank_by": "total_pnl",
+            "commission_per_trade": "0",
+        },
+    )
+    assert r.status_code == 200
+    assert "結果" in r.text
+
+    r = client.get("/optimizations")
+    assert r.status_code == 200
+    run_ids = re.findall(r"/optimizations/(\d+)", r.text)
+    assert run_ids
+
+    r = client.get(f"/optimizations/{run_ids[0]}")
+    assert r.status_code == 200
+    assert "戦略登録" in r.text
 
 
 def test_performance_page(client):
