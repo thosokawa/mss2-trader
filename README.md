@@ -24,10 +24,11 @@
 
 売買ロジックは `app/strategy/` に `Strategy.on_bar()` を実装するだけ。
 バックテストとライブが同じコードを呼ぶので挙動が一致する。書き方と指標ヘルパー
-（`ema` `rsi` `atr` `macd` `deviation_pct` `slope_pct` `crossed_up` …）は
-[app/strategy/README.md](app/strategy/README.md)。同梱例: `sma_cross`（SMAクロス）,
-`ma_rsi`（移動平均と終値の関係 + 傾き + RSI帯）,
-`trend_rsi_reclaim`（トレンド方向 × RSI 40/60 出戻りの通知）。
+（`ema` `rsi` `atr` `macd` `bollinger_bands` `donchian_upper/lower` `adx`
+`deviation_pct` `slope_pct` `crossed_up` …）は [app/strategy/README.md](app/strategy/README.md)。
+同梱例（トレンドフォロー・逆張り・ブレイクアウト・フィルタ付きなど7種類）:
+`sma_cross` `ma_rsi` `trend_rsi_reclaim` `macd_cross` `bollinger_reversion`
+`donchian_breakout` `adx_ma_cross`。
 
 ## フェーズ
 

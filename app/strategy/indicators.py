@@ -60,6 +60,40 @@ def macd(s: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9):
     return line, sig, line - sig
 
 
+def bollinger_bands(s: pd.Series, n: int = 20, num_std: float = 2.0):
+    """(中心線, 上限, 下限) を返す。中心線=SMA、上下限=中心線±num_std×標準偏差。"""
+    mid = sma(s, n)
+    std = s.rolling(int(n)).std()
+    upper = mid + num_std * std
+    lower = mid - num_std * std
+    return mid, upper, lower
+
+
+def donchian_upper(high: pd.Series, n: int) -> pd.Series:
+    """直近 n 本（現在足を含まない）の最高値。ブレイクアウト判定に使う。"""
+    return high.rolling(int(n)).max().shift(1)
+
+
+def donchian_lower(low: pd.Series, n: int) -> pd.Series:
+    """直近 n 本（現在足を含まない）の最安値。"""
+    return low.rolling(int(n)).min().shift(1)
+
+
+def adx(high: pd.Series, low: pd.Series, close: pd.Series, n: int = 14):
+    """Wilder の ADX。(ADX, +DI, -DI) を返す。ADX が高いほどトレンドが強い（方向は問わない）。"""
+    n = int(n)
+    up_move = high.diff()
+    down_move = -low.diff()
+    plus_dm = up_move.where((up_move > down_move) & (up_move > 0), 0.0)
+    minus_dm = down_move.where((down_move > up_move) & (down_move > 0), 0.0)
+    tr_n = true_range(high, low, close).ewm(alpha=1 / n, adjust=False, min_periods=n).mean()
+    plus_di = 100 * plus_dm.ewm(alpha=1 / n, adjust=False, min_periods=n).mean() / tr_n
+    minus_di = 100 * minus_dm.ewm(alpha=1 / n, adjust=False, min_periods=n).mean() / tr_n
+    dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
+    adx_line = dx.ewm(alpha=1 / n, adjust=False, min_periods=n).mean()
+    return adx_line, plus_di, minus_di
+
+
 def crossed_up(a: pd.Series, b: pd.Series) -> bool:
     """最新足で a が b を下から上へ抜けたか（1本前は a<=b、最新は a>b）。"""
     if len(a) < 2 or len(b) < 2:

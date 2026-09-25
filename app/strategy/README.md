@@ -68,14 +68,23 @@ Signal(side, qty=None, reason="", order_type="MKT", limit_price=None)
 | `deviation_pct(price, ma)` | 移動平均からの乖離率（%） |
 | `slope_pct(s, lookback)` | `lookback` 本前からの変化率（%）。傾きの判定に |
 | `crossed_up(a, b)` / `crossed_down(a, b)` | 最新足で a が b を上抜け / 下抜けしたか（bool） |
+| `bollinger_bands(s, n=20, num_std=2.0)` | `(中心線, 上限, 下限)` = SMA ± num_std×標準偏差 |
+| `donchian_upper(high, n)` / `donchian_lower(low, n)` | 現在足を含まない直近 n 本の最高値/最安値（ブレイクアウト判定用） |
+| `adx(high, low, close, n=14)` | `(ADX, +DI, -DI)`。ADX が高いほどトレンドが強い（方向は問わない） |
 
 ## 例
 
-- `examples/sma_cross.py` — 短期/長期 SMA のゴールデン/デッドクロス
-- `examples/ma_rsi.py` — 移動平均と終値の関係（上抜け/上方）+ 傾き + RSI 帯でエントリー
-- `examples/trend_rsi_reclaim.py` — 短期MA>中期MAでRSIが40を回復→買い / 短期MA<中期MAで
-  RSIが60を割れ→売り（ポジションを見ない純粋なアラート戦略。`mode=notify` 向け。
-  売り側は現エンジンでは paper/backtest 非対応）
+トレンドフォロー系、逆張り系、フィルタ付きなど性質の違うものを揃えてある。
+
+| 例 | 系統 | 概要 |
+|---|---|---|
+| `sma_cross.py` | トレンドフォロー | 短期/長期 SMA のゴールデン/デッドクロス |
+| `ma_rsi.py` | トレンドフォロー | 終値とMAの関係（上抜け/上方）+ 傾き + RSI帯でエントリー |
+| `trend_rsi_reclaim.py` | アラート専用 | 短期MA>中期MAでRSIが40回復→買い通知 / 短期MA<中期MAでRSIが60割れ→売り通知。ポジションを見ない純粋なアラート（`mode=notify` 向け。売り側は paper/backtest 非対応） |
+| `macd_cross.py` | モメンタム | MACD線がシグナル線を上抜け/下抜け |
+| `bollinger_reversion.py` | **逆張り** | ボリンジャー下限を割れてから反発で買い、中心線/上限で手仕舞い |
+| `donchian_breakout.py` | ブレイクアウト | 直近N本の高値ブレイクで買い、より短いM本の安値割れで手仕舞い（タートル風） |
+| `adx_ma_cross.py` | フィルタ付きトレンド | ADXでトレンドの強さを確認してから SMAクロスに従う（レンジ相場のダマシ回避） |
 
 ## パラメータ最適化
 
