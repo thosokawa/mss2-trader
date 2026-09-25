@@ -264,7 +264,9 @@ def live_table(request: Request, s: Session = Depends(get_session)):
 @router.get("/backtest", response_class=HTMLResponse)
 def backtest_form(request: Request, s: Session = Depends(get_session)):
     symbols = s.exec(select(Symbol).order_by(Symbol.code)).all()
-    return templates.TemplateResponse(request, "backtest.html", _ctx(request, symbols=symbols, result=None))
+    return templates.TemplateResponse(
+        request, "backtest.html", _ctx(request, symbols=symbols, result=None, class_path=None)
+    )
 
 
 @router.post("/backtest", response_class=HTMLResponse)
@@ -288,6 +290,10 @@ def backtest_run(
                 symbols=s.exec(select(Symbol)).all(),
                 result=None,
                 error=f"params JSON エラー: {e}",
+                class_path=class_path,
+                selected=symbol_code,
+                selected_timeframe=timeframe,
+                params_json=params_json,
             ),
         )
 
@@ -330,7 +336,16 @@ def backtest_run(
     return templates.TemplateResponse(
         request,
         "backtest.html",
-        _ctx(request, symbols=symbols, result=result, run_id=run.id, selected=symbol_code),
+        _ctx(
+            request,
+            symbols=symbols,
+            result=result,
+            run_id=run.id,
+            class_path=class_path,
+            selected=symbol_code,
+            selected_timeframe=timeframe,
+            params_json=json.dumps(strat.params, ensure_ascii=False),
+        ),
     )
 
 

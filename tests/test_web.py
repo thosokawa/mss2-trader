@@ -76,6 +76,60 @@ def test_strategy_crud(client):
     assert "SMAテスト戦略" not in r.text
 
 
+def test_backtest_form_state_persists_after_run(client):
+    from datetime import datetime, timedelta
+
+    from sqlmodel import Session
+
+    from app.db import engine
+    from app.models import Bar, Symbol
+
+    with Session(engine) as s:
+        s.add(Symbol(code="9984", name="ソフトバンクG"))
+        base = datetime(2026, 5, 1)
+        closes = [100 - i * 0.4 for i in range(40)] + [80 + i for i in range(40)]
+        for i, price in enumerate(closes):
+            s.add(
+                Bar(
+                    symbol_code="9984", timeframe="15m", ts=base + timedelta(minutes=15 * i),
+                    open=price, high=price, low=price, close=price, volume=100.0, source="test",
+                )
+            )
+        s.commit()
+
+    r = client.post(
+        "/backtest",
+        data={
+            "class_path": "app.strategy.examples.ma_rsi:MaRsi",
+            "symbol_code": "9984",
+            "timeframe": "15m",
+            "params_json": '{"ma_period": 20, "rsi_period": 10, "qty": 200}',
+            "commission_per_trade": "5",
+        },
+    )
+    assert r.status_code == 200
+    # 実行後も、選んだ戦略・銘柄・足・パラメータが選択されたまま（初期値に戻らない）
+    assert 'app.strategy.examples.ma_rsi:MaRsi" selected' in r.text
+    assert 'value="9984" selected' in r.text
+    assert "selected>15m" in r.text
+    assert "ma_period&#34;: 20" in r.text
+
+    # JSON エラー時も入力内容が失われない
+    r = client.post(
+        "/backtest",
+        data={
+            "class_path": "app.strategy.examples.ma_rsi:MaRsi",
+            "symbol_code": "9984",
+            "timeframe": "15m",
+            "params_json": "not-json",
+            "commission_per_trade": "0",
+        },
+    )
+    assert r.status_code == 200
+    assert 'app.strategy.examples.ma_rsi:MaRsi" selected' in r.text
+    assert 'value="9984" selected' in r.text
+
+
 def test_optimize_invalid_grid_json(client):
     r = client.post(
         "/optimize",
