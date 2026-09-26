@@ -17,21 +17,21 @@
   <p><small>{{ c.st.timeframe }} / slippage 概算込み</small></p>
 
   <div class="metrics">
-    <div><div class="k">実現損益</div><div class="v {{ 'pos' if c.realized>=0 else 'neg' }}">{{ '{:,.0f}'.format(c.realized) }}</div></div>
-    <div><div class="k">含み損益</div><div class="v {{ 'pos' if c.unrealized>=0 else 'neg' }}">{{ '{:,.0f}'.format(c.unrealized) }}</div></div>
+    <div><div class="k gloss" title="{{ '実現損益'|gloss }}">実現損益</div><div class="v {{ 'pos' if c.realized>=0 else 'neg' }}">{{ '{:,.0f}'.format(c.realized) }}</div></div>
+    <div><div class="k gloss" title="{{ '含み損益'|gloss }}">含み損益</div><div class="v {{ 'pos' if c.unrealized>=0 else 'neg' }}">{{ '{:,.0f}'.format(c.unrealized) }}</div></div>
     <div><div class="k">合計</div><div class="v {{ 'pos' if c.total>=0 else 'neg' }}">{{ '{:,.0f}'.format(c.total) }}</div></div>
-    <div><div class="k">往復数</div><div class="v">{{ c.metrics.trades }}</div></div>
+    <div><div class="k gloss" title="{{ '往復数'|gloss }}">往復数</div><div class="v">{{ c.metrics.trades }}</div></div>
     {% if c.metrics.trades %}
-    <div><div class="k">勝率</div><div class="v">{{ c.metrics.win_rate_pct }}%</div></div>
-    <div><div class="k">PF</div><div class="v">{{ c.metrics.profit_factor }}</div></div>
-    <div><div class="k">最良 / 最悪</div><div class="v">{{ '{:,.0f}'.format(c.metrics.best) }} / {{ '{:,.0f}'.format(c.metrics.worst) }}</div></div>
+    <div><div class="k gloss" title="{{ '勝率'|gloss }}">勝率</div><div class="v">{{ c.metrics.win_rate_pct }}%</div></div>
+    <div><div class="k gloss" title="{{ 'PF'|gloss }}">PF</div><div class="v">{{ c.metrics.profit_factor }}</div></div>
+    <div><div class="k gloss" title="{{ '最良/最悪'|gloss }}">最良 / 最悪</div><div class="v">{{ '{:,.0f}'.format(c.metrics.best) }} / {{ '{:,.0f}'.format(c.metrics.worst) }}</div></div>
     {% endif %}
   </div>
 
   {% if c.opens %}
   <h4 style="margin-top:1rem">建玉</h4>
   <table>
-    <thead><tr><th>銘柄</th><th>株数</th><th>建値</th><th>現在値</th><th>含み損益</th><th>建てた根拠</th></tr></thead>
+    <thead><tr><th>銘柄</th><th class="gloss" title="{{ 'qty'|gloss }}">株数</th><th class="gloss" title="{{ '建値'|gloss }}">建値</th><th>現在値</th><th class="gloss" title="{{ '含み損益'|gloss }}">含み損益</th><th class="gloss" title="{{ '根拠'|gloss }}">建てた根拠</th></tr></thead>
     <tbody>
     {% for o in c.opens %}
       <tr>
@@ -50,7 +50,12 @@
   {% if c.trades %}
   <h4 style="margin-top:1rem">トレード</h4>
   <table>
-    <thead><tr><th>状態</th><th>銘柄</th><th>建</th><th>建値</th><th>仕切</th><th>仕切値</th><th>株数</th><th>損益</th><th>%</th></tr></thead>
+    <thead><tr>
+      <th>状態</th><th>銘柄</th>
+      <th class="gloss" title="{{ '建'|gloss }}">建</th><th class="gloss" title="{{ '建値'|gloss }}">建値</th>
+      <th class="gloss" title="{{ '仕切'|gloss }}">仕切</th><th class="gloss" title="{{ '仕切値'|gloss }}">仕切値</th>
+      <th class="gloss" title="{{ 'qty'|gloss }}">株数</th><th>損益</th><th>%</th>
+    </tr></thead>
     <tbody>
     {% for t in c.trades %}
       <tr>

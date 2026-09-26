@@ -37,3 +37,14 @@ def builtin_params() -> dict[str, dict]:
         except Exception:  # noqa: BLE001
             out[cp] = {}
     return out
+
+
+def builtin_param_meta() -> dict[str, dict]:
+    """class_path -> param_meta。UI がパラメータ入力欄のラベル/選択肢/説明を出すのに使う。"""
+    out: dict[str, dict] = {}
+    for cp in BUILTIN.values():
+        try:
+            out[cp] = dict(load_strategy_class(cp).param_meta)
+        except Exception:  # noqa: BLE001
+            out[cp] = {}
+    return out

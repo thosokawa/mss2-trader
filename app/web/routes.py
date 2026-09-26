@@ -33,7 +33,8 @@ from app.models import (
     SymbolSetItem,
     Tick,
 )
-from app.strategy.registry import BUILTIN, builtin_params, load_strategy_class
+from app.strategy.registry import BUILTIN, builtin_param_meta, builtin_params, load_strategy_class
+from app.web.glossary import GLOSSARY, gloss
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -59,6 +60,7 @@ def _jst(dt: datetime | str | None, fmt: str = "%m/%d %H:%M") -> str:
 
 
 templates.env.filters["jst"] = _jst
+templates.env.filters["gloss"] = gloss
 
 
 def _now_utc() -> datetime:
@@ -66,7 +68,13 @@ def _now_utc() -> datetime:
 
 
 def _ctx(request: Request, **kw):
-    return {"request": request, "builtin": BUILTIN, "builtin_params": builtin_params(), **kw}
+    return {
+        "request": request,
+        "builtin": BUILTIN,
+        "builtin_params": builtin_params(),
+        "builtin_param_meta": builtin_param_meta(),
+        **kw,
+    }
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -689,7 +697,7 @@ async def ingest(request: Request, s: Session = Depends(get_session)):
 
 @router.get("/help", response_class=HTMLResponse)
 def help_page(request: Request):
-    return templates.TemplateResponse(request, "help.html", _ctx(request))
+    return templates.TemplateResponse(request, "help.html", _ctx(request, glossary=GLOSSARY))
 
 
 @router.get("/healthz")

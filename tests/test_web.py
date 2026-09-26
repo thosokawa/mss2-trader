@@ -130,6 +130,13 @@ def test_backtest_form_state_persists_after_run(client):
     assert 'value="9984" selected' in r.text
 
 
+def test_optimize_param_form_allows_ranges(client):
+    r = client.get("/optimize")
+    assert r.status_code == 200
+    assert "allowRanges: true" in r.text
+    assert "カンマ区切りで複数指定" in r.text
+
+
 def test_optimize_invalid_grid_json(client):
     r = client.post(
         "/optimize",
@@ -241,6 +248,56 @@ def test_help_page(client):
     assert "ヘルプ" in r.text
     assert "run_all.ps1" in r.text
     assert "fetch_history.py" in r.text
+    assert "用語集" in r.text
+    assert "プロフィットファクター" in r.text  # glossary が render されている
+
+
+def test_backtest_result_has_glossary_tooltips(client):
+    from datetime import datetime, timedelta
+
+    from sqlmodel import Session
+
+    from app.db import engine
+    from app.models import Bar, Symbol
+
+    closes = [100 - i for i in range(30)] + [70 + i * 2 for i in range(20)] + [110 - i * 2 for i in range(20)]
+    with Session(engine) as s:
+        s.add(Symbol(code="8001", name="テスト銘柄"))
+        base = datetime(2026, 6, 1)
+        for i, price in enumerate(closes):
+            s.add(
+                Bar(
+                    symbol_code="8001", timeframe="5m", ts=base + timedelta(minutes=5 * i),
+                    open=price, high=price, low=price, close=price, volume=100.0, source="test",
+                )
+            )
+        s.commit()
+
+    r = client.post(
+        "/backtest",
+        data={
+            "class_path": "app.strategy.examples.sma_cross:SmaCross",
+            "symbol_code": "8001",
+            "timeframe": "5m",
+            "params_json": '{"fast": 5, "slow": 20, "qty": 100}',
+            "commission_per_trade": "0",
+        },
+    )
+    assert r.status_code == 200
+    assert "プロフィットファクター" in r.text  # PF の title
+    assert "最大ドローダウン" in r.text  # 最大DD の title
+
+
+def test_backtest_param_form_uses_strategy_meta(client):
+    import json
+
+    r = client.get("/backtest")
+    assert r.status_code == 200
+    assert 'id="param_fields"' in r.text
+    assert "ParamForm.mount" in r.text
+    # SmaCross の param_meta ラベルが JS データに埋め込まれている（tojson は日本語を \uXXXX で出す）
+    escaped_label = json.dumps("短期SMA期間")
+    assert escaped_label[1:-1] in r.text  # 前後の " を除いた本体部分
 
 
 def test_healthz(client):

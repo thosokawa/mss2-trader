@@ -30,18 +30,40 @@
           <option value="live">live（実発注・P4）</option>
         </select>
       </label>
-      <label>パラメータ (JSON)<input name="params_json" id="params_json" value="{{ prefill.params_json or '{"fast": 5, "slow": 20, "qty": 100}' }}"></label>
     </div>
-    <button type="submit">追加</button>
+
+    <strong>パラメータ</strong>
+    <div class="pf-fields" id="param_fields"></div>
+    <details id="json_details">
+      <summary><small>JSON で直接編集</small></summary>
+      <textarea id="params_json_visible" rows="4">{{ prefill.params_json or '{"fast": 5, "slow": 20, "qty": 100}' }}</textarea>
+    </details>
+    <input type="hidden" name="params_json" id="params_json">
+
+    <button type="submit" style="margin-top:.6rem">追加</button>
   </form>
 </article>
 
+<script src="/static/param_form.js"></script>
 <script>
   const STRAT_PARAMS = {{ builtin_params | tojson }};
-  const _sel = document.getElementById('class_path'), _pj = document.getElementById('params_json');
+  const STRAT_META = {{ builtin_param_meta | tojson }};
+  const _sel = document.getElementById('class_path');
+  const _jsonArea = document.getElementById('params_json_visible');
+
+  const pf = ParamForm.mount({
+    containerEl: document.getElementById('param_fields'),
+    hiddenEl: document.getElementById('params_json'),
+    jsonAreaEl: _jsonArea,
+    allowRanges: false,
+  });
+
+  let initial = null;
+  try { initial = JSON.parse(_jsonArea.value); } catch (e) { /* 壊れたJSON、defaultsで組む */ }
+  pf.rebuild(STRAT_PARAMS[_sel.value] || {}, STRAT_META[_sel.value] || {}, initial);
+
   _sel.addEventListener('change', () => {
-    const d = STRAT_PARAMS[_sel.value];
-    if (d) _pj.value = JSON.stringify(d);
+    pf.rebuild(STRAT_PARAMS[_sel.value] || {}, STRAT_META[_sel.value] || {}, null);
   });
 </script>
 

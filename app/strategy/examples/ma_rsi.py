@@ -40,6 +40,24 @@ class MaRsi(Strategy):
         "dev_max_pct": 0.0,        # MA からの上方乖離の上限(%)。0 で無効
         "qty": 100,
     }
+    param_meta = {
+        "ma_type": {"label": "移動平均の種類", "choices": ["ema", "sma"],
+                    "help": "ema=指数移動平均（直近を重視） / sma=単純移動平均"},
+        "ma_period": {"label": "移動平均期間"},
+        "price_vs_ma": {"label": "価格とMAの関係", "choices": ["cross_up", "above"],
+                         "help": "cross_up=終値がMAを上抜けた瞬間だけ / above=終値がMAより上にある間ずっと"},
+        "slope_lookback": {"label": "傾き判定の遡り本数"},
+        "ma_slope_min": {
+            "label": "MAの傾きの下限(%)",
+            "help": "この値以上でMAが上向きと判定（0でフィルタ実質無効）",
+        },
+        "rsi_period": {"label": "RSI期間"},
+        "rsi_min": {"label": "RSI下限"},
+        "rsi_max": {"label": "RSI上限"},
+        "rsi_exit": {"label": "RSI手仕舞いライン", "help": "RSIがこの値以上になったら手仕舞い"},
+        "dev_max_pct": {"label": "MAからの上方乖離の上限(%)", "help": "飛びつき買い防止。0で無効"},
+        "qty": {"label": "株数", "help": "1回のエントリーで売買する株数"},
+    }
 
     def on_bar(self, ctx: Context) -> Signal | None:
         p = self.params

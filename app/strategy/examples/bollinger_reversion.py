@@ -19,6 +19,13 @@ class BollingerReversion(Strategy):
         "exit_at": "mid",  # "mid"（中心線）| "upper"（上限バンド）
         "qty": 100,
     }
+    param_meta = {
+        "period": {"label": "期間"},
+        "num_std": {"label": "バンド幅（標準偏差の倍率）"},
+        "exit_at": {"label": "手仕舞いライン", "choices": ["mid", "upper"],
+                    "help": "mid=中心線 / upper=上限バンド"},
+        "qty": {"label": "株数", "help": "1回のエントリーで売買する株数"},
+    }
 
     def on_bar(self, ctx: Context) -> Signal | None:
         p = self.params

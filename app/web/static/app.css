@@ -8,3 +8,12 @@ table { font-size: .9rem; }
 .cardgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 1rem; }
 .cardgrid a { display:block; padding:1rem; border:1px solid var(--pico-muted-border-color); border-radius:8px; text-decoration:none; }
 .cardgrid .n { font-size:1.6rem; font-weight:700; }
+
+/* 用語のマウスオーバー説明（title属性）が付いている箇所の目印 */
+.gloss { border-bottom: 1px dotted var(--pico-muted-color); cursor: help; }
+
+/* パラメータの動的入力フォーム（param_form.js） */
+.pf-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: .6rem .9rem; margin: .6rem 0; }
+.pf-field { font-size: .85rem; }
+.pf-field input, .pf-field select { margin-top: .2rem; }
+.pf-hint { color: var(--pico-muted-color); }

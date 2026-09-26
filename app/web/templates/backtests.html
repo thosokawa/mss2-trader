@@ -3,7 +3,11 @@
 <h2>バックテスト履歴</h2>
 {% if runs %}
 <table>
-  <thead><tr><th>#</th><th>日時</th><th>戦略</th><th>銘柄</th><th>足</th><th>取引</th><th>勝率</th><th>合計損益</th><th></th></tr></thead>
+  <thead><tr>
+    <th>#</th><th>日時</th><th>戦略</th><th>銘柄</th><th>足</th>
+    <th class="gloss" title="{{ '取引数'|gloss }}">取引</th><th class="gloss" title="{{ '勝率'|gloss }}">勝率</th>
+    <th class="gloss" title="{{ '合計損益'|gloss }}">合計損益</th><th></th>
+  </tr></thead>
   <tbody>
   {% for r, m in runs %}
     <tr>

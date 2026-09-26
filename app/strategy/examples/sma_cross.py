@@ -12,6 +12,11 @@ class SmaCross(Strategy):
     timeframe = "5m"
     description = "短期SMAが長期SMAを上抜けで買い、下抜けで手仕舞い"
     default_params = {"fast": 5, "slow": 20, "qty": 100}
+    param_meta = {
+        "fast": {"label": "短期SMA期間", "help": "短期の単純移動平均を計算する本数"},
+        "slow": {"label": "長期SMA期間", "help": "長期の単純移動平均を計算する本数"},
+        "qty": {"label": "株数", "help": "1回のエントリーで売買する株数"},
+    }
 
     def on_bar(self, ctx: Context) -> Signal | None:
         fast_n = int(self.params["fast"])

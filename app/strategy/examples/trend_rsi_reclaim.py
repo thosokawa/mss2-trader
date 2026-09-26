@@ -29,6 +29,17 @@ class TrendRsiReclaim(Strategy):
         "rsi_sell_level": 60.0,
         "qty": 100,
     }
+    param_meta = {
+        "ma_type": {"label": "移動平均の種類", "choices": ["sma", "ema"]},
+        "fast_period": {"label": "短期MA期間"},
+        "mid_period": {"label": "中期MA期間"},
+        "rsi_period": {"label": "RSI期間"},
+        "rsi_buy_level": {"label": "買いのRSIライン",
+                           "help": "短期MA>中期MAのとき、このラインを下から上に回復したら買い"},
+        "rsi_sell_level": {"label": "売りのRSIライン",
+                            "help": "短期MA<中期MAのとき、このラインを上から下に割ったら売り"},
+        "qty": {"label": "株数", "help": "1回のエントリーで売買する株数"},
+    }
 
     def on_bar(self, ctx: Context) -> Signal | None:
         p = self.params

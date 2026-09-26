@@ -8,18 +8,22 @@
 
 {% if metrics.get('trades') %}
 <div class="metrics">
-  <div><div class="k">取引数</div><div class="v">{{ metrics.trades }}</div></div>
-  <div><div class="k">勝率</div><div class="v">{{ metrics.win_rate_pct }}%</div></div>
-  <div><div class="k">合計損益</div><div class="v {{ 'pos' if metrics.total_pnl>=0 else 'neg' }}">{{ '{:,.0f}'.format(metrics.total_pnl) }}</div></div>
-  <div><div class="k">PF</div><div class="v">{{ metrics.profit_factor }}</div></div>
-  <div><div class="k">最大DD</div><div class="v neg">{{ '{:,.0f}'.format(metrics.max_drawdown) }}</div></div>
-  <div><div class="k">最良 / 最悪</div><div class="v">{{ '{:,.0f}'.format(metrics.best) }} / {{ '{:,.0f}'.format(metrics.worst) }}</div></div>
+  <div><div class="k gloss" title="{{ '取引数'|gloss }}">取引数</div><div class="v">{{ metrics.trades }}</div></div>
+  <div><div class="k gloss" title="{{ '勝率'|gloss }}">勝率</div><div class="v">{{ metrics.win_rate_pct }}%</div></div>
+  <div><div class="k gloss" title="{{ '合計損益'|gloss }}">合計損益</div><div class="v {{ 'pos' if metrics.total_pnl>=0 else 'neg' }}">{{ '{:,.0f}'.format(metrics.total_pnl) }}</div></div>
+  <div><div class="k gloss" title="{{ 'PF'|gloss }}">PF</div><div class="v">{{ metrics.profit_factor }}</div></div>
+  <div><div class="k gloss" title="{{ '最大DD'|gloss }}">最大DD</div><div class="v neg">{{ '{:,.0f}'.format(metrics.max_drawdown) }}</div></div>
+  <div><div class="k gloss" title="{{ '最良/最悪'|gloss }}">最良 / 最悪</div><div class="v">{{ '{:,.0f}'.format(metrics.best) }} / {{ '{:,.0f}'.format(metrics.worst) }}</div></div>
 </div>
 {% else %}<p>{{ metrics.get('note') or metrics.get('error') or '約定なし' }}</p>{% endif %}
 
 {% if trades %}
 <table style="margin-top:1rem">
-  <thead><tr><th>建</th><th>建値</th><th>仕切</th><th>仕切値</th><th>株数</th><th>損益</th><th>%</th></tr></thead>
+  <thead><tr>
+    <th class="gloss" title="{{ '建'|gloss }}">建</th><th class="gloss" title="{{ '建値'|gloss }}">建値</th>
+    <th class="gloss" title="{{ '仕切'|gloss }}">仕切</th><th class="gloss" title="{{ '仕切値'|gloss }}">仕切値</th>
+    <th class="gloss" title="{{ 'qty'|gloss }}">株数</th><th>損益</th><th>%</th>
+  </tr></thead>
   <tbody>
   {% for t in trades %}
     <tr>

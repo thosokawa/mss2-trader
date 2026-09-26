@@ -18,6 +18,14 @@ class DonchianBreakout(Strategy):
         "exit_period": 10,
         "qty": 100,
     }
+    param_meta = {
+        "entry_period": {"label": "エントリー判定期間", "help": "この本数の高値をブレイクしたら買い"},
+        "exit_period": {
+            "label": "手仕舞い判定期間",
+            "help": "この本数の安値を割ったら手仕舞い（entry_periodより短めが定番）",
+        },
+        "qty": {"label": "株数", "help": "1回のエントリーで売買する株数"},
+    }
 
     def on_bar(self, ctx: Context) -> Signal | None:
         p = self.params

@@ -13,6 +13,7 @@
     <li><a href="#optimize">最適化（パラメータ探索）</a></li>
     <li><a href="#strategy">戦略</a></li>
     <li><a href="#notify">Slack 通知の設定</a></li>
+    <li><a href="#glossary">用語集</a></li>
   </ul>
 </article>
 
@@ -96,17 +97,20 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
 <a href="/backtest">バックテスト</a>、<a href="/optimize">最適化</a> の対象になる。</small></p>
 
 <h3 id="backtest">バックテスト</h3>
-<p><a href="/backtest">/backtest</a> で戦略・銘柄・足・パラメータ(JSON)・手数料を指定して実行。
-戦略を選ぶとパラメータ欄がその戦略の既定値に自動で入る。結果は
-取引数・勝率・合計損益・PF・最大DDと、往復トレード一覧。過去分は <a href="/backtests">履歴</a> から見返せる。</p>
+<p><a href="/backtest">/backtest</a> で戦略・銘柄・足・パラメータ・手数料を指定して実行。
+戦略を選ぶと、下の「パラメータ」欄にその戦略の項目が名前・説明付きで自動で並ぶ
+（JSONを手で書く必要はない。マウスを乗せると説明が出る項目もある）。
+細かく直接編集したい場合は「JSON で直接編集」を開けば生のJSONも編集できる。
+結果は取引数・勝率・合計損益・PF・最大DDと、往復トレード一覧。過去分は
+<a href="/backtests">履歴</a> から見返せる。用語の意味は<a href="#glossary">下の用語集</a>参照。</p>
 
 <h3 id="optimize">最適化（パラメータ探索）</h3>
 <p><a href="/optimize">/optimize</a> はパラメータの組み合わせを総当たりでバックテストし、
 <strong>提案</strong>する機能。</p>
 <ol>
   <li>戦略・銘柄・足を選ぶ</li>
-  <li>「パラメータ範囲 (JSON)」で、探索したい項目を配列にする。例:
-    <code>{"fast": [5, 10, 15], "slow": [20, 30, 40], "qty": 100}</code>（<code>qty</code>は固定のまま）</li>
+  <li>「パラメータ範囲」の各項目に、探索したい値を<strong>カンマ区切り</strong>で入れる。例:
+    短期期間の欄に <code>5,10,15</code> → その3値を総当たり。1つの値のままなら固定</li>
   <li>学習期間の割合（既定0.7 = 前半70%で探索）、ランキング指標（合計損益/PF/勝率/平均損益）を指定して実行</li>
 </ol>
 <p><strong>結果の見方が重要</strong>: ランキングは <strong>検証期間（探索に使っていない後半のデータ）の成績</strong>
@@ -137,5 +141,17 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
 <p><code>config\config.toml</code> の <code>[notify]</code> に Incoming Webhook URL を入れて <code>dry_run = false</code>
 にすると、liveエンジンが出したシグナルが実際にSlackへ届く。未設定・<code>dry_run = true</code> のときは
 送信せずログ出力のみ（<code>[notify dry_run] ...</code>）。</p>
+
+<h3 id="glossary">用語集</h3>
+<p><small>下線が点線になっている項目名（<span class="gloss" title="これがマウスオーバー説明の見本です">例えばこれ</span>）は、
+画面上でもマウスを乗せると同じ説明が出る。</small></p>
+<table>
+  <thead><tr><th>用語</th><th>意味</th></tr></thead>
+  <tbody>
+  {% for term, desc in glossary.items() %}
+    <tr><td><strong>{{ term }}</strong></td><td>{{ desc }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
 
 {% endblock %}

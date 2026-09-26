@@ -26,10 +26,17 @@
       </label>
       <label>足<select name="timeframe"><option>5m</option><option>1m</option><option>15m</option><option>1d</option></select></label>
     </div>
-    <label>パラメータ範囲 (JSON) — 値を配列にすると総当たり。単値はそのまま固定
-      <input name="grid_json" id="grid_json" value="{{ '{"fast": [5, 10, 15], "slow": [20, 30, 40], "qty": 100}' }}">
-    </label>
-    <div class="grid">
+
+    <strong>パラメータ範囲</strong>
+    <p class="pf-hint"><small>カンマ区切りで複数指定すると総当たりの対象になる（例: <code>5,10,15</code>）。単値のままなら固定。</small></p>
+    <div class="pf-fields" id="param_fields"></div>
+    <details id="json_details">
+      <summary><small>JSON で直接編集</small></summary>
+      <textarea id="grid_json_visible" rows="4">{"fast": [5, 10, 15], "slow": [20, 30, 40], "qty": 100}</textarea>
+    </details>
+    <input type="hidden" name="grid_json" id="grid_json">
+
+    <div class="grid" style="margin-top:.6rem">
       <label>学習期間の割合<input name="train_ratio" type="number" step="0.05" min="0.3" max="0.9" value="0.7"></label>
       <label>検証取引の最低本数<input name="min_test_trades" type="number" min="0" value="3"></label>
       <label>ランキング指標
@@ -45,12 +52,26 @@
     <button type="submit">探索を実行</button>
   </form>
 </article>
+<script src="/static/param_form.js"></script>
 <script>
   const STRAT_PARAMS = {{ builtin_params | tojson }};
-  const _sel = document.getElementById('class_path'), _gj = document.getElementById('grid_json');
+  const STRAT_META = {{ builtin_param_meta | tojson }};
+  const _sel = document.getElementById('class_path');
+  const _jsonArea = document.getElementById('grid_json_visible');
+
+  const pf = ParamForm.mount({
+    containerEl: document.getElementById('param_fields'),
+    hiddenEl: document.getElementById('grid_json'),
+    jsonAreaEl: _jsonArea,
+    allowRanges: true,
+  });
+
+  let initial = null;
+  try { initial = JSON.parse(_jsonArea.value); } catch (e) { /* 壊れたJSON、defaultsで組む */ }
+  pf.rebuild(STRAT_PARAMS[_sel.value] || {}, STRAT_META[_sel.value] || {}, initial);
+
   _sel.addEventListener('change', () => {
-    const d = STRAT_PARAMS[_sel.value];
-    if (d) _gj.value = JSON.stringify(d);  // まず単値で入る。探索したい項目を [a, b, c] に書き換える
+    pf.rebuild(STRAT_PARAMS[_sel.value] || {}, STRAT_META[_sel.value] || {}, null);
   });
 </script>
 {% endif %}
@@ -61,8 +82,18 @@
 <div style="overflow-x:auto">
 <table>
   <thead>
-    <tr><th rowspan="2">#</th><th rowspan="2">パラメータ</th><th colspan="4">学習期間</th><th colspan="4">検証期間</th><th rowspan="2"></th></tr>
-    <tr><th>取引</th><th>勝率</th><th>損益</th><th>PF</th><th>取引</th><th>勝率</th><th>損益</th><th>PF</th></tr>
+    <tr>
+      <th rowspan="2">#</th><th rowspan="2">パラメータ</th>
+      <th colspan="4" class="gloss" title="{{ '学習期間'|gloss }}">学習期間</th>
+      <th colspan="4" class="gloss" title="{{ '検証期間'|gloss }}">検証期間</th>
+      <th rowspan="2"></th>
+    </tr>
+    <tr>
+      <th class="gloss" title="{{ '取引数'|gloss }}">取引</th><th class="gloss" title="{{ '勝率'|gloss }}">勝率</th>
+      <th class="gloss" title="{{ '合計損益'|gloss }}">損益</th><th class="gloss" title="{{ 'PF'|gloss }}">PF</th>
+      <th class="gloss" title="{{ '取引数'|gloss }}">取引</th><th class="gloss" title="{{ '勝率'|gloss }}">勝率</th>
+      <th class="gloss" title="{{ '合計損益'|gloss }}">損益</th><th class="gloss" title="{{ 'PF'|gloss }}">PF</th>
+    </tr>
   </thead>
   <tbody>
   {% for r in result %}

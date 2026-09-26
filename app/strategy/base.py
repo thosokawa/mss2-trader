@@ -66,3 +66,9 @@ class Strategy:
 
     # ロジック作者向けの説明文（UI に表示）
     description: str = ""
+
+    # UI がパラメータ入力欄を組み立てるためのヒント（無くても動く。省略したキーは
+    # 項目名がそのまま表示される）。例:
+    #   {"fast": {"label": "短期期間", "help": "短期移動平均の本数"},
+    #    "ma_type": {"label": "種類", "choices": ["ema", "sma"]}}
+    param_meta: dict[str, dict] = {}

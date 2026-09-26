@@ -27,7 +27,7 @@
 <h3 style="margin-top:2rem">最近のシグナル</h3>
 {% if recent_signals %}
 <table>
-  <thead><tr><th>時刻</th><th>銘柄</th><th>方向</th><th>価格</th><th>戦略</th><th>根拠</th><th>種別</th></tr></thead>
+  <thead><tr><th>時刻</th><th>銘柄</th><th>方向</th><th>価格</th><th>戦略</th><th class="gloss" title="{{ '根拠'|gloss }}">根拠</th><th>種別</th></tr></thead>
   <tbody>
   {% for s in recent_signals %}
     <tr><td>{{ s.ts | jst }}</td><td>{{ s.symbol_code }}</td><td>{{ s.side }}</td>

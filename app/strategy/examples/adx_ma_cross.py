@@ -20,6 +20,13 @@ class AdxMaCross(Strategy):
         "adx_min": 20.0,
         "qty": 100,
     }
+    param_meta = {
+        "fast": {"label": "短期SMA期間"},
+        "slow": {"label": "長期SMA期間"},
+        "adx_period": {"label": "ADX期間"},
+        "adx_min": {"label": "ADXの下限", "help": "この値以上のときだけトレンドが強いと判定してエントリー"},
+        "qty": {"label": "株数", "help": "1回のエントリーで売買する株数"},
+    }
 
     def on_bar(self, ctx: Context) -> Signal | None:
         p = self.params

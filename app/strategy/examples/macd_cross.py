@@ -15,6 +15,16 @@ class MacdCross(Strategy):
         "require_above_zero": False,  # true にすると MACD>0（中期的に上昇基調）のときだけ買う
         "qty": 100,
     }
+    param_meta = {
+        "fast": {"label": "MACD短期期間"},
+        "slow": {"label": "MACD長期期間"},
+        "signal": {"label": "シグナル期間"},
+        "require_above_zero": {
+            "label": "ゼロライン上のみ買う",
+            "help": "オンにするとMACDがプラスのときだけ買う",
+        },
+        "qty": {"label": "株数", "help": "1回のエントリーで売買する株数"},
+    }
 
     def on_bar(self, ctx: Context) -> Signal | None:
         p = self.params
