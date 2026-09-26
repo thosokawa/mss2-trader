@@ -137,6 +137,14 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
 <p>登録は <a href="/strategies">/strategies</a> から。モードは <code>notify</code>（通知のみ）/
 <code>paper</code>（擬似約定して<a href="/performance">成績</a>に反映）/ <code>live</code>（実発注・未実装）。</p>
 
+<h4>損切り / 利確</h4>
+<p>パラメータ欄の一番下に <strong>損切り(%)</strong> ・ <strong>利確(%)</strong> が全戦略共通で出る
+（<code>/backtest</code> <code>/strategies</code> <code>/optimize</code> どこでも）。建値からその%
+動いたら、戦略ロジック（<code>on_bar()</code>）の判断より<strong>優先して</strong>その足の高値/安値で
+成行手仕舞いする。空欄なら無効（今までどおり戦略自身の判断だけで手仕舞い）。同じ足で両方のライン
+に達したら損切りを優先する。<code>/optimize</code> でもカンマ区切りで範囲指定して一緒に最適化できる
+（例: 損切り欄に <code>2,3,5</code>）。</p>
+
 <h3 id="notify">Slack 通知の設定</h3>
 <p><code>config\config.toml</code> の <code>[notify]</code> に Incoming Webhook URL を入れて <code>dry_run = false</code>
 にすると、liveエンジンが出したシグナルが実際にSlackへ届く。未設定・<code>dry_run = true</code> のときは

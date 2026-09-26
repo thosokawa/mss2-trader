@@ -28,9 +28,11 @@ const ParamForm = (() => {
     return raw;
   }
 
-  // allowRanges のとき、カンマ区切りは配列（=最適化の探索対象）として扱う
+  // allowRanges のとき、カンマ区切りは配列（=最適化の探索対象）として扱う。
+  // 空欄は null（未設定）にする — 損切り/利確など「空欄=無効」な項目のため。
   function parseFieldValue(raw, type, allowRanges) {
     const trimmed = String(raw).trim();
+    if (trimmed === "") return null;
     if (allowRanges && trimmed.includes(",")) {
       return trimmed.split(",").map((v) => coerce(v.trim(), type));
     }
@@ -62,7 +64,9 @@ const ParamForm = (() => {
       for (const key of Object.keys(defaults)) {
         const m = meta[key] || {};
         const def = defaults[key];
-        const type = inferType(def);
+        // 既定値が null（例: 損切り%が未設定）だと値からは型を推測できないので、
+        // param_meta の type 指定を優先する
+        const type = m.type || inferType(def);
         const val = values && Object.prototype.hasOwnProperty.call(values, key) ? values[key] : def;
 
         const wrap = document.createElement("label");
@@ -88,7 +92,7 @@ const ParamForm = (() => {
           input = document.createElement("input");
           input.type = type === "number" && !allowRanges ? "number" : "text";
           if (type === "number") input.step = "any";
-          input.value = Array.isArray(val) ? val.join(",") : val;
+          input.value = val == null ? "" : Array.isArray(val) ? val.join(",") : val;
         }
         input.dataset.key = key;
         input.dataset.type = type;

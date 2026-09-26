@@ -4,6 +4,10 @@ P0 の割り切り:
 - 現物ロング only（空売り・信用の建玉管理は P3 以降）
 - 約定は「シグナルが出た足の終値」で成立（スリッページ/板は考慮しない）
 - 手数料は commission_per_trade（片道・円）で概算
+
+戦略パラメータに `stop_loss_pct` / `take_profit_pct`（建値からの%）があれば、
+on_bar の判断より優先してその足の高値/安値でストップ・ターゲット判定する
+（app/engine/stops.py）。
 """
 from __future__ import annotations
 
@@ -12,6 +16,7 @@ from datetime import datetime
 
 import pandas as pd
 
+from app.engine.stops import check_stop_target
 from app.strategy.base import Context, Position, Strategy
 
 
@@ -48,6 +53,9 @@ def run_backtest(
     if bars.empty:
         return BacktestResult(symbol, strategy.timeframe, metrics={"error": "足データが空"})
 
+    stop_loss_pct = strategy.params.get("stop_loss_pct")
+    take_profit_pct = strategy.params.get("take_profit_pct")
+
     position = Position()
     trades: list[Trade] = []
     pending_entry: dict | None = None
@@ -58,34 +66,63 @@ def run_backtest(
         window = bars.iloc[: i + 1]
         now = pd.Timestamp(window.index[-1]).to_pydatetime()
         price = float(window["close"].iloc[-1])
+        bar_high = float(window["high"].iloc[-1])
+        bar_low = float(window["low"].iloc[-1])
 
         if i >= warmup:
-            ctx = Context(symbol=symbol, now=now, bars=window, position=position, params=strategy.params)
-            sig = strategy.on_bar(ctx)
-            if sig is not None:
-                if sig.side == "BUY" and position.is_flat:
-                    qty = int(sig.qty or strategy.params.get("qty", 100))
-                    position = Position(qty=qty, avg_price=price)
-                    pending_entry = {"ts": now, "price": price, "qty": qty, "reason": sig.reason}
-                    realized -= commission_per_trade
-                elif sig.side in ("EXIT", "SELL") and position.is_long and pending_entry:
-                    pnl = (price - position.avg_price) * position.qty - commission_per_trade
-                    realized += (price - position.avg_price) * position.qty - commission_per_trade
-                    trades.append(
-                        Trade(
-                            entry_ts=pending_entry["ts"],
-                            entry_price=pending_entry["price"],
-                            exit_ts=now,
-                            exit_price=price,
-                            qty=position.qty,
-                            pnl=pnl,
-                            return_pct=(price / position.avg_price - 1) * 100,
-                            reason_in=pending_entry["reason"],
-                            reason_out=sig.reason,
-                        )
+            hit = (
+                check_stop_target(
+                    position.avg_price, bar_high, bar_low,
+                    stop_loss_pct=stop_loss_pct, take_profit_pct=take_profit_pct,
+                )
+                if position.is_long and pending_entry
+                else None
+            )
+            if hit is not None:
+                pnl = (hit.price - position.avg_price) * position.qty - commission_per_trade
+                realized += (hit.price - position.avg_price) * position.qty - commission_per_trade
+                trades.append(
+                    Trade(
+                        entry_ts=pending_entry["ts"],
+                        entry_price=pending_entry["price"],
+                        exit_ts=now,
+                        exit_price=hit.price,
+                        qty=position.qty,
+                        pnl=pnl,
+                        return_pct=(hit.price / position.avg_price - 1) * 100,
+                        reason_in=pending_entry["reason"],
+                        reason_out=hit.reason,
                     )
-                    position = Position()
-                    pending_entry = None
+                )
+                position = Position()
+                pending_entry = None
+            else:
+                ctx = Context(symbol=symbol, now=now, bars=window, position=position, params=strategy.params)
+                sig = strategy.on_bar(ctx)
+                if sig is not None:
+                    if sig.side == "BUY" and position.is_flat:
+                        qty = int(sig.qty or strategy.params.get("qty", 100))
+                        position = Position(qty=qty, avg_price=price)
+                        pending_entry = {"ts": now, "price": price, "qty": qty, "reason": sig.reason}
+                        realized -= commission_per_trade
+                    elif sig.side in ("EXIT", "SELL") and position.is_long and pending_entry:
+                        pnl = (price - position.avg_price) * position.qty - commission_per_trade
+                        realized += (price - position.avg_price) * position.qty - commission_per_trade
+                        trades.append(
+                            Trade(
+                                entry_ts=pending_entry["ts"],
+                                entry_price=pending_entry["price"],
+                                exit_ts=now,
+                                exit_price=price,
+                                qty=position.qty,
+                                pnl=pnl,
+                                return_pct=(price / position.avg_price - 1) * 100,
+                                reason_in=pending_entry["reason"],
+                                reason_out=sig.reason,
+                            )
+                        )
+                        position = Position()
+                        pending_entry = None
 
         unrealized = (price - position.avg_price) * position.qty if position.is_long else 0.0
         equity.append((now, realized + unrealized))

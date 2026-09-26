@@ -53,7 +53,16 @@ Signal(side, qty=None, reason="", order_type="MKT", limit_price=None)
 - `order_type` / `limit_price`: engine は現状 **成行・終値約定** 固定（指値は P4 で対応）
 
 いまのエンジンは `flat → long → flat` のみ。建玉中の追加 BUY、分割決済、空売りは未対応。
-損切り/利確は `on_bar` の中で `ctx.position.avg_price` と現在値を比べて自前で出す。
+
+## 損切り / 利確
+
+`stop_loss_pct` / `take_profit_pct`（建値からの%）は全戦略に共通のパラメータとして
+自動で付く（`registry.UNIVERSAL_DEFAULTS` / `UNIVERSAL_META`。戦略クラス側で書く必要はない）。
+バックテスト・live 両方で、`on_bar()` の判断より**優先して**その足の高値/安値で判定する
+（`app/engine/stops.py`）。同じ足で両方のラインに達したら損切りを優先。空欄（`None`）なら無効
+で、今までどおり戦略自身が `ctx.position.avg_price` を見て `on_bar` 内で判断する形も引き続き使える
+（両方併用も可。バックテストは `run_backtest` 内でストップ判定が先に走り、当たれば `on_bar` はその
+足で呼ばれない）。
 
 ## 指標ヘルパー（`app/strategy/indicators.py`）
 

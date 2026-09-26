@@ -23,6 +23,7 @@ from sqlmodel import Session, select
 
 from app.bars import load_bars
 from app.engine import paper
+from app.engine.stops import check_stop_target
 from app.models import LiveCursor, Signal, Strategy, Symbol, SymbolSetItem, utcnow
 from app.notify import format_signal, send_slack
 from app.strategy.base import Context, Position
@@ -122,21 +123,38 @@ def _run_strategy_symbol(
     fired: list[Signal] = []
     for ts in new_ts:
         window = bars.loc[:ts]
-        ctx = Context(symbol=symbol_code, now=ts, bars=window, position=pos, params=strat.params)
-        sig = strat.on_bar(ctx)
-        if sig is None:
-            continue
+        bar_high = float(window["high"].iloc[-1])
+        bar_low = float(window["low"].iloc[-1])
+
+        # 損切り/利確（stop_loss_pct / take_profit_pct）は on_bar の判断より優先する。
+        hit = (
+            check_stop_target(
+                pos.avg_price, bar_high, bar_low,
+                stop_loss_pct=strat.params.get("stop_loss_pct"),
+                take_profit_pct=strat.params.get("take_profit_pct"),
+            )
+            if pos.is_long
+            else None
+        )
+        if hit is not None:
+            side, price, reason = "EXIT", hit.price, hit.reason
+        else:
+            ctx = Context(symbol=symbol_code, now=ts, bars=window, position=pos, params=strat.params)
+            sig = strat.on_bar(ctx)
+            if sig is None:
+                continue
+            side, price, reason = sig.side, float(window["close"].iloc[-1]), sig.reason
+
         key = idempotency_key(strat_row.name, symbol_code, ts)
         if session.exec(select(Signal).where(Signal.idempotency_key == key)).first():
             continue
-        price = float(window["close"].iloc[-1])
         row = Signal(
             strategy_id=strat_row.id,
             strategy_name=strat_row.name,
             symbol_code=symbol_code,
             ts=ts,
-            side=sig.side,
-            reason=sig.reason,
+            side=side,
+            reason=reason,
             price=price,
             origin="live",
             idempotency_key=key,
@@ -145,14 +163,14 @@ def _run_strategy_symbol(
         session.commit()
         fired.append(row)
         if is_paper:
-            paper.on_signal(session, strat_row, symbol_code, sig.side, price, sig.reason, ts, qty_hint)
+            paper.on_signal(session, strat_row, symbol_code, side, price, reason, ts, qty_hint)
             pos = paper.current_position(session, strat_row.id, symbol_code)
-        elif sig.side == "BUY":
+        elif side == "BUY":
             pos = Position(qty=qty_hint, avg_price=price)
-        elif sig.side in ("EXIT", "SELL"):
+        elif side in ("EXIT", "SELL"):
             pos = Position()
         if notify:
-            send_slack(format_signal(strat_row.name, symbol_code, name, sig.side, price, sig.reason))
+            send_slack(format_signal(strat_row.name, symbol_code, name, side, price, reason))
 
     cur.last_bar_ts = latest_ts
     cur.updated_at = utcnow()

@@ -252,6 +252,44 @@ def test_help_page(client):
     assert "プロフィットファクター" in r.text  # glossary が render されている
 
 
+def test_backtest_with_stop_loss_via_web(client):
+    from datetime import datetime, timedelta
+
+    from sqlmodel import Session
+
+    from app.db import engine
+    from app.models import Bar, Symbol
+
+    decline = [100 - i for i in range(30)]
+    rise = [70 + i * 2 for i in range(7)]
+    closes = decline + rise + [70.0, 70.0, 70.0]
+    with Session(engine) as s:
+        s.add(Symbol(code="8002", name="テスト銘柄"))
+        base = datetime(2026, 7, 1)
+        for i, price in enumerate(closes):
+            s.add(
+                Bar(
+                    symbol_code="8002", timeframe="5m", ts=base + timedelta(minutes=5 * i),
+                    open=price, high=price, low=price, close=price, volume=100.0, source="test",
+                )
+            )
+        s.commit()
+
+    r = client.post(
+        "/backtest",
+        data={
+            "class_path": "app.strategy.examples.sma_cross:SmaCross",
+            "symbol_code": "8002",
+            "timeframe": "5m",
+            "params_json": '{"fast": 5, "slow": 20, "qty": 100, "stop_loss_pct": 3.0}',
+            "commission_per_trade": "0",
+        },
+    )
+    assert r.status_code == 200
+    assert "損切り" in r.text
+    assert "79.5" in r.text  # 82.0 * 0.97 の仕切値
+
+
 def test_backtest_result_has_glossary_tooltips(client):
     from datetime import datetime, timedelta
 
@@ -286,6 +324,18 @@ def test_backtest_result_has_glossary_tooltips(client):
     assert r.status_code == 200
     assert "プロフィットファクター" in r.text  # PF の title
     assert "最大ドローダウン" in r.text  # 最大DD の title
+
+
+def test_stop_loss_take_profit_appear_in_all_param_forms(client):
+    import json
+
+    escaped_stop = json.dumps("損切り(%)")[1:-1]
+    escaped_tp = json.dumps("利確(%)")[1:-1]
+    for path in ("/backtest", "/strategies", "/optimize"):
+        r = client.get(path)
+        assert r.status_code == 200
+        assert escaped_stop in r.text, f"{path} に損切りの universal param が無い"
+        assert escaped_tp in r.text, f"{path} に利確の universal param が無い"
 
 
 def test_backtest_param_form_uses_strategy_meta(client):

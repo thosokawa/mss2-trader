@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 
+import pytest
 from sqlmodel import Session, select
 
 from app.db import engine, init_db
@@ -88,6 +89,58 @@ def test_disabled_strategy_does_not_run():
         fired = live.run_once(s, notify=False)
         assert [f for f in fired if f.symbol_code == "9802"] == []
         assert s.exec(select(Signal).where(Signal.symbol_code == "9802")).all() == []
+
+
+def test_stop_loss_closes_paper_trade_before_natural_exit():
+    init_db()
+    from app.models import PaperTrade
+
+    with Session(engine) as s:
+        s.add(Symbol(code="9804", name="テスト銘柄"))
+        ss = SymbolSet(name="set-9804")
+        s.add(ss)
+        s.commit()
+        s.refresh(ss)
+        s.add(SymbolSetItem(set_id=ss.id, symbol_code="9804"))
+        st = Strategy(
+            name="strat-9804",
+            class_path="app.strategy.examples.sma_cross:SmaCross",
+            params_json='{"fast": 5, "slow": 20, "qty": 100, "stop_loss_pct": 3.0}',
+            symbol_set_id=ss.id,
+            timeframe="5m",
+            mode="paper",
+            enabled=True,
+        )
+        s.add(st)
+        s.commit()
+        s.refresh(st)
+
+        decline = [100 - i for i in range(30)]
+        rise = [70 + i * 2 for i in range(7)]  # GC は最後の足（close=82）
+        _add_bars(s, "9804", decline, BASE)
+        live.run_once(s, notify=False)  # カーソル初期化
+
+        base2 = BASE + timedelta(minutes=5 * len(decline))
+        _add_bars(s, "9804", rise, base2)
+        # GC 直後に急落する足を1本追加（低値がストップラインを割る）
+        crash_ts = base2 + timedelta(minutes=5 * len(rise))
+        s.add(Bar(symbol_code="9804", timeframe="5m", ts=crash_ts,
+                  open=70.0, high=70.0, low=70.0, close=70.0, volume=1000.0, source="rss"))
+        s.commit()
+
+        fired = live.run_once(s, notify=False)
+        sides = [f.side for f in fired]
+        assert sides == ["BUY", "EXIT"]
+        assert "損切り" in fired[-1].reason
+
+        trades = s.exec(select(PaperTrade).where(PaperTrade.strategy_id == st.id)).all()
+        assert len(trades) == 1
+        t = trades[0]
+        assert t.status == "closed"
+        assert t.entry_price == pytest.approx(82.0 * 1.0003)  # PaperBroker の既定スリッページ込み
+        assert t.exit_price < t.entry_price
+        assert "損切り" in t.exit_reason
+        assert live.paper.current_position(s, st.id, "9804").is_flat
 
 
 def test_paper_mode_records_trades():

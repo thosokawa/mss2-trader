@@ -28,7 +28,8 @@
 `deviation_pct` `slope_pct` `crossed_up` …）は [app/strategy/README.md](app/strategy/README.md)。
 同梱例（トレンドフォロー・逆張り・ブレイクアウト・フィルタ付きなど7種類）:
 `sma_cross` `ma_rsi` `trend_rsi_reclaim` `macd_cross` `bollinger_reversion`
-`donchian_breakout` `adx_ma_cross`。
+`donchian_breakout` `adx_ma_cross`。**損切り/利確**（建値からの%）は全戦略共通のパラメータとして
+自動で付き、`on_bar()` の判断より優先してバックテスト・live 両方で執行される（`app/engine/stops.py`）。
 
 ## フェーズ
 
