@@ -39,7 +39,7 @@
 | P1 | `bridge/` 実装、tick→足 集約、ライブ気配画面 | 済（Windows 実機で RSS 疎通確認まで完了 2026-09） |
 | P2 | live エンジンで足確定→Slack 通知（＝通知だけ完成） | 済（Slack Webhook を設定して実疎通確認が残り） |
 | P3 | PaperBroker でペーパートレード、成績表示 | 済 |
-| P4 | RssBroker で実発注、risk.py 完全実装、少額試験運用 | ← 次 |
+| P4 | RssBroker で実発注、risk.py 完全実装、少額試験運用 | 実装済み（**Windows実機で未検証** — `bridge/README.md`「実発注」参照） |
 
 ## セットアップ（Mac）
 
@@ -137,10 +137,13 @@ Web UI:
   （過学習対策）。結果から「戦略登録」でそのパラメータのまま `/strategies` へ。履歴は `/optimizations`
 - **戦略** … live エンジンで回すロジックの登録。有効化すると `live_interval_sec` ごとに
   対象銘柄セットの確定足へ `on_bar()` を流し、シグナルを記録して Slack 通知（発注はしない）。
-  有効化した時点より後の足だけが対象。モード `notify` / `paper` / `live`（P4）
+  有効化した時点より後の足だけが対象。モード `notify` / `paper` / `live`
 - **シグナル** … live エンジンが記録したシグナル履歴
 - **成績** … `paper` モードの戦略の擬似約定（PaperBroker）による往復トレードと
   実現/含み損益・勝率・PF。`[paper] slippage_bps` で約定価格に概算スリッページ
+- **リスク管理** … `mode=live` の実発注まわり。ARMED トグル（既定OFF、再起動で自動解除）、
+  `config.trading` の各種上限、発注履歴。`config.trading.enabled` と ARMED の両方が
+  true でないと発注しない（二重の安全弁）。詳細は `bridge/README.md`「実発注（P4）」
 
 ### Slack 通知の設定
 

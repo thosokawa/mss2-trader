@@ -1,9 +1,12 @@
-"""発注インターフェース。engine はこの抽象だけに依存する。
+"""発注インターフェース。
 
-- PaperBroker: 約定をシミュレーション（P3 のペーパートレードで使用）
-- RssBroker  : Windows の bridge 経由で MarketSpeed II RSS に発注（P4 で実装）
-
-P0 では未使用。IF を先に固定しておくことで engine 側のコードが後から変わらない。
+- PaperBroker: 約定をシミュレーション（P3 のペーパートレードで使用。同期・即約定）
+- 実発注（P4）: RssStockOrder は Excel の式評価 + セルの状態確定を待つ必要があり、
+  本質的に非同期（backend が Order を作る → bridge が拾って発注 → 結果を報告、の
+  リレー）。そのため PaperBroker のような同期 place() では表現できず、
+  app/engine/orders.py（キュー管理）+ app/web/routes.py の
+  /api/orders/pending, /api/orders/{id}/report + bridge/bridge.py が本体。
+  ここでの RssBroker は API 一覧性のためのプレースホルダとして残す。
 """
 from __future__ import annotations
 
@@ -47,10 +50,8 @@ class PaperBroker(Broker):
 
 
 class RssBroker(Broker):
-    """bridge にHTTPで発注指令を出し、RssOrder の実行結果を受け取る（P4 で実装）。"""
-
-    def __init__(self, command_url: str):
-        self.command_url = command_url
+    """未使用（プレースホルダ）。実発注は非同期のため place() では表現できない。
+    実体は app/engine/orders.py + /api/orders/* + bridge/bridge.py を参照。"""
 
     def place(self, symbol: str, signal: Signal, ref_price: float) -> OrderResult:
-        raise NotImplementedError("P4 で実装。bridge 側の RssOrder ラッパと合わせて作る。")
+        raise NotImplementedError("place() は使わない。app.engine.orders.queue_order() を使うこと。")

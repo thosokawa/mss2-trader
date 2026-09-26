@@ -28,6 +28,7 @@ $root     = Split-Path -Parent $PSScriptRoot            # bridge\ の親 = リ�
 $py       = Join-Path $root '.venv\Scripts\python.exe'
 $logs     = Join-Path $root 'logs'
 $workbook = Join-Path $root 'bridge\rss_bridge.xlsx'
+$ordersWorkbook = Join-Path $root 'bridge\rss_orders.xlsx'
 $stamp    = Get-Date -Format 'yyyyMMdd'
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
 
@@ -99,6 +100,28 @@ if ($excelHasIt) {
   Start-Sleep -Seconds $RssWaitSec
 }
 
+# ---- 3b. 発注専用ブック（あれば開く。無ければ発注リレーは無効のまま）---------
+#   rss_orders.xlsx は `python bridge\build_workbook.py --orders` で1回だけ作る。
+#   quotes ブックと違い自動では作り直さない（発注中の状態を壊さないため）。
+$ordersEnabled = $false
+if (Test-Path $ordersWorkbook) {
+  $ordersEnabled = $true
+  $excelHasOrders = $false
+  try {
+    $xl2 = [Runtime.InteropServices.Marshal]::GetActiveObject('Excel.Application')
+    foreach ($wb in $xl2.Workbooks) { if ($wb.FullName -eq $ordersWorkbook) { $excelHasOrders = $true } }
+  } catch { }
+  if ($excelHasOrders) {
+    Write-Host '[orders] rss_orders.xlsx は既に開いています'
+  } else {
+    Write-Host '[orders] rss_orders.xlsx を開きます（発注リレー有効・未検証機能）'
+    Start-Process -FilePath $ordersWorkbook
+    Start-Sleep -Seconds 3
+  }
+} else {
+  Write-Host '[orders] rss_orders.xlsx が無いので発注リレーは無効（通知/ペーパーのみ動作）'
+}
+
 # ---- 4. bridge -------------------------------------------------------------
 if ($NoBridge) {
   Write-Host '[bridge] スキップ（--NoBridge）'
@@ -109,7 +132,9 @@ if ($NoBridge) {
     Write-Host "[bridge] 既に起動済み（PID $($running.ProcessId -join ', ')）"
   } else {
     Write-Host '[bridge] 起動中...'
-    Start-Bg ("bridge\bridge.py --workbook '{0}'" -f $workbook) (Join-Path $logs "bridge-$stamp.log")
+    $bridgeArgs = "bridge\bridge.py --workbook '{0}'" -f $workbook
+    if ($ordersEnabled) { $bridgeArgs += " --orders-workbook '{0}'" -f $ordersWorkbook }
+    Start-Bg $bridgeArgs (Join-Path $logs "bridge-$stamp.log")
     Write-Host "[bridge] OK  ログ: $logs\bridge-$stamp.log"
   }
 }

@@ -143,6 +143,63 @@ def test_stop_loss_closes_paper_trade_before_natural_exit():
         assert live.paper.current_position(s, st.id, "9804").is_flat
 
 
+def test_live_mode_blocked_by_default_creates_no_order():
+    init_db()
+    from app.models import Order
+
+    with Session(engine) as s:
+        st = _make_strategy(s, "9805", mode="live")
+        _add_bars(s, "9805", DECLINE, BASE)
+        live.run_once(s, notify=False)  # カーソル初期化
+
+        _add_bars(s, "9805", RISE, BASE + timedelta(minutes=5 * len(DECLINE)))
+        fired = live.run_once(s, notify=False)
+
+        assert len(fired) >= 1
+        assert fired[0].side == "BUY"
+        assert "発注見送り" in fired[0].reason  # 既定は DISARMED + config.trading.enabled=false
+        assert s.exec(select(Order).where(Order.strategy_id == st.id)).all() == []
+        # ブロックされた分はポジションを進めていない
+        from app.engine import orders as orders_mod
+        assert orders_mod.current_live_position(s, st.id, "9805").is_flat
+
+
+def test_live_mode_queues_order_when_armed():
+    init_db()
+    from unittest.mock import patch
+
+    from app.config import TradingCfg
+    from app.engine.risk import RiskEngine
+    from app.models import Order
+
+    session_base = datetime(2026, 3, 2, 9, 0, 0)  # 取引時間内(09:00-11:30)に収まるように
+    armed_engine = RiskEngine(
+        TradingCfg(enabled=True, max_qty_per_order=1000, max_notional_per_order=10_000_000,
+                   daily_loss_limit=1_000_000, session_windows=["00:00-23:59"])
+    )
+    armed_engine.arm()
+
+    with Session(engine) as s:
+        st = _make_strategy(s, "9806", mode="live")
+        _add_bars(s, "9806", DECLINE, session_base)
+        with patch("app.engine.live.get_risk_engine", return_value=armed_engine):
+            live.run_once(s, notify=False)  # カーソル初期化
+
+            _add_bars(s, "9806", RISE, session_base + timedelta(minutes=5 * len(DECLINE)))
+            fired = live.run_once(s, notify=False)
+
+        assert len(fired) >= 1
+        assert "発注見送り" not in fired[0].reason
+        placed = s.exec(select(Order).where(Order.strategy_id == st.id)).all()
+        assert len(placed) == 1
+        assert placed[0].side == "BUY" and placed[0].status == "new" and placed[0].symbol_code == "9806"
+
+        # 決着待ちのまま二重発注しない
+        from app.engine import orders as orders_mod
+        assert orders_mod.has_in_flight_order(s, st.id, "9806")
+        assert orders_mod.current_live_position(s, st.id, "9806").is_long
+
+
 def test_paper_mode_records_trades():
     init_db()
     from app.models import PaperTrade

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>リスク管理 / 実発注（P4）</h2>
+<article class="err">
+  ⚠ ここを ARMED にすると、<code>mode=live</code> の戦略のシグナルが実際に発注されます
+  （config の <code>trading.enabled</code> も true の場合のみ）。<code>config.trading.enabled</code>
+  は <code>config/config.toml</code> を編集して再起動しないと変わりません。ARMED はこの画面の
+  ボタンでいつでも解除でき、backend を再起動すると自動的に解除されます。
+</article>
+
+<div class="metrics">
+  <div><div class="k">config.trading.enabled</div>
+    <div class="v {{ 'pos' if trading_cfg.enabled else 'neg' }}">{{ trading_cfg.enabled }}</div></div>
+  <div><div class="k">ARMED</div>
+    <div class="v {{ 'neg' if state.armed else 'pos' }}">{{ '稼働中' if state.armed else '停止中' }}</div></div>
+  <div><div class="k">本日の実現損益</div>
+    <div class="v {{ 'pos' if state.day_realized_pnl>=0 else 'neg' }}">{{ '{:,.0f}'.format(state.day_realized_pnl) }}</div></div>
+  <div><div class="k">停止理由</div><div class="v">{{ state.halted_reason or '—' }}</div></div>
+</div>
+
+<article>
+  {% if state.armed %}
+  <form method="post" action="/risk/disarm">
+    <label>停止理由（任意）<input name="reason" placeholder="手動停止"></label>
+    <button type="submit" class="secondary">DISARM（発注を止める）</button>
+  </form>
+  {% else %}
+  <form method="post" action="/risk/arm" onsubmit="return confirm('ARMED にすると mode=live の戦略が実際に発注できるようになります。よろしいですか？')">
+    <button type="submit">ARM（発注を許可する）</button>
+  </form>
+  {% endif %}
+</article>
+
+<h3>制限（config.trading、変更は config.toml 編集 + 再起動）</h3>
+<table>
+  <tbody>
+    <tr><td>1回の注文の数量上限</td><td>{{ trading_cfg.max_qty_per_order }} 株</td></tr>
+    <tr><td>1回の注文の金額上限</td><td>{{ '{:,.0f}'.format(trading_cfg.max_notional_per_order) }} 円</td></tr>
+    <tr><td>日次損失リミット</td><td>{{ '{:,.0f}'.format(trading_cfg.daily_loss_limit) }} 円</td></tr>
+    <tr><td>取引時間帯</td><td>{{ trading_cfg.session_windows | join(', ') }}</td></tr>
+    <tr><td>既定の口座区分</td><td>{{ trading_cfg.default_account_type }}（0:特定 1:一般 2:NISA 3:旧NISA）</td></tr>
+  </tbody>
+</table>
+
+<h3>mode=live の戦略</h3>
+{% if live_strategies %}
+<table>
+  <thead><tr><th>名前</th><th>銘柄セット</th><th>状態</th></tr></thead>
+  <tbody>
+  {% for st in live_strategies %}
+    <tr>
+      <td><a href="/strategies">{{ st.name }}</a></td>
+      <td>{{ st.symbol_set_id or '—' }}</td>
+      <td>{% if st.enabled %}<span class="pos">稼働中</span>{% else %}<span class="neg">停止</span>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p>mode=live の戦略はまだ登録されていません。</p>{% endif %}
+
+<h3>発注履歴</h3>
+{% if recent_orders %}
+<table>
+  <thead><tr><th>日時</th><th>戦略</th><th>銘柄</th><th>売買</th><th class="gloss" title="{{ 'qty'|gloss }}">数量</th><th>状態</th><th>約定数量/価格</th><th>エラー</th></tr></thead>
+  <tbody>
+  {% for o in recent_orders %}
+    <tr>
+      <td>{{ o.ts | jst('%Y-%m-%d %H:%M:%S') }}</td>
+      <td>{{ o.strategy_name }}</td>
+      <td>{{ o.symbol_code }}</td>
+      <td>{{ o.side }}</td>
+      <td>{{ o.qty }}</td>
+      <td>{{ o.status }}</td>
+      <td>{{ o.filled_qty }} / {{ '%.1f'|format(o.avg_price) if o.avg_price else '—' }}</td>
+      <td><small class="neg">{{ o.error }}</small></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p>まだありません。</p>{% endif %}
+{% endblock %}

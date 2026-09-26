@@ -44,6 +44,15 @@ PROBE_FIELDS = [
     "VWAP", "約定回数", "市場コード",
 ]
 
+# --orders 用。RssStockOrder（国内株式・現物注文）の引数（20個、A〜T列）。
+# bridge.py の ORDER_INPUT_COLS と対応関係を保つこと。
+ORDER_ARG_HEADER = [
+    "発注ID", "発注トリガー", "銘柄コード", "売買区分", "注文区分", "SOR区分",
+    "注文数量", "価格区分", "注文価格", "執行条件", "注文期限", "口座区分",
+    "逆指値条件価格", "逆指値条件区分", "逆指値価格区分", "逆指値価格",
+    "セット注文区分", "セット注文価格", "セット注文執行条件", "セット注文期限",
+]
+
 
 def load_codes(set_id: int) -> list[str]:
     init_db()
@@ -105,13 +114,55 @@ def build_probe(code: str, out_path: Path) -> None:
     print("Excel で開き、B列に数値/文字が返る項目名をメモ → FIELDS を修正する。")
 
 
+def build_orders(out_path: Path, n_rows: int = 300) -> None:
+    """発注専用ブック（1回だけ作って使い回す。quotes ブックとは別ファイル）。
+
+    quotes ブックは銘柄セットを変えるたびに作り直すが、orders ブックは
+    発注中の状態を持つので自動では作り直さない・書き換えない設計にしてある。
+    """
+    try:
+        from openpyxl import Workbook
+        from openpyxl.utils import get_column_letter
+    except ImportError as e:
+        raise SystemExit("openpyxl が必要です: pip install openpyxl") from e
+
+    n_args = len(ORDER_ARG_HEADER)  # 20 (A〜T列)
+    status_col = n_args + 1  # U列(21列目)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "orders"
+    ws.append([*ORDER_ARG_HEADER, "ステータス"])
+    for row in range(2, n_rows + 2):
+        cell_refs = ",".join(f"{get_column_letter(c)}{row}" for c in range(1, n_args + 1))
+        ws.cell(row=row, column=status_col, value=f"=RssStockOrder({cell_refs})")
+    for c in range(1, n_args + 1):
+        ws.column_dimensions[get_column_letter(c)].width = 11
+    ws.column_dimensions[get_column_letter(status_col)].width = 45
+    ws.freeze_panes = "A2"
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(out_path)
+    print(f"生成: {out_path}  (発注用シート、{n_rows}行ぶんの空き)")
+    print("このファイルは1回作って Excel で開いたままにする（quotes ブックと違い自動では作り直さない）。")
+    print("※ RssStockOrder の実際の発注は未検証。まず MarketSpeed II 側の「発注機能」を"
+          "OFFのままテストし、「発注ロック中」が正しく検出できることを確認してから有効化すること。")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--set-id", type=int)
     ap.add_argument("--codes", help="カンマ区切り 例: 7203,6501")
     ap.add_argument("--probe", help="項目名の実地確認用ブックを作る（1銘柄コード）")
+    ap.add_argument("--orders", action="store_true", help="発注用ブック（rss_orders.xlsx）を作る")
     ap.add_argument("--out", default=str(Path(__file__).parent / "rss_bridge.xlsx"))
     args = ap.parse_args()
+
+    if args.orders:
+        default_out = Path(__file__).parent / "rss_orders.xlsx"
+        out = Path(args.out) if args.out != str(Path(__file__).parent / "rss_bridge.xlsx") else default_out
+        build_orders(out)
+        return
 
     if args.probe:
         default_out = Path(__file__).parent / "rss_probe.xlsx"
@@ -124,7 +175,7 @@ def main() -> None:
     elif args.set_id:
         codes = load_codes(args.set_id)
     else:
-        raise SystemExit("--set-id か --codes か --probe を指定してください")
+        raise SystemExit("--set-id か --codes か --probe か --orders を指定してください")
     build(codes, Path(args.out))
 
 

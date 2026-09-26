@@ -15,9 +15,11 @@ from sqlmodel import Session, func, select
 from app.bars import load_bars
 from app.config import get_config
 from app.db import get_session
+from app.engine import orders as orders_engine
 from app.engine import paper
 from app.engine.backtest import run_backtest
 from app.engine.optimize import OptimizeRow, optimize
+from app.engine.risk import get_risk_engine
 from app.history import fetch_and_store
 from app.models import (
     BacktestRun,
@@ -25,6 +27,7 @@ from app.models import (
     Bar,
     LiveCursor,
     OptimizationRun,
+    Order,
     PaperTrade,
     Signal,
     Strategy,
@@ -617,6 +620,72 @@ def delete_strategy(strategy_id: int, s: Session = Depends(get_session)):
         s.delete(st)
     s.commit()
     return RedirectResponse("/strategies", status_code=303)
+
+
+# ---- リスク管理 / 実発注（P4） -----------------------------------------------
+
+
+@router.get("/risk", response_class=HTMLResponse)
+def risk_page(request: Request, s: Session = Depends(get_session)):
+    eng = get_risk_engine()
+    live_strategies = s.exec(
+        select(Strategy).where(Strategy.mode == "live").order_by(Strategy.created_at.desc())
+    ).all()
+    recent_orders = s.exec(select(Order).order_by(Order.ts.desc()).limit(50)).all()
+    return templates.TemplateResponse(
+        request,
+        "risk.html",
+        _ctx(
+            request,
+            trading_cfg=eng.cfg,
+            state=eng.state,
+            live_strategies=live_strategies,
+            recent_orders=recent_orders,
+        ),
+    )
+
+
+@router.post("/risk/arm")
+def risk_arm():
+    get_risk_engine().arm()
+    return RedirectResponse("/risk", status_code=303)
+
+
+@router.post("/risk/disarm")
+def risk_disarm(reason: str = Form("manual")):
+    get_risk_engine().disarm(reason or "manual")
+    return RedirectResponse("/risk", status_code=303)
+
+
+# ---- 発注リレー（P4）: bridge が拾って RssStockOrder で発注、結果を報告する -----
+
+
+@router.get("/api/orders/pending")
+def orders_pending(s: Session = Depends(get_session)):
+    """bridge がポーリングして拾う。呼ぶたびに status を new -> sending に進めて配布済みにする。"""
+    claimed = orders_engine.claim_pending(s)
+    return {"orders": [orders_engine.order_to_dict(o) for o in claimed]}
+
+
+@router.post("/api/orders/{order_id}/report")
+async def orders_report(order_id: int, request: Request, s: Session = Depends(get_session)):
+    """bridge からの結果報告。body 例:
+    {"status": "filled", "broker_order_id": "...", "filled_qty": 100, "avg_price": 2810.0}
+    {"status": "rejected", "error": "発注ロック中（発注を行うには発注機能を有効にしてください）"}
+    """
+    body = await request.json()
+    order = orders_engine.apply_report(
+        s,
+        order_id,
+        status=body.get("status", "error"),
+        broker_order_id=body.get("broker_order_id", ""),
+        filled_qty=int(body.get("filled_qty") or 0),
+        avg_price=float(body.get("avg_price") or 0.0),
+        error=body.get("error", ""),
+    )
+    if order is None:
+        return JSONResponse({"ok": False, "error": f"order {order_id} not found"}, status_code=404)
+    return {"ok": True}
 
 
 # ---- 成績（ペーパートレード） --------------------------------------------

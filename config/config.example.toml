@@ -20,14 +20,23 @@ slippage_bps = 3.0
 [bridge]
 # backend の受信エンドポイント（同一PCなら localhost）
 ingest_url = "http://127.0.0.1:8000/api/ingest"
+# 発注キューの受け渡し（P4）
+orders_url = "http://127.0.0.1:8000/api/orders"
 # xlwings で開く RSS ブック（build_workbook.py が生成）
 workbook_path = "C:\\mss2-trader\\bridge\\rss_bridge.xlsx"
+# 発注専用ブック（build_workbook.py --orders で1回だけ生成。空なら発注リレー無効）
+orders_workbook_path = ""
 poll_interval_sec = 2.0
+# RssStockOrder のセルが確定するまで待つ秒数
+order_resolve_timeout_sec = 15.0
 
 [trading]
-# P4 まで false。true でも各戦略の mode=live かつ UI で ARMED にしないと発注しない。
+# false のままなら mode=live のシグナルは一切発注されない。true にしても
+# さらに UI で ARMED にしないと発注しない（二重の安全弁）。
 enabled = false
 max_qty_per_order = 100
 max_notional_per_order = 300000
 daily_loss_limit = 30000
 session_windows = ["09:00-11:30", "12:30-15:30"]
+# RssStockOrder の口座区分: 0:特定 1:一般 2:NISA 3:旧NISA
+default_account_type = "0"

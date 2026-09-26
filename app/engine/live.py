@@ -1,4 +1,4 @@
-"""ライブのシグナル生成ループ（P2）。
+"""ライブのシグナル生成ループ（P2、P4で実発注を追加）。
 
 流れ:
   bridge から届いた tick は aggregator が確定足（Bar）にしている。
@@ -7,8 +7,11 @@
     -> Signal が返ったら:
        - Signal を DB 保存（origin="live", idempotency_key で重複防止）
        - notify.send_slack で通知
-  ポジションは live シグナルの履歴から復元する（BUY で建て、EXIT/SELL で手仕舞い）。
-  mode=="live" の実発注は P4（ここではまだやらない）。
+       - mode=paper: PaperBroker で擬似約定
+       - mode=live : RiskEngine.check() を通過し、決着待ちの発注が無ければ
+         Order をキューイング（実際の発注は bridge が非同期で行う。P4）
+  ポジションは mode ごとに別の情報源から復元する
+  （notify: live シグナル履歴 / paper: PaperTrade / live: Order 履歴）。
 
 バックテストと同じ Strategy.on_bar を呼ぶので挙動が一致する。
 """
@@ -22,7 +25,8 @@ import pandas as pd
 from sqlmodel import Session, select
 
 from app.bars import load_bars
-from app.engine import paper
+from app.engine import orders, paper
+from app.engine.risk import get_risk_engine
 from app.engine.stops import check_stop_target
 from app.models import LiveCursor, Signal, Strategy, Symbol, SymbolSetItem, utcnow
 from app.notify import format_signal, send_slack
@@ -112,8 +116,11 @@ def _run_strategy_symbol(
 
     qty_hint = int(strat.params.get("qty", 100))
     is_paper = strat_row.mode == "paper"
+    is_live_trading = strat_row.mode == "live"
     if is_paper:
         pos = paper.current_position(session, strat_row.id, symbol_code)
+    elif is_live_trading:
+        pos = orders.current_live_position(session, strat_row.id, symbol_code, qty_hint)
     else:
         pos = position_from_signals(session, strat_row.id, symbol_code, qty_hint)
     name = getattr(session.get(Symbol, symbol_code), "name", "") or ""
@@ -148,13 +155,24 @@ def _run_strategy_symbol(
         key = idempotency_key(strat_row.name, symbol_code, ts)
         if session.exec(select(Signal).where(Signal.idempotency_key == key)).first():
             continue
+
+        blocked_reason = ""
+        if is_live_trading:
+            if orders.has_in_flight_order(session, strat_row.id, symbol_code):
+                blocked_reason = "決着待ちの発注が残っています"
+            else:
+                ok, why = get_risk_engine().check(now=ts, side=side, qty=qty_hint, price=price, mode="live")
+                if not ok:
+                    blocked_reason = why
+
+        signal_reason = f"{reason} [発注見送り: {blocked_reason}]" if blocked_reason else reason
         row = Signal(
             strategy_id=strat_row.id,
             strategy_name=strat_row.name,
             symbol_code=symbol_code,
             ts=ts,
             side=side,
-            reason=reason,
+            reason=signal_reason,
             price=price,
             origin="live",
             idempotency_key=key,
@@ -165,12 +183,23 @@ def _run_strategy_symbol(
         if is_paper:
             paper.on_signal(session, strat_row, symbol_code, side, price, reason, ts, qty_hint)
             pos = paper.current_position(session, strat_row.id, symbol_code)
+        elif is_live_trading:
+            if not blocked_reason:
+                orders.queue_order(
+                    session, strat_row, symbol_code, side, qty_hint, reason, idempotency_key=key
+                )
+                # 実際に受理されたかは bridge の報告待ちだが、同一足内で矛盾したシグナルを
+                # 出さないよう楽観的にポジションを進めておく（ブロックされた場合は進めない）。
+                if side == "BUY":
+                    pos = Position(qty=qty_hint, avg_price=price)
+                elif side in ("EXIT", "SELL"):
+                    pos = Position()
         elif side == "BUY":
             pos = Position(qty=qty_hint, avg_price=price)
         elif side in ("EXIT", "SELL"):
             pos = Position()
         if notify:
-            send_slack(format_signal(strat_row.name, symbol_code, name, side, price, reason))
+            send_slack(format_signal(strat_row.name, symbol_code, name, side, price, signal_reason))
 
     cur.last_bar_ts = latest_ts
     cur.updated_at = utcnow()

@@ -350,6 +350,55 @@ def test_backtest_param_form_uses_strategy_meta(client):
     assert escaped_label[1:-1] in r.text  # 前後の " を除いた本体部分
 
 
+def test_risk_page_and_arm_disarm(client):
+    r = client.get("/risk")
+    assert r.status_code == 200
+    assert "ARMED" in r.text
+
+    r = client.post("/risk/arm", follow_redirects=True)
+    assert "稼働中" in r.text
+
+    r = client.post("/risk/disarm", data={"reason": "テスト停止"}, follow_redirects=True)
+    assert "テスト停止" in r.text
+    assert "停止中" in r.text
+
+
+def test_orders_pending_and_report_flow(client):
+    from sqlmodel import Session
+
+    from app.db import engine
+    from app.engine import orders as orders_engine
+    from app.models import Order, Strategy
+
+    with Session(engine) as s:
+        st = Strategy(
+            name="live-web-test", class_path="app.strategy.examples.sma_cross:SmaCross", mode="live"
+        )
+        s.add(st)
+        s.commit()
+        s.refresh(st)
+        placed = orders_engine.queue_order(s, st, "7777", "BUY", 100, "テスト")
+        order_id = placed.id
+
+    r = client.get("/api/orders/pending")
+    assert r.status_code == 200
+    ids = [o["id"] for o in r.json()["orders"]]
+    assert order_id in ids
+
+    r = client.post(
+        f"/api/orders/{order_id}/report",
+        json={"status": "filled", "broker_order_id": "ORD1", "filled_qty": 100, "avg_price": 2500.0},
+    )
+    assert r.status_code == 200 and r.json()["ok"] is True
+
+    with Session(engine) as s:
+        o = s.get(Order, order_id)
+        assert o.status == "filled" and o.broker_order_id == "ORD1" and o.avg_price == 2500.0
+
+    r = client.post(f"/api/orders/{order_id}/report", json={"status": "filled"})
+    assert r.status_code == 200  # 既知の注文なら再報告も許容
+
+
 def test_healthz(client):
     assert client.get("/healthz").json() == {"ok": True}
 

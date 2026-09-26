@@ -12,6 +12,7 @@
     <li><a href="#backtest">バックテスト</a></li>
     <li><a href="#optimize">最適化（パラメータ探索）</a></li>
     <li><a href="#strategy">戦略</a></li>
+    <li><a href="#risk">リスク管理 / 実発注</a></li>
     <li><a href="#notify">Slack 通知の設定</a></li>
     <li><a href="#glossary">用語集</a></li>
   </ul>
@@ -29,6 +30,7 @@
     <tr><td><a href="/strategies">戦略</a></td><td>liveエンジンで回すロジックの登録・有効化</td></tr>
     <tr><td><a href="/signals">シグナル</a></td><td>liveエンジンが記録したシグナル履歴</td></tr>
     <tr><td><a href="/performance">成績</a></td><td>paperモード戦略の擬似約定・損益</td></tr>
+    <tr><td><a href="/risk">リスク管理</a></td><td>実発注のARMEDトグルと発注履歴（<code>mode=live</code>用）</td></tr>
   </tbody>
 </table>
 
@@ -135,7 +137,8 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
   </tbody>
 </table>
 <p>登録は <a href="/strategies">/strategies</a> から。モードは <code>notify</code>（通知のみ）/
-<code>paper</code>（擬似約定して<a href="/performance">成績</a>に反映）/ <code>live</code>（実発注・未実装）。</p>
+<code>paper</code>（擬似約定して<a href="/performance">成績</a>に反映）/
+<code>live</code>（実発注。<a href="#risk">リスク管理</a>で ARM しない限り発注されない）。</p>
 
 <h4>損切り / 利確</h4>
 <p>パラメータ欄の一番下に <strong>損切り(%)</strong> ・ <strong>利確(%)</strong> が全戦略共通で出る
@@ -144,6 +147,25 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
 成行手仕舞いする。空欄なら無効（今までどおり戦略自身の判断だけで手仕舞い）。同じ足で両方のライン
 に達したら損切りを優先する。<code>/optimize</code> でもカンマ区切りで範囲指定して一緒に最適化できる
 （例: 損切り欄に <code>2,3,5</code>）。</p>
+
+<h3 id="risk">リスク管理 / 実発注（mode=live）</h3>
+<p><strong>⚠ Windows実機（Excel + MarketSpeed II + 実口座）で未検証の機能</strong>。試す前に
+<code>bridge/README.md</code>の「実発注（P4）」の安全な確認手順を必ず読むこと。</p>
+<p>戦略を <code>mode=live</code> で登録・有効化しても、それだけでは発注されない。以下が
+<strong>すべて</strong>true でないと発注しない（二重・三重の安全弁）:</p>
+<ol>
+  <li><code>config/config.toml</code> の <code>[trading] enabled = true</code>（要編集+再起動）</li>
+  <li><a href="/risk">/risk</a> 画面で <strong>ARMED</strong>（backend 再起動で自動的に OFF に戻る）</li>
+  <li>取引時間内・数量/金額が上限内・日次損失リミット未達（<code>config.trading</code> の各種上限）</li>
+  <li>同一銘柄で決着待ちの注文が残っていない（二重発注防止）</li>
+</ol>
+<p>発注の実体は非同期のリレー: backend が発注キューを作る →
+<a href="/help#windows">bridge</a> が拾って Excel の <code>RssStockOrder</code> に書き込み・
+発注トリガーを立てる → セルの表示が確定するまで待つ → 結果を backend に報告、という流れ。
+セットアップ手順・既知の制限（成行のみ、約定の自動確認は未実装 等）は
+<code>bridge/README.md</code> を参照。</p>
+<p><a href="/risk">/risk</a> 画面で ARMED状態・本日の実現損益・発注履歴（状態・約定数量/価格・
+エラー内容）が確認できる。</p>
 
 <h3 id="notify">Slack 通知の設定</h3>
 <p><code>config\config.toml</code> の <code>[notify]</code> に Incoming Webhook URL を入れて <code>dry_run = false</code>

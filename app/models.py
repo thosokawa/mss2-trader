@@ -170,22 +170,42 @@ class BacktestTrade(SQLModel, table=True):
     return_pct: float
 
 
-# --- 以下 P3-P4 用（今は未使用・スキーマ固定目的）------------------------------
+# --- 以下 P4 用 ----------------------------------------------------------------
 
 
 class Order(SQLModel, table=True):
+    """実発注（P4）。backend が作った行を bridge がポーリングして拾い、
+    RssStockOrder で発注、結果を backend へ報告して更新する（非同期リレー）。
+
+    id をそのまま RssStockOrder の「発注ID」として使う（Excel 側で一意な数値が必要）。
+
+    status の遷移:
+      new（backend作成・未着手）
+        -> sending（bridgeが取得・処理開始。GET /api/orders/pending が付与）
+        -> sent（RSS側が受理 = セルが「発注済み(発注ID=xxxx)」）
+        -> filled（RssOrderStatus等で約定確認）
+      失敗系: rejected（入力/サーバエラー）, cancelled（確認画面でキャンセル）,
+              timeout（セルが確定しないまま待機時間切れ）, error（bridge側の例外）
+    """
+
     id: int | None = Field(default=None, primary_key=True)
     strategy_id: int | None = Field(default=None, foreign_key="strategy.id", index=True)
+    strategy_name: str = ""
     symbol_code: str = Field(index=True)
     ts: datetime = Field(default_factory=utcnow)
     side: str = ""
     qty: int = 0
     order_type: str = "MKT"
     limit_price: float | None = None
-    status: str = "new"
-    broker_order_id: str = ""
+    account_type: str = "0"  # RssStockOrder の口座区分: 0:特定 1:一般 2:NISA 3:旧NISA
+    reason: str = ""
+    status: str = Field(default="new", index=True)
+    broker_order_id: str = ""  # RSS側の注文番号（発注ID とは別）
+    filled_qty: int = 0
+    avg_price: float = 0.0
     error: str = ""
     idempotency_key: str = Field(default="", index=True)
+    updated_at: datetime = Field(default_factory=utcnow)
 
 
 class Fill(SQLModel, table=True):

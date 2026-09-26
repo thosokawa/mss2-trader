@@ -38,8 +38,13 @@ class PaperCfg:
 @dataclass
 class BridgeCfg:
     ingest_url: str = "http://127.0.0.1:8000/api/ingest"
+    orders_url: str = "http://127.0.0.1:8000/api/orders"
     workbook_path: str = ""
+    # 発注専用ブック（bridge/build_workbook.py --orders で生成）。空なら発注リレー無効。
+    orders_workbook_path: str = ""
     poll_interval_sec: float = 2.0
+    # RssStockOrder のセルが「発注済み/エラー/キャンセル」等に確定するまで待つ秒数
+    order_resolve_timeout_sec: float = 15.0
 
 
 @dataclass
@@ -49,6 +54,8 @@ class TradingCfg:
     max_notional_per_order: int = 300_000
     daily_loss_limit: int = 30_000
     session_windows: list[str] = field(default_factory=lambda: ["09:00-11:30", "12:30-15:30"])
+    # RssStockOrder の口座区分: 0:特定 1:一般 2:NISA 3:旧NISA
+    default_account_type: str = "0"
 
 
 @dataclass
