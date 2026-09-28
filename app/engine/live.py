@@ -17,17 +17,21 @@
 損切り/利確（stops.py）と大引け手仕舞い（eod.py、hold_overnight=False の日中足）も
 バックテストと同じ判定を on_bar より先に行う。live では加えて、前日から持ち越して
 しまった建玉（大引け時に backend が止まっていた等）を翌日最初の足で手仕舞いする。
+mode=live では、足の確定から trading.max_signal_age_sec 以上たったシグナルは発注しない
+（backend 停止後にまとめて評価された古い足のシグナルを、今の成行で発注しないため）。
 """
 from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 from sqlmodel import Session, select
 
+from app.aggregator import TF_DELTA
 from app.bars import load_bars
+from app.config import get_config
 from app.engine import orders, paper
 from app.engine.eod import flatten_at_close, is_last_bar_of_day, is_new_day
 from app.engine.risk import get_risk_engine
@@ -102,6 +106,7 @@ def _run_strategy_symbol(
     symbol_code: str,
     *,
     notify: bool,
+    now: datetime | None = None,
 ) -> list[Signal]:
     tf = strat_row.timeframe
     bars = load_bars(session, symbol_code, tf)
@@ -169,7 +174,11 @@ def _run_strategy_symbol(
 
         blocked_reason = ""
         if is_live_trading:
-            if orders.has_in_flight_order(session, strat_row.id, symbol_code):
+            age = (now or utcnow()) - (ts + TF_DELTA.get(tf, timedelta(0)))
+            max_age = get_config().trading.max_signal_age_sec
+            if age.total_seconds() > max_age:
+                blocked_reason = f"古い足のシグナル（確定から{int(age.total_seconds())}秒 > {max_age}秒）"
+            elif orders.has_in_flight_order(session, strat_row.id, symbol_code):
                 blocked_reason = "決着待ちの発注が残っています"
             else:
                 ok, why = get_risk_engine().check(now=ts, side=side, qty=qty_hint, price=price, mode="live")
@@ -219,8 +228,11 @@ def _run_strategy_symbol(
     return fired
 
 
-def run_once(session: Session, *, notify: bool = True) -> list[Signal]:
-    """enabled な全 Strategy を1周評価する。生成した live Signal を返す。"""
+def run_once(session: Session, *, notify: bool = True, now: datetime | None = None) -> list[Signal]:
+    """enabled な全 Strategy を1周評価する。生成した live Signal を返す。
+
+    now（naive UTC、既定は現在時刻）は mode=live の古いシグナル判定に使う。テスト用。
+    """
     strategies = session.exec(select(Strategy).where(Strategy.enabled == True)).all()  # noqa: E712
     out: list[Signal] = []
     for strat_row in strategies:
@@ -234,7 +246,9 @@ def run_once(session: Session, *, notify: bool = True) -> list[Signal]:
         strat.timeframe = strat_row.timeframe
         for symbol_code in _symbols_for(session, strat_row):
             try:
-                out.extend(_run_strategy_symbol(session, strat_row, strat, symbol_code, notify=notify))
+                out.extend(_run_strategy_symbol(
+                    session, strat_row, strat, symbol_code, notify=notify, now=now
+                ))
             except Exception:  # noqa: BLE001
                 log.exception("live 評価失敗: %s / %s", strat_row.name, symbol_code)
     return out

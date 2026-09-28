@@ -185,8 +185,12 @@ def test_live_mode_queues_order_when_armed():
         with patch("app.engine.live.get_risk_engine", return_value=armed_engine):
             live.run_once(s, notify=False)  # カーソル初期化
 
-            _add_bars(s, "9806", RISE, session_base + timedelta(minutes=5 * len(DECLINE)))
-            fired = live.run_once(s, notify=False)
+            # 実運用どおり足が1本確定するたびに評価する（古いシグナル扱いにしない）
+            fired = []
+            for i, c in enumerate(RISE):
+                bar_start = session_base + timedelta(minutes=5 * (len(DECLINE) + i))
+                _add_bars(s, "9806", [c], bar_start)
+                fired += live.run_once(s, notify=False, now=bar_start + timedelta(minutes=5, seconds=30))
 
         assert len(fired) >= 1
         assert "発注見送り" not in fired[0].reason
@@ -217,3 +221,35 @@ def test_paper_mode_records_trades():
         assert trades[0].entry_price > 0
         # BUY で建玉ができ、live の ctx.position も PaperTrade 由来
         assert live.paper.current_position(s, st.id, "9803").is_long
+
+
+def test_live_mode_skips_stale_signal_after_downtime():
+    """backend 停止後にまとめて評価された古い足のシグナルは発注しない。"""
+    init_db()
+    from unittest.mock import patch
+
+    from app.config import TradingCfg
+    from app.engine.risk import RiskEngine
+    from app.models import Order
+
+    session_base = datetime(2026, 3, 2, 9, 0, 0)
+    armed_engine = RiskEngine(
+        TradingCfg(enabled=True, max_qty_per_order=1000, max_notional_per_order=10_000_000,
+                   daily_loss_limit=1_000_000, session_windows=["00:00-23:59"])
+    )
+    armed_engine.arm()
+
+    with Session(engine) as s:
+        st = _make_strategy(s, "9807", mode="live")
+        _add_bars(s, "9807", DECLINE, session_base)
+        with patch("app.engine.live.get_risk_engine", return_value=armed_engine):
+            live.run_once(s, notify=False)  # カーソル初期化
+
+            _add_bars(s, "9807", RISE, session_base + timedelta(minutes=5 * len(DECLINE)))
+            # 最後の足の確定から1時間後に評価（停止していた backend が追いついた想定）
+            last_bar_end = session_base + timedelta(minutes=5 * (len(DECLINE) + len(RISE)))
+            fired = live.run_once(s, notify=False, now=last_bar_end + timedelta(hours=1))
+
+        assert len(fired) >= 1
+        assert all("古い足のシグナル" in f.reason for f in fired)
+        assert s.exec(select(Order).where(Order.strategy_id == st.id)).all() == []

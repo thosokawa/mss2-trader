@@ -38,6 +38,7 @@
     <tr><td>1回の注文の金額上限</td><td>{{ '{:,.0f}'.format(trading_cfg.max_notional_per_order) }} 円</td></tr>
     <tr><td>日次損失リミット</td><td>{{ '{:,.0f}'.format(trading_cfg.daily_loss_limit) }} 円</td></tr>
     <tr><td>取引時間帯</td><td>{{ trading_cfg.session_windows | join(', ') }}</td></tr>
+    <tr><td>シグナルの鮮度上限</td><td>足の確定から {{ trading_cfg.max_signal_age_sec }} 秒以内</td></tr>
     <tr><td>既定の口座区分</td><td>{{ trading_cfg.default_account_type }}（0:特定 1:一般 2:NISA 3:旧NISA）</td></tr>
   </tbody>
 </table>

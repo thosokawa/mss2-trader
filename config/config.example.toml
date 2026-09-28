@@ -40,3 +40,5 @@ daily_loss_limit = 30000
 session_windows = ["09:00-11:30", "12:30-15:30"]
 # RssStockOrder の口座区分: 0:特定 1:一般 2:NISA 3:旧NISA
 default_account_type = "0"
+# 足の確定からこの秒数以上たったシグナルは発注しない（停止後の追いつき評価対策）
+max_signal_age_sec = 120

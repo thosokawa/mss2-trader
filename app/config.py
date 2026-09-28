@@ -56,6 +56,9 @@ class TradingCfg:
     session_windows: list[str] = field(default_factory=lambda: ["09:00-11:30", "12:30-15:30"])
     # RssStockOrder の口座区分: 0:特定 1:一般 2:NISA 3:旧NISA
     default_account_type: str = "0"
+    # 足の確定からこの秒数以上たったシグナルは発注しない（backend 停止後の追いつき評価で
+    # 何時間も前のシグナルを今の成行で発注しないため）。
+    max_signal_age_sec: int = 120
 
 
 @dataclass
