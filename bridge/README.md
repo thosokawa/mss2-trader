@@ -6,7 +6,7 @@
 2. `bridge.py` … MarketSpeed II ログイン後にそのブックを開き、xlwings でセルを
    ポーリング読み取り → backend の `/api/ingest` へ POST
    - `--simulate` … Excel 不要のシミュレーションモード（Mac で疎通確認できる）
-3. （P4・未検証）発注リレー: `build_workbook.py --orders` で発注専用ブックを1回作り、
+3. （P4・ステージ1確認済み）発注リレー: `build_workbook.py --orders` で発注専用ブックを1回作り、
    `bridge.py --orders-workbook <path>` で backend の発注キューを拾って
    `RssStockOrder` に書き込み・結果を報告する（下記「実発注（P4）」参照）
 
@@ -48,11 +48,24 @@ python bridge.py --simulate --set-id 1
 
 - リアルタイム登録銘柄数の上限
 
-## 実発注（P4・未検証 — Windows実機での確認が必須）
+## 実発注（P4・ステージ1確認済み / 実弾は未検証）
 
 `RssStockOrder`（国内株式・現物注文）の引数・戻り値・注文一覧系関数は公式リファレンス
-（PDF）で確認済み。コードは仕様どおりに実装したが、**Excel/MarketSpeed II との実際の
-やり取りは未検証**。試す前に必ず以下を確認すること。
+（PDF）で確認済み。試す前に必ず以下を確認すること。
+
+### 実機検証の記録
+
+- **2026-09-28 ステージ1 OK**（下記「安全な確認手順」の 1〜3）: MarketSpeed II の発注機能
+  OFF のまま、9984 BUY 100株（MACD 1分足、mode=live、ARMED）のシグナルから Order が作られ、
+  bridge が `rss_orders.xlsx` に書き込み、`RssStockOrder` が
+  「発注ロック中(発注を行うには発注機能を有効にしてください)」を返して約1.3秒で
+  `status="rejected"` として報告された。
+  - この過程で見つかったバグ（修正済み）: RiskEngine の取引時間判定が UTC を JST として
+    比べていた（全シグナルが「取引時間外」）。
+  - 100株単位だと値がさ株は `max_notional_per_order`（既定30万円）に掛かって見送られる
+    （「金額NG」）。実弾の最初は低位株で試すのが安全。
+- **ステージ2（発注機能 ON・実弾）: 未実施。** 確認画面の有無（出ると `cancelled` になる）、
+  受理後の約定は MarketSpeed II の注文照会で手動確認すること。
 
 ### セットアップ
 

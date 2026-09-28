@@ -158,7 +158,8 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
 <code>true,false</code> と入れれば両方を比較できる。</p>
 
 <h3 id="risk">リスク管理 / 実発注（mode=live）</h3>
-<p><strong>⚠ Windows実機（Excel + MarketSpeed II + 実口座）で未検証の機能</strong>。試す前に
+<p><strong>⚠ 実弾（MarketSpeed II の発注機能 ON）では未検証の機能</strong>（発注機能 OFF で
+「発注ロック中」→ rejected になるところまでは実機確認済み）。試す前に
 <code>bridge/README.md</code>の「実発注（P4）」の安全な確認手順を必ず読むこと。</p>
 <p>戦略を <code>mode=live</code> で登録・有効化しても、それだけでは発注されない。以下が
 <strong>すべて</strong>true でないと発注しない（二重・三重の安全弁）:</p>

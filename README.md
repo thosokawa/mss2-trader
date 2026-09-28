@@ -40,7 +40,7 @@
 | P1 | `bridge/` 実装、tick→足 集約、ライブ気配画面 | 済（Windows 実機で RSS 疎通確認まで完了 2026-09） |
 | P2 | live エンジンで足確定→Slack 通知（＝通知だけ完成） | 済（Slack Webhook を設定して実疎通確認が残り） |
 | P3 | PaperBroker でペーパートレード、成績表示 | 済 |
-| P4 | RssBroker で実発注、risk.py 完全実装、少額試験運用 | 実装済み（**Windows実機で未検証** — `bridge/README.md`「実発注」参照） |
+| P4 | RssBroker で実発注、risk.py 完全実装、少額試験運用 | 実装済み・実機ステージ1（発注ロック中→rejected）確認済み（**実弾は未検証** — `bridge/README.md`「実発注」参照） |
 
 ## セットアップ（Mac）
 

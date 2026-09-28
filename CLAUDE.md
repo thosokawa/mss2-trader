@@ -29,10 +29,16 @@ P0〜P3 済（雛形・バックテスト・RSSブリッジ・tick→足集約�
 （stop_loss_pct/take_profit_pct、全戦略共通）も実装済み。戦略は7種類
 （トレンドフォロー/逆張り/ブレイクアウト/フィルタ付き、詳細 `app/strategy/README.md`）。
 
-**P4（実発注）はコード実装済みだが Windows実機で未検証。** リスク管理は
-`config.trading.enabled` と `/risk` 画面の ARMED トグルの両方が true でないと
-発注しない設計（二重の安全弁、backend 再起動で ARMED は自動 OFF）。詳細・安全な
-確認手順は `bridge/README.md`「実発注（P4）」を必ず読むこと。
+**P4（実発注）は実機でステージ1まで確認済み（2026-09-28）。** MarketSpeed II の
+発注機能 OFF のまま、シグナル → RiskEngine → Order → bridge → `RssStockOrder` →
+「発注ロック中」→ backend で `rejected` の一連が動くことを確認した。**発注機能 ON
+（実弾・ステージ2）はまだ未検証。** リスク管理は `config.trading.enabled` と `/risk`
+画面の ARMED トグルの両方が true でないと発注しない設計（二重の安全弁、backend
+再起動で ARMED は自動 OFF）。詳細・安全な確認手順は `bridge/README.md`「実発注（P4）」
+を必ず読むこと。
+
+戦略共通パラメータ: 損切り/利確（`app/engine/stops.py`）、大引けをまたぐか
+（`hold_overnight`、`app/engine/eod.py`）。通知は Slack / メール（Gmail SMTP、`app/notify.py`）。
 
 ## 開発上の重要な注意点
 
@@ -49,6 +55,14 @@ P0〜P3 済（雛形・バックテスト・RSSブリッジ・tick→足集約�
   gitignore 済み）。基本は Mac で実装 → push、Windows は `git pull` で受け取る運用。
 - Windows 側の運用は `bridge/run_all.ps1`（一括起動）/ `stop_all.ps1` /
   `install_autostart.ps1`（スタートアップ登録、管理者権限不要）。
+- **時刻は DB・足の ts とも naive UTC、取引時間や大引けの判定は JST。** 比較するときは
+  必ず +9h してから（ステージ1検証で RiskEngine が UTC を JST として比べて全シグナルを
+  「取引時間外」にしていたバグがあった）。テストで取引時間を `00:00-23:59` にするとこの種の
+  ずれを見逃すので、JST の時刻で書いたテストも置くこと。
+- live の発注は足の確定から `trading.max_signal_age_sec`（既定120秒）を超えたシグナルでは
+  行わない（backend 停止後の追いつき評価対策）。live のテストで足をまとめて入れると途中の
+  シグナルが「古い」扱いになるので、`run_once(now=...)` を渡し足を1本ずつ評価する。
+- Windows 機の git 作者は `thosokawa <t.hosokawa.pc@gmail.com>`（リポジトリローカル設定）。
 - コミット前に必ず: `.venv/bin/pytest -q` と
   `.venv/bin/ruff check app/ tests/ bridge/ scripts/` の両方を通す。
 
