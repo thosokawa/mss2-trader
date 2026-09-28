@@ -148,6 +148,15 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
 に達したら損切りを優先する。<code>/optimize</code> でもカンマ区切りで範囲指定して一緒に最適化できる
 （例: 損切り欄に <code>2,3,5</code>）。</p>
 
+<h4>大引けをまたぐ（デイトレ設定）</h4>
+<p>同じく全戦略共通の <strong>大引けをまたぐ</strong> のチェックを外すと、日中足（1m / 5m / 15m）では
+<strong>15:20 までに確定する最後の足</strong>（5分足なら 15:15〜15:20 の足）の終値で成行手仕舞いし、
+その足では新規買いもしない（建玉を翌日に持ち越さない）。損切り/利確に達していればそちらが優先。
+既定はチェックあり（従来どおり持ち越す）。日足では無視される。バックテストでは「次の足が別の日」の足も
+大引けとみなす（15:00 引けだった 2024/11 以前のデータ用）。live では前日から持ち越してしまった建玉
+（大引け時に backend が止まっていた等）を翌日最初の足で手仕舞いする。<code>/optimize</code> では
+<code>true,false</code> と入れれば両方を比較できる。</p>
+
 <h3 id="risk">リスク管理 / 実発注（mode=live）</h3>
 <p><strong>⚠ Windows実機（Excel + MarketSpeed II + 実口座）で未検証の機能</strong>。試す前に
 <code>bridge/README.md</code>の「実発注（P4）」の安全な確認手順を必ず読むこと。</p>

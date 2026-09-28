@@ -8,6 +8,9 @@ P0 の割り切り:
 戦略パラメータに `stop_loss_pct` / `take_profit_pct`（建値からの%）があれば、
 on_bar の判断より優先してその足の高値/安値でストップ・ターゲット判定する
 （app/engine/stops.py）。
+
+`hold_overnight=False` なら日中足では大引け前の最後の足の終値で手仕舞いし、
+その足では新規買いしない（app/engine/eod.py）。
 """
 from __future__ import annotations
 
@@ -16,7 +19,8 @@ from datetime import datetime
 
 import pandas as pd
 
-from app.engine.stops import check_stop_target
+from app.engine.eod import flatten_at_close, is_last_bar_of_day
+from app.engine.stops import StopTargetHit, check_stop_target
 from app.strategy.base import Context, Position, Strategy
 
 
@@ -55,6 +59,7 @@ def run_backtest(
 
     stop_loss_pct = strategy.params.get("stop_loss_pct")
     take_profit_pct = strategy.params.get("take_profit_pct")
+    flatten_eod = flatten_at_close(strategy.params, strategy.timeframe)
 
     position = Position()
     trades: list[Trade] = []
@@ -68,6 +73,11 @@ def run_backtest(
         price = float(window["close"].iloc[-1])
         bar_high = float(window["high"].iloc[-1])
         bar_low = float(window["low"].iloc[-1])
+        eod = flatten_eod and is_last_bar_of_day(
+            now,
+            strategy.timeframe,
+            pd.Timestamp(bars.index[i + 1]).to_pydatetime() if i + 1 < len(bars) else None,
+        )
 
         if i >= warmup:
             hit = (
@@ -78,6 +88,8 @@ def run_backtest(
                 if position.is_long and pending_entry
                 else None
             )
+            if hit is None and eod and position.is_long and pending_entry:
+                hit = StopTargetHit(price, "大引け手仕舞い")
             if hit is not None:
                 pnl = (hit.price - position.avg_price) * position.qty - commission_per_trade
                 realized += (hit.price - position.avg_price) * position.qty - commission_per_trade
@@ -100,7 +112,7 @@ def run_backtest(
                 ctx = Context(symbol=symbol, now=now, bars=window, position=position, params=strategy.params)
                 sig = strategy.on_bar(ctx)
                 if sig is not None:
-                    if sig.side == "BUY" and position.is_flat:
+                    if sig.side == "BUY" and position.is_flat and not eod:
                         qty = int(sig.qty or strategy.params.get("qty", 100))
                         position = Position(qty=qty, avg_price=price)
                         pending_entry = {"ts": now, "price": price, "qty": qty, "reason": sig.reason}

@@ -14,6 +14,9 @@
   （notify: live シグナル履歴 / paper: PaperTrade / live: Order 履歴）。
 
 バックテストと同じ Strategy.on_bar を呼ぶので挙動が一致する。
+損切り/利確（stops.py）と大引け手仕舞い（eod.py、hold_overnight=False の日中足）も
+バックテストと同じ判定を on_bar より先に行う。live では加えて、前日から持ち越して
+しまった建玉（大引け時に backend が止まっていた等）を翌日最初の足で手仕舞いする。
 """
 from __future__ import annotations
 
@@ -26,6 +29,7 @@ from sqlmodel import Session, select
 
 from app.bars import load_bars
 from app.engine import orders, paper
+from app.engine.eod import flatten_at_close, is_last_bar_of_day, is_new_day
 from app.engine.risk import get_risk_engine
 from app.engine.stops import check_stop_target
 from app.models import LiveCursor, Signal, Strategy, Symbol, SymbolSetItem, utcnow
@@ -127,11 +131,15 @@ def _run_strategy_symbol(
 
     all_ts = [pd.Timestamp(t).to_pydatetime() for t in bars.index]
     new_ts = [t for t in all_ts if t > cur.last_bar_ts]
+    flatten_eod = flatten_at_close(strat.params, tf)
     fired: list[Signal] = []
     for ts in new_ts:
         window = bars.loc[:ts]
         bar_high = float(window["high"].iloc[-1])
         bar_low = float(window["low"].iloc[-1])
+        eod = flatten_eod and is_last_bar_of_day(ts, tf)
+        prev_ts = pd.Timestamp(window.index[-2]).to_pydatetime() if len(window) >= 2 else None
+        carried = flatten_eod and pos.is_long and is_new_day(prev_ts, ts)
 
         # 損切り/利確（stop_loss_pct / take_profit_pct）は on_bar の判断より優先する。
         hit = (
@@ -145,10 +153,13 @@ def _run_strategy_symbol(
         )
         if hit is not None:
             side, price, reason = "EXIT", hit.price, hit.reason
+        elif pos.is_long and (eod or carried):
+            reason = "大引け手仕舞い" if eod else "持ち越し建玉の手仕舞い"
+            side, price = "EXIT", float(window["close"].iloc[-1])
         else:
             ctx = Context(symbol=symbol_code, now=ts, bars=window, position=pos, params=strat.params)
             sig = strat.on_bar(ctx)
-            if sig is None:
+            if sig is None or (eod and sig.side == "BUY"):
                 continue
             side, price, reason = sig.side, float(window["close"].iloc[-1]), sig.reason
 

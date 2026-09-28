@@ -30,6 +30,7 @@
 `sma_cross` `ma_rsi` `trend_rsi_reclaim` `macd_cross` `bollinger_reversion`
 `donchian_breakout` `adx_ma_cross`。**損切り/利確**（建値からの%）は全戦略共通のパラメータとして
 自動で付き、`on_bar()` の判断より優先してバックテスト・live 両方で執行される（`app/engine/stops.py`）。
+同様に **大引けをまたぐか**（`hold_overnight`、OFF で日中足は大引け前に手仕舞い）も選べる（`app/engine/eod.py`）。
 
 ## フェーズ
 

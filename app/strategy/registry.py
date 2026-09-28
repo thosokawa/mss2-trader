@@ -17,9 +17,10 @@ BUILTIN = {
 }
 
 
-# どの戦略にも共通で持たせるリスク管理パラメータ（損切り/利確）。
-# app/engine/stops.py が strategy.params から読む。既定は None＝無効。
-UNIVERSAL_DEFAULTS = {"stop_loss_pct": None, "take_profit_pct": None}
+# どの戦略にも共通で持たせるリスク管理パラメータ（損切り/利確/大引けをまたぐか）。
+# app/engine/stops.py・eod.py が strategy.params から読む。既定は従来どおりの挙動
+# （損切り/利確は None＝無効、hold_overnight は True＝持ち越す）。
+UNIVERSAL_DEFAULTS = {"stop_loss_pct": None, "take_profit_pct": None, "hold_overnight": True}
 UNIVERSAL_META = {
     "stop_loss_pct": {
         "label": "損切り(%)", "type": "number",
@@ -28,6 +29,11 @@ UNIVERSAL_META = {
     "take_profit_pct": {
         "label": "利確(%)", "type": "number",
         "help": "建値からこの%上昇したら成行で手仕舞い（on_barの判断より優先）。空欄で無効",
+    },
+    "hold_overnight": {
+        "label": "大引けをまたぐ", "type": "bool",
+        "help": "OFFにすると日中足(1m/5m/15m)では15:20までに確定する最後の足で成行手仕舞いし、"
+                "その足では新規買いしない（デイトレ）。日足では無視",
     },
 }
 

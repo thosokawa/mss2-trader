@@ -64,6 +64,13 @@ Signal(side, qty=None, reason="", order_type="MKT", limit_price=None)
 （両方併用も可。バックテストは `run_backtest` 内でストップ判定が先に走り、当たれば `on_bar` はその
 足で呼ばれない）。
 
+## 大引けをまたぐか（hold_overnight）
+
+`hold_overnight`（既定 `True`＝持ち越す）も全戦略共通パラメータ。`False` にすると日中足
+（1m/5m/15m）では、15:20（JST）までに確定する最後の足の終値で手仕舞いし、その足では新規 BUY を
+無視する（`app/engine/eod.py`）。判定順は 損切り/利確 → 大引け手仕舞い → `on_bar()`。
+バックテストでは次の足が別の日なら、その足も大引けとして扱う。日足では無視。
+
 ## 指標ヘルパー（`app/strategy/indicators.py`）
 
 すべて `pd.Series` 入出力。最新値は `.iloc[-1]`、1本前は `.iloc[-2]`。
