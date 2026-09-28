@@ -6,13 +6,17 @@
 - mode="live" の戦略のシグナルであっても、config.trading.enabled と ARMED の
   両方が true でない限り発注しない（config はコード外から明示的に変更する必要が
   あり、ARMED は画面のボタンだが再起動でリセットされる — 二重の安全弁）。
+- check() の now は DB の規約どおり naive UTC（足の ts をそのまま渡す）。取引時間
+  （session_windows）と日次の区切りは JST で判定する。
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 
 from app.config import TradingCfg, get_config
+
+JST_OFFSET = timedelta(hours=9)
 
 
 @dataclass
@@ -48,8 +52,8 @@ class RiskEngine:
         if self.state.day_realized_pnl <= -abs(self.cfg.daily_loss_limit):
             self.disarm("日次損失リミット到達")
 
-    def in_session(self, now: datetime) -> bool:
-        t = now.time()
+    def in_session(self, now_jst: datetime) -> bool:
+        t = now_jst.time()
         for w in self.cfg.session_windows:
             a, b = w.split("-")
             start = time.fromisoformat(a)
@@ -59,8 +63,9 @@ class RiskEngine:
         return False
 
     def check(self, *, now: datetime, side: str, qty: int, price: float, mode: str) -> tuple[bool, str]:
-        """(発注してよいか, 理由) を返す。"""
-        self._roll_day(now.date())
+        """(発注してよいか, 理由) を返す。now は naive UTC。"""
+        now_jst = now + JST_OFFSET
+        self._roll_day(now_jst.date())
         if mode != "live":
             return False, f"mode={mode}（発注対象外）"
         if not self.cfg.enabled:
@@ -69,7 +74,7 @@ class RiskEngine:
             return False, "DISARMED"
         if self.state.halted_reason:
             return False, f"halted: {self.state.halted_reason}"
-        if not self.in_session(now):
+        if not self.in_session(now_jst):
             return False, "取引時間外"
         if qty <= 0 or qty > self.cfg.max_qty_per_order:
             return False, f"数量NG qty={qty} 上限={self.cfg.max_qty_per_order}"
