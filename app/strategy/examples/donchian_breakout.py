@@ -45,6 +45,13 @@ class DonchianBreakout(Strategy):
                     int(p["qty"]),
                     reason=f"{entry_n}本高値ブレイク 終値{price:.1f}>{upper.iloc[-1]:.1f}",
                 )
+            lower = donchian_lower(bars["low"], entry_n)
+            if self.allow_short and price < float(lower.iloc[-1]):
+                return Signal(
+                    "SHORT",
+                    int(p["qty"]),
+                    reason=f"{entry_n}本安値ブレイク 終値{price:.1f}<{lower.iloc[-1]:.1f}",
+                )
             return None
 
         if ctx.position.is_long:
@@ -53,5 +60,12 @@ class DonchianBreakout(Strategy):
                 return Signal(
                     "EXIT",
                     reason=f"{exit_n}本安値割れ 終値{price:.1f}<{lower_exit.iloc[-1]:.1f}",
+                )
+        if ctx.position.is_short:
+            upper_exit = donchian_upper(bars["high"], exit_n)
+            if price > float(upper_exit.iloc[-1]):
+                return Signal(
+                    "EXIT",
+                    reason=f"{exit_n}本高値超え 終値{price:.1f}>{upper_exit.iloc[-1]:.1f}",
                 )
         return None

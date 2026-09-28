@@ -7,7 +7,8 @@ from app.strategy.indicators import crossed_down, crossed_up, macd
 
 class MacdCross(Strategy):
     timeframe = "5m"
-    description = "MACD線がシグナル線を上抜けで買い、下抜けで手仕舞い（ゼロライン上のみに絞ることも可）"
+    description = ("MACD線がシグナル線を上抜けで買い、下抜けで手仕舞い（ゼロライン上のみに絞ることも可）。"
+                   "空売りありなら下抜けで売建（ゼロライン下のみ）、上抜けで買戻し")
     default_params = {
         "fast": 12,
         "slow": 26,
@@ -21,7 +22,7 @@ class MacdCross(Strategy):
         "signal": {"label": "シグナル期間"},
         "require_above_zero": {
             "label": "ゼロライン上のみ買う",
-            "help": "オンにするとMACDがプラスのときだけ買う",
+            "help": "オンにするとMACDがプラスのときだけ買う（空売りはマイナスのときだけ）",
         },
         "qty": {"label": "株数", "help": "1回のエントリーで売買する株数"},
     }
@@ -42,8 +43,17 @@ class MacdCross(Strategy):
                     int(p["qty"]),
                     reason=f"MACD上抜け {line.iloc[-1]:.2f}>{sig.iloc[-1]:.2f}",
                 )
+            if (self.allow_short and crossed_down(line, sig)
+                    and (not p["require_above_zero"] or line.iloc[-1] < 0)):
+                return Signal(
+                    "SHORT",
+                    int(p["qty"]),
+                    reason=f"MACD下抜け {line.iloc[-1]:.2f}<{sig.iloc[-1]:.2f}",
+                )
             return None
 
         if ctx.position.is_long and crossed_down(line, sig):
             return Signal("EXIT", reason=f"MACD下抜け {line.iloc[-1]:.2f}<{sig.iloc[-1]:.2f}")
+        if ctx.position.is_short and crossed_up(line, sig):
+            return Signal("EXIT", reason=f"MACD上抜け {line.iloc[-1]:.2f}>{sig.iloc[-1]:.2f}")
         return None

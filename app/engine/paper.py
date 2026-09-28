@@ -3,9 +3,10 @@
 mode=paper の戦略が live エンジンでシグナルを出したとき、PaperBroker で擬似約定し
 PaperTrade（1往復）を記録する。実発注は一切しない。
 
-- BUY  : 建玉が無ければ開く
-- EXIT / SELL : 建玉があれば仕切って損益確定
-ポジションは PaperTrade（status=open）から復元する。
+- BUY   : 建玉が無ければ買いで開く
+- SHORT : 建玉が無ければ売建で開く（戦略が allow_short のときだけ出る）
+- EXIT / COVER : 建玉があれば仕切って損益確定（SELL は買い建玉の手仕舞いとしてだけ扱う）
+ポジションは PaperTrade（status=open）から復元する（売建は qty をマイナスで返す）。
 """
 from __future__ import annotations
 
@@ -34,7 +35,10 @@ def _open_trade(session: Session, strategy_id: int, symbol_code: str) -> PaperTr
 
 def current_position(session: Session, strategy_id: int, symbol_code: str) -> Position:
     t = _open_trade(session, strategy_id, symbol_code)
-    return Position(qty=t.qty, avg_price=t.entry_price) if t else Position()
+    if not t:
+        return Position()
+    sign = -1 if t.side == "SHORT" else 1
+    return Position(qty=t.qty * sign, avg_price=t.entry_price)
 
 
 def latest_price(session: Session, symbol_code: str) -> float | None:
@@ -66,14 +70,15 @@ def on_signal(
     broker = PaperBroker(slippage_bps=get_config().paper.slippage_bps)
     open_t = _open_trade(session, strat_row.id, symbol_code)
 
-    if side == "BUY":
+    if side in ("BUY", "SHORT"):
         if open_t:
             return None
-        res = broker.place(symbol_code, Signal("BUY", qty_hint, reason), ref_price)
+        res = broker.place(symbol_code, Signal(side, qty_hint, reason), ref_price)
         t = PaperTrade(
             strategy_id=strat_row.id,
             strategy_name=strat_row.name,
             symbol_code=symbol_code,
+            side="LONG" if side == "BUY" else "SHORT",
             qty=res.filled_qty,
             entry_ts=ts,
             entry_price=res.avg_price,
@@ -83,19 +88,23 @@ def on_signal(
         session.add(t)
         session.commit()
         session.refresh(t)
-        log.info("paper OPEN  %s %s x%d @%.1f", strat_row.name, symbol_code, res.filled_qty, res.avg_price)
+        log.info("paper OPEN  %s %s %s x%d @%.1f", strat_row.name, symbol_code, t.side,
+                 res.filled_qty, res.avg_price)
         return t
 
-    if side in ("EXIT", "SELL"):
-        if not open_t:
+    if side in ("EXIT", "SELL", "COVER"):
+        if not open_t or (side == "SELL" and open_t.side == "SHORT"):
             return None
-        res = broker.place(symbol_code, Signal("SELL", open_t.qty, reason), ref_price)
+        short = open_t.side == "SHORT"
+        close_side = "COVER" if short else "SELL"
+        res = broker.place(symbol_code, Signal(close_side, open_t.qty, reason), ref_price)
+        direction = -1 if short else 1
         open_t.exit_ts = ts
         open_t.exit_price = res.avg_price
         open_t.exit_reason = reason
-        open_t.pnl = (res.avg_price - open_t.entry_price) * open_t.qty
+        open_t.pnl = (res.avg_price - open_t.entry_price) * open_t.qty * direction
         open_t.return_pct = (
-            (res.avg_price / open_t.entry_price - 1) * 100 if open_t.entry_price else 0.0
+            (res.avg_price / open_t.entry_price - 1) * 100 * direction if open_t.entry_price else 0.0
         )
         open_t.status = "closed"
         session.add(open_t)

@@ -10,11 +10,17 @@
   4. dev_max_pct  : MA からの上方乖離が上限以下（飛びつき防止, 0 で無効）
 
 エグジット(EXIT) … 建玉があり、終値が MA を下抜け、または RSI >= rsi_exit
+
+空売り（allow_short）… 上の条件を上下反転したもの:
+  売建(SHORT): 終値が MA を下抜け（above なら終値 < MA）、MA の傾き <= -ma_slope_min、
+               100-rsi_max <= RSI <= 100-rsi_min、MA からの下方乖離が dev_max_pct 以下
+  買戻し(EXIT): 終値が MA を上抜け、または RSI <= 100-rsi_exit
 """
 from __future__ import annotations
 
 from app.strategy.base import Context, Signal, Strategy
 from app.strategy.indicators import (
+    crossed_down,
     crossed_up,
     deviation_pct,
     ema,
@@ -95,9 +101,31 @@ class MaRsi(Strategy):
                         f"価格{price:.1f}/MA{ma_now:.1f} 傾き{slope:+.2f}% RSI{rsi_now:.0f} 乖離{dev:+.2f}%"
                     ),
                 )
+            if self.allow_short:
+                if p["price_vs_ma"] == "cross_up":
+                    s_price = crossed_down(c, ma)
+                else:
+                    s_price = price < ma_now
+                s_slope = slope <= -float(p["ma_slope_min"])
+                s_rsi = 100 - float(p["rsi_max"]) <= rsi_now <= 100 - float(p["rsi_min"])
+                s_dev = dev_max <= 0 or -dev <= dev_max
+                if s_price and s_slope and s_rsi and s_dev:
+                    return Signal(
+                        "SHORT",
+                        int(p["qty"]),
+                        reason=(
+                            f"{p['ma_type'].upper()}{ma_n} "
+                            f"{'下抜け' if p['price_vs_ma'] == 'cross_up' else '下方'} "
+                            f"価格{price:.1f}/MA{ma_now:.1f} 傾き{slope:+.2f}% "
+                            f"RSI{rsi_now:.0f} 乖離{dev:+.2f}%"
+                        ),
+                    )
             return None
 
         if ctx.position.is_long and (price < ma_now or rsi_now >= float(p["rsi_exit"])):
             why = "MA下抜け" if price < ma_now else f"RSI{rsi_now:.0f}過熱"
+            return Signal("EXIT", reason=f"{why} 価格{price:.1f}")
+        if ctx.position.is_short and (price > ma_now or rsi_now <= 100 - float(p["rsi_exit"])):
+            why = "MA上抜け" if price > ma_now else f"RSI{rsi_now:.0f}売られ過ぎ"
             return Signal("EXIT", reason=f"{why} 価格{price:.1f}")
         return None

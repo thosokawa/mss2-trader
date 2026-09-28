@@ -5,6 +5,9 @@
 ラインに達していないかを判定する。同じ足で両方に達した場合は保守的にストップを優先する
 （利食いより損切りを信じる）。
 
+ショート（direction=-1）では向きが逆になる: 建値から上がったら損切り（高値で判定）、
+下がったら利確（安値で判定）。
+
 現状の制約: 判定は「その足の高値/安値」だけを見る（板・寄り付き前の跳ねなどは考慮しない）。
 成行で建値からの%で即決済する想定で、指値の概念は無い。
 """
@@ -36,11 +39,22 @@ def check_stop_target(
     *,
     stop_loss_pct: object = None,
     take_profit_pct: object = None,
+    direction: int = 1,
 ) -> StopTargetHit | None:
     if avg_price <= 0:
         return None
     sl = _to_positive_float(stop_loss_pct)
     tp = _to_positive_float(take_profit_pct)
+    if direction < 0:
+        if sl is not None:
+            stop_price = avg_price * (1 + sl / 100)
+            if bar_high >= stop_price:
+                return StopTargetHit(stop_price, f"損切り +{sl:.1f}%（売建）")
+        if tp is not None:
+            target_price = avg_price * (1 - tp / 100)
+            if bar_low <= target_price:
+                return StopTargetHit(target_price, f"利確 -{tp:.1f}%（売建）")
+        return None
     if sl is not None:
         stop_price = avg_price * (1 - sl / 100)
         if bar_low <= stop_price:

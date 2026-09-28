@@ -37,7 +37,7 @@ UI の「戦略」「バックテスト」画面のプルダウンに出る。
 | `ctx.bars` | `DataFrame`（index=時刻, 列 `open/high/low/close/volume`）。最終行=確定した最新足 |
 | `ctx.close` | `ctx.bars["close"]`（Series） |
 | `ctx.price` | 最新足の終値（float） |
-| `ctx.position` | `.is_flat` / `.is_long` / `.qty` / `.avg_price` |
+| `ctx.position` | `.is_flat` / `.is_long` / `.is_short` / `.qty`（売建はマイナス）/ `.avg_price` |
 | `ctx.now` | 最新足の時刻 |
 | `ctx.params` | `default_params` にコンストラクタ引数をマージしたもの（`self.params` と同じ） |
 
@@ -47,12 +47,27 @@ UI の「戦略」「バックテスト」画面のプルダウンに出る。
 Signal(side, qty=None, reason="", order_type="MKT", limit_price=None)
 ```
 
-- `side`: `"BUY"` / `"EXIT"` / `"SELL"`（現状は現物ロングのみ。`EXIT`=`SELL`）
+- `side`: `"BUY"`（新規買い）/ `"SHORT"`（新規売建）/ `"EXIT"`（今の建玉を手仕舞い。売建なら
+  買戻し）/ `"SELL"`（旧来の書き方。買い建玉の手仕舞いとしてだけ扱う）
 - `qty`: `None` なら `params["qty"]`
 - `reason`: 通知・履歴・成績画面に出る。指標値を入れておくと後で検証しやすい
 - `order_type` / `limit_price`: engine は現状 **成行・終値約定** 固定（指値は P4 で対応）
 
-いまのエンジンは `flat → long → flat` のみ。建玉中の追加 BUY、分割決済、空売りは未対応。
+いまのエンジンは `flat → long → flat` と `flat → short → flat`。同時に持つ建玉は1つで、
+建玉中の追加建て・分割決済・ドテン（同じ足で手仕舞い→反対に建てる）はしない。
+
+## 空売り（allow_short）と取引区分（trade_type）
+
+`allow_short`（既定 `False`）・`trade_type`（`"cash"`=現物 / `"margin"`=信用、既定 `"cash"`）も
+全戦略共通パラメータ。`self.allow_short` が True のときだけ `SHORT` を返すこと。同梱の7戦略は
+買いと上下対称な売建ルールを持つ（例: SMA クロスはデッドクロスで売建、ゴールデンクロスで買戻し）。
+ショートの損益は (建値 - 手仕舞い値) × 株数、損切り/利確は向きが逆（`stops.py` の `direction`）。
+信用の金利・貸株料はバックテスト・ペーパーでは考慮しない。
+
+実発注（mode=live）では空売りは `trade_type="margin"` のときだけ発注する。信用区分は
+`hold_overnight=False`（日中足）ならいちにち信用(4)、それ以外は一般信用・無期限(2)
+（`live.margin_type_for`）。**bridge の信用注文対応（返済に必要な建玉一覧の読み取り）が
+未実装のため、現状 `live.MARGIN_ORDERS_SUPPORTED=False` で信用の新規建ては発注見送りになる。**
 
 ## 損切り / 利確
 

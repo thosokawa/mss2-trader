@@ -177,6 +177,12 @@ class OrderRelay:
 
     def place(self, order: dict, resolve_timeout: float) -> dict:
         """1件発注する。{"status": ..., "broker_order_id"?: ..., "error"?: ...} を返す。"""
+        trade_type = order.get("trade_type") or "cash"
+        if trade_type != "cash" or order["side"] not in ("BUY", "EXIT", "SELL"):
+            # 信用（新規売建・買戻し含む）は未対応。Excel に一切書かずに拒否する＝確実に未発注。
+            return {"status": "rejected",
+                    "error": f"bridge は信用注文に未対応: trade_type={trade_type} side={order['side']}"}
+
         book = _open_book(self.workbook_path)
         ws = book.sheets["orders"]
         row = self.row_for(order["id"])

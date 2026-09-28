@@ -92,12 +92,14 @@ class Signal(SQLModel, table=True):
 
 class PaperTrade(SQLModel, table=True):
     """ペーパートレードの1往復。live エンジンが mode=paper の戦略のシグナルから記録する
-    （BUY で建て、EXIT/SELL で仕切る）。BacktestTrade のライブ版。現物ロング only。"""
+    （BUY / SHORT で建て、EXIT で仕切る）。BacktestTrade のライブ版。qty は常に正で、
+    向きは side（"LONG" / "SHORT"）。"""
 
     id: int | None = Field(default=None, primary_key=True)
     strategy_id: int = Field(foreign_key="strategy.id", index=True)
     strategy_name: str = ""
     symbol_code: str = Field(index=True)
+    side: str = "LONG"  # "LONG" | "SHORT"
     qty: int = 0
     entry_ts: datetime
     entry_price: float
@@ -194,8 +196,13 @@ class Order(SQLModel, table=True):
     strategy_name: str = ""
     symbol_code: str = Field(index=True)
     ts: datetime = Field(default_factory=utcnow)
+    # BUY=新規買い / SHORT=新規売建 / EXIT=買い建玉の売り手仕舞い / COVER=売建の買戻し
     side: str = ""
     qty: int = 0
+    # cash=現物（RssStockOrder）/ margin=信用（RssMarginOpenOrder / RssMarginCloseOrder）
+    trade_type: str = "cash"
+    # 信用区分（margin のとき）: 1=制度 2=一般(無期限) 3=一般(14日) 4=一般(いちにち)。現物は 0
+    margin_type: int = 0
     order_type: str = "MKT"
     limit_price: float | None = None
     account_type: str = "0"  # RssStockOrder の口座区分: 0:特定 1:一般 2:NISA 3:旧NISA

@@ -29,7 +29,7 @@
     <tr>
       <td>{{ t.entry_ts | jst }}</td><td>{{ '%.1f'|format(t.entry_price) }}</td>
       <td>{{ t.exit_ts | jst }}</td><td>{{ '%.1f'|format(t.exit_price) }}</td>
-      <td>{{ t.qty }}</td>
+      <td>{{ '売' if t.side == 'SHORT' else '買' }} {{ t.qty }}</td>
       <td class="{{ 'pos' if t.pnl>=0 else 'neg' }}">{{ '{:,.0f}'.format(t.pnl) }}</td>
       <td class="{{ 'pos' if t.return_pct>=0 else 'neg' }}">{{ '%.2f'|format(t.return_pct) }}</td>
     </tr>

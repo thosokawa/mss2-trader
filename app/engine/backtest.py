@@ -1,16 +1,17 @@
 """過去足に対して Strategy.on_bar() を1本ずつ流し、擬似的に売買してパフォーマンスを測る。
 
-P0 の割り切り:
-- 現物ロング only（空売り・信用の建玉管理は P3 以降）
+割り切り:
+- 買い（BUY）と、戦略が allow_short なら売建（SHORT）。同時に持つ建玉は1つ（ドテンはしない）
 - 約定は「シグナルが出た足の終値」で成立（スリッページ/板は考慮しない）
-- 手数料は commission_per_trade（片道・円）で概算
+- 手数料は commission_per_trade（片道・円）で概算。信用の金利・貸株料は考慮しない
+- 損益は (手仕舞い値 - 建値) × 株数 × 方向（ロング +1 / ショート -1）
 
 戦略パラメータに `stop_loss_pct` / `take_profit_pct`（建値からの%）があれば、
 on_bar の判断より優先してその足の高値/安値でストップ・ターゲット判定する
-（app/engine/stops.py）。
+（app/engine/stops.py。ショートは向きが逆）。
 
 `hold_overnight=False` なら日中足では大引け前の最後の足の終値で手仕舞いし、
-その足では新規買いしない（app/engine/eod.py）。
+その足では新規建てしない（app/engine/eod.py）。
 """
 from __future__ import annotations
 
@@ -23,6 +24,9 @@ from app.engine.eod import flatten_at_close, is_last_bar_of_day
 from app.engine.stops import StopTargetHit, check_stop_target
 from app.strategy.base import Context, Position, Strategy
 
+OPEN_SIDES = {"BUY": 1, "SHORT": -1}
+CLOSE_SIDES = {"EXIT", "SELL", "COVER"}
+
 
 @dataclass
 class Trade:
@@ -30,11 +34,12 @@ class Trade:
     entry_price: float
     exit_ts: datetime
     exit_price: float
-    qty: int
+    qty: int  # 株数（常に正）
     pnl: float
     return_pct: float
     reason_in: str = ""
     reason_out: str = ""
+    side: str = "LONG"  # "LONG" | "SHORT"
 
 
 @dataclass
@@ -63,9 +68,32 @@ def run_backtest(
 
     position = Position()
     trades: list[Trade] = []
-    pending_entry: dict | None = None
+    entry: dict | None = None
     equity: list[tuple[datetime, float]] = []
     realized = 0.0
+
+    def close(now: datetime, price: float, reason: str) -> None:
+        nonlocal position, entry, realized
+        qty = abs(position.qty)
+        gross = (price - position.avg_price) * qty * position.direction
+        pnl = gross - commission_per_trade
+        realized += pnl
+        trades.append(
+            Trade(
+                entry_ts=entry["ts"],
+                entry_price=entry["price"],
+                exit_ts=now,
+                exit_price=price,
+                qty=qty,
+                pnl=pnl,
+                return_pct=(price / position.avg_price - 1) * 100 * position.direction,
+                reason_in=entry["reason"],
+                reason_out=reason,
+                side="LONG" if position.is_long else "SHORT",
+            )
+        )
+        position = Position()
+        entry = None
 
     for i in range(len(bars)):
         window = bars.iloc[: i + 1]
@@ -80,63 +108,35 @@ def run_backtest(
         )
 
         if i >= warmup:
+            holding = not position.is_flat and entry is not None
             hit = (
                 check_stop_target(
                     position.avg_price, bar_high, bar_low,
                     stop_loss_pct=stop_loss_pct, take_profit_pct=take_profit_pct,
+                    direction=position.direction,
                 )
-                if position.is_long and pending_entry
+                if holding
                 else None
             )
-            if hit is None and eod and position.is_long and pending_entry:
+            if hit is None and eod and holding:
                 hit = StopTargetHit(price, "大引け手仕舞い")
             if hit is not None:
-                pnl = (hit.price - position.avg_price) * position.qty - commission_per_trade
-                realized += (hit.price - position.avg_price) * position.qty - commission_per_trade
-                trades.append(
-                    Trade(
-                        entry_ts=pending_entry["ts"],
-                        entry_price=pending_entry["price"],
-                        exit_ts=now,
-                        exit_price=hit.price,
-                        qty=position.qty,
-                        pnl=pnl,
-                        return_pct=(hit.price / position.avg_price - 1) * 100,
-                        reason_in=pending_entry["reason"],
-                        reason_out=hit.reason,
-                    )
-                )
-                position = Position()
-                pending_entry = None
+                close(now, hit.price, hit.reason)
             else:
                 ctx = Context(symbol=symbol, now=now, bars=window, position=position, params=strategy.params)
                 sig = strategy.on_bar(ctx)
                 if sig is not None:
-                    if sig.side == "BUY" and position.is_flat and not eod:
+                    if sig.side in OPEN_SIDES and position.is_flat and not eod:
                         qty = int(sig.qty or strategy.params.get("qty", 100))
-                        position = Position(qty=qty, avg_price=price)
-                        pending_entry = {"ts": now, "price": price, "qty": qty, "reason": sig.reason}
+                        position = Position(qty=qty * OPEN_SIDES[sig.side], avg_price=price)
+                        entry = {"ts": now, "price": price, "reason": sig.reason}
                         realized -= commission_per_trade
-                    elif sig.side in ("EXIT", "SELL") and position.is_long and pending_entry:
-                        pnl = (price - position.avg_price) * position.qty - commission_per_trade
-                        realized += (price - position.avg_price) * position.qty - commission_per_trade
-                        trades.append(
-                            Trade(
-                                entry_ts=pending_entry["ts"],
-                                entry_price=pending_entry["price"],
-                                exit_ts=now,
-                                exit_price=price,
-                                qty=position.qty,
-                                pnl=pnl,
-                                return_pct=(price / position.avg_price - 1) * 100,
-                                reason_in=pending_entry["reason"],
-                                reason_out=sig.reason,
-                            )
-                        )
-                        position = Position()
-                        pending_entry = None
+                    elif sig.side in CLOSE_SIDES and holding:
+                        # 旧来の SELL はロングの手仕舞いとしてだけ扱う
+                        if not (sig.side == "SELL" and position.is_short):
+                            close(now, price, sig.reason)
 
-        unrealized = (price - position.avg_price) * position.qty if position.is_long else 0.0
+        unrealized = (price - position.avg_price) * abs(position.qty) * position.direction
         equity.append((now, realized + unrealized))
 
     eq = pd.Series({t: v for t, v in equity}, name="equity")

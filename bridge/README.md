@@ -92,6 +92,26 @@ python bridge\bridge.py --workbook rss_bridge.xlsx --orders-workbook rss_orders.
 5. 注文確認画面が出る設定だと `status="cancelled"`（ダイアログを閉じただけ）になる。
    自動化するなら確認画面を出さない設定が必要（MarketSpeed II 側の設定を確認）
 
+### 信用取引（実装中）
+
+公式オンラインヘルプで確認した仕様:
+- 新規 `RssMarginOpenOrder(発注ID,発注トリガー,銘柄コード,売買区分,注文区分,SOR区分,信用区分,
+  注文数量,価格区分,注文価格,執行条件,注文期限,口座区分,逆指値…,セット注文…)`（22引数）。
+  売買区分 1=売建 3=買建、信用区分 1=制度 2=一般(無期限) 3=一般(14日) 4=一般(いちにち)、口座区分 0/1
+- 返済 `RssMarginCloseOrder(…,信用区分,注文数量,価格区分,注文価格,執行条件,注文期限,口座区分,
+  建日,建単価,建市場,逆指値…)`（20引数）。売買区分 1=売埋 3=買埋。**建日(YYYYMMDD)・建単価・
+  建市場(1=東証…)は必須で省略不可** → 返済する建玉を `RssMarginPositionList` で特定する必要がある
+- `RssMarginPositionList` の取得項目: 銘柄コード, 銘柄名称, 口座区分, 建市場, 信用区分, 弁済期限,
+  売買, 建玉数量, 発注数量, 建値, 建日, 最終返済日, 時価, …
+- 値の形式（建日が日付型か文字列か、建市場が「東証」か等）は未確認。信用建玉がある状態で:
+  ```powershell
+  python bridge\build_workbook.py --probe-account      # bridge\rss_account_probe.xlsx を生成して Excel で開く
+  python bridge\bridge.py --dump --workbook bridge\rss_account_probe.xlsx --sheet positions
+  ```
+
+それまで backend は信用の新規建てを発注しない（`live.MARGIN_ORDERS_SUPPORTED=False`）。bridge も
+`trade_type=margin` や SHORT/COVER の注文は Excel に書かずに `rejected` を返す（二重の防御）。
+
 ### 既知の制限（v1）
 
 - 成行注文のみ（指値・逆指値・信用取引・セット注文は未対応。RssStockOrder の引数は

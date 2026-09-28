@@ -8,8 +8,10 @@
 「一旦下（上）に行ってから戻る」は 40（60）ラインの上抜け（下抜け）そのもので判定する
 （上抜けるには直前が 40 以下である必要があるため）。
 
-※ ポジションは見ない純粋なアラート戦略。mode=notify 向け。
-   売り（空売り）は現エンジン未対応なので paper/backtest では BUY 側しか約定しない。
+※ allow_short がオフ（既定）ならポジションは見ない純粋なアラート戦略（mode=notify 向け）。
+   BUY/SELL を出すだけで、paper/backtest では SELL は買い建玉の手仕舞いとして扱われる。
+   allow_short をオンにすると建玉を見て、買いシグナルで「売建なら買戻し / ノーポジなら買い」、
+   売りシグナルで「買建なら手仕舞い / ノーポジなら売建（SHORT）」を出す。
 """
 from __future__ import annotations
 
@@ -63,16 +65,25 @@ class TrendRsiReclaim(Strategy):
         sell_lv = float(p["rsi_sell_level"])
         tag = f"{p['ma_type'].upper()}{fast_n}/{mid_n}"
 
-        if up_trend and r_prev <= buy_lv < r_now:
-            return Signal(
-                "BUY",
-                int(p["qty"]),
-                reason=f"上昇({tag}) RSI {r_prev:.0f}→{r_now:.0f} が{buy_lv:.0f}回復",
-            )
-        if down_trend and r_prev >= sell_lv > r_now:
-            return Signal(
-                "SELL",
-                int(p["qty"]),
-                reason=f"下降({tag}) RSI {r_prev:.0f}→{r_now:.0f} が{sell_lv:.0f}割れ",
-            )
+        up = up_trend and r_prev <= buy_lv < r_now
+        down = down_trend and r_prev >= sell_lv > r_now
+        up_reason = f"上昇({tag}) RSI {r_prev:.0f}→{r_now:.0f} が{buy_lv:.0f}回復"
+        down_reason = f"下降({tag}) RSI {r_prev:.0f}→{r_now:.0f} が{sell_lv:.0f}割れ"
+        pos = ctx.position
+
+        if self.allow_short:
+            if up and pos.is_short:
+                return Signal("EXIT", reason=up_reason)
+            if up and pos.is_flat:
+                return Signal("BUY", int(p["qty"]), reason=up_reason)
+            if down and pos.is_long:
+                return Signal("EXIT", reason=down_reason)
+            if down and pos.is_flat:
+                return Signal("SHORT", int(p["qty"]), reason=down_reason)
+            return None
+
+        if up:
+            return Signal("BUY", int(p["qty"]), reason=up_reason)
+        if down:
+            return Signal("SELL", int(p["qty"]), reason=down_reason)
         return None

@@ -118,6 +118,7 @@ def test_order_to_dict_shape():
         assert d == {
             "id": o.id, "symbol_code": "7008", "side": "BUY", "qty": 100,
             "order_type": "MKT", "limit_price": None, "account_type": "1",
+            "trade_type": "cash", "margin_type": 0,
         }
 
 

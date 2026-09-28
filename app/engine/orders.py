@@ -34,6 +34,8 @@ UNKNOWN_RESULT = {"error", "timeout"}  # 発注されたか不明 → DISARM し
 TERMINAL_OK = {"filled"}
 EXECUTED = {"sent", "filled"}  # 約定した（とみなす）＝建玉に反映する
 IN_FLIGHT = {"new", "sending"}  # 発注中＝決着まで次の発注をブロック
+OPEN_SIDES = {"BUY": 1, "SHORT": -1}  # 新規建て（値は方向）
+CLOSE_SIDES = {"EXIT", "SELL", "COVER"}
 
 
 def queue_order(
@@ -49,6 +51,8 @@ def queue_order(
     account_type: str | None = None,
     idempotency_key: str = "",
     ref_price: float = 0.0,
+    trade_type: str = "cash",
+    margin_type: int = 0,
 ) -> Order:
     order = Order(
         strategy_id=strat_row.id,
@@ -61,6 +65,8 @@ def queue_order(
         account_type=account_type or get_config().trading.default_account_type,
         reason=reason,
         ref_price=ref_price,
+        trade_type=trade_type,
+        margin_type=margin_type,
         status="new",
         idempotency_key=idempotency_key,
     )
@@ -84,13 +90,28 @@ def current_live_position(
     for o in rows:
         if o.status in TERMINAL_FAILURE:
             continue
-        if o.side == "BUY" and pos.is_flat:
+        if o.side in OPEN_SIDES and pos.is_flat:
             qty = o.filled_qty or o.qty or qty_hint
-            price = _exec_price(o)
-            pos = Position(qty=qty, avg_price=price)
+            pos = Position(qty=qty * OPEN_SIDES[o.side], avg_price=_exec_price(o))
         elif o.side in ("EXIT", "SELL") and pos.is_long:
             pos = Position()
+        elif o.side in ("EXIT", "COVER") and pos.is_short:
+            pos = Position()
     return pos
+
+
+def last_open_order(session: Session, strategy_id: int, symbol_code: str) -> Order | None:
+    """今の建玉を建てた注文（手仕舞い時に取引区分・信用区分を合わせるため）。"""
+    return session.exec(
+        select(Order)
+        .where(
+            Order.strategy_id == strategy_id,
+            Order.symbol_code == symbol_code,
+            Order.side.in_(tuple(OPEN_SIDES)),
+            Order.status.not_in(tuple(TERMINAL_FAILURE)),
+        )
+        .order_by(Order.id.desc())
+    ).first()
 
 
 def _exec_price(o: Order) -> float:
@@ -144,7 +165,7 @@ def apply_report(
     session.commit()
     session.refresh(order)
 
-    if newly_executed and order.side in ("EXIT", "SELL"):
+    if newly_executed and order.side in CLOSE_SIDES:
         pnl = _realized_pnl(session, order)
         if pnl is not None:
             today_jst = (utcnow() + timedelta(hours=9)).date()
@@ -157,13 +178,13 @@ def apply_report(
 
 
 def _realized_pnl(session: Session, exit_order: Order) -> float | None:
-    """手仕舞い注文に対応する直前の買い（約定とみなしたもの）との損益。"""
+    """手仕舞い注文に対応する直前の新規建て（約定とみなしたもの）との損益。"""
     entry = session.exec(
         select(Order)
         .where(
             Order.strategy_id == exit_order.strategy_id,
             Order.symbol_code == exit_order.symbol_code,
-            Order.side == "BUY",
+            Order.side.in_(tuple(OPEN_SIDES)),
             Order.status.in_(EXECUTED),
             Order.id < exit_order.id,
         )
@@ -172,7 +193,7 @@ def _realized_pnl(session: Session, exit_order: Order) -> float | None:
     if entry is None or not _exec_price(entry) or not _exec_price(exit_order):
         return None
     qty = exit_order.filled_qty or exit_order.qty
-    return (_exec_price(exit_order) - _exec_price(entry)) * qty
+    return (_exec_price(exit_order) - _exec_price(entry)) * qty * OPEN_SIDES[entry.side]
 
 
 def claim_pending(session: Session, limit: int = 20) -> list[Order]:
@@ -192,7 +213,7 @@ def claim_pending(session: Session, limit: int = 20) -> list[Order]:
 
 
 def order_to_dict(o: Order) -> dict:
-    """bridge に渡す発注指令。RssStockOrder の引数に必要な最小限。"""
+    """bridge に渡す発注指令。RssStockOrder / RssMargin*Order の引数に必要な最小限。"""
     return {
         "id": o.id,
         "symbol_code": o.symbol_code,
@@ -201,4 +222,6 @@ def order_to_dict(o: Order) -> dict:
         "order_type": o.order_type,
         "limit_price": o.limit_price,
         "account_type": o.account_type,
+        "trade_type": o.trade_type or "cash",
+        "margin_type": o.margin_type or 0,
     }

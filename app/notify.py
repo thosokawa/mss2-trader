@@ -73,5 +73,7 @@ def send_email(text: str, subject: str | None = None) -> bool:
 
 
 def format_signal(strategy_name: str, symbol: str, name: str, side: str, price: float, reason: str) -> str:
-    icon = {"BUY": "🟢 買い", "SELL": "🔴 売り", "EXIT": "⚪ 手仕舞い"}.get(side, side)
+    icon = {
+        "BUY": "🟢 買い", "SELL": "🔴 売り", "SHORT": "🔴 売建", "EXIT": "⚪ 手仕舞い", "COVER": "⚪ 買戻し",
+    }.get(side, side)
     return f"*{icon}* {symbol} {name}  @{price:,.1f}\n戦略: {strategy_name}\n根拠: {reason}"

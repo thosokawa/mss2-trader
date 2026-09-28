@@ -60,7 +60,7 @@ def idempotency_key(strategy_name: str, symbol: str, bar_ts: datetime) -> str:
 def position_from_signals(
     session: Session, strategy_id: int, symbol_code: str, qty_hint: int = 100
 ) -> Position:
-    """live シグナル履歴を畳んで現在ポジションを求める（現物ロング only）。"""
+    """live シグナル履歴を畳んで現在ポジションを求める（売建は qty マイナス）。"""
     rows = session.exec(
         select(Signal)
         .where(
@@ -74,9 +74,27 @@ def position_from_signals(
     for s in rows:
         if s.side == "BUY" and pos.is_flat:
             pos = Position(qty=qty_hint, avg_price=s.price)
+        elif s.side == "SHORT" and pos.is_flat:
+            pos = Position(qty=-qty_hint, avg_price=s.price)
         elif s.side in ("EXIT", "SELL") and pos.is_long:
             pos = Position()
+        elif s.side in ("EXIT", "COVER") and pos.is_short:
+            pos = Position()
     return pos
+
+
+OPEN_SIDES = {"BUY": 1, "SHORT": -1}
+CLOSE_SIDES = {"EXIT", "SELL", "COVER"}
+
+# bridge が信用注文（RssMarginOpenOrder / RssMarginCloseOrder）に対応するまでは、信用の
+# 新規建てを発注しない（返済できない建玉を作らないため）。バックテスト・ペーパーには無関係。
+MARGIN_ORDERS_SUPPORTED = False
+
+
+def margin_type_for(params: dict, timeframe: str) -> int:
+    """信用区分（RssMarginOpenOrder）: 大引けをまたがないならいちにち信用(4)、またぐなら
+    一般信用・無期限(2)。"""
+    return 4 if flatten_at_close(params, timeframe) else 2
 
 
 def _symbols_for(session: Session, strategy: Strategy) -> list[str]:
@@ -138,13 +156,15 @@ def _run_strategy_symbol(
     new_ts = [t for t in all_ts if t > cur.last_bar_ts]
     flatten_eod = flatten_at_close(strat.params, tf)
     fired: list[Signal] = []
+    trade_type = str(strat.params.get("trade_type") or "cash")
     for ts in new_ts:
         window = bars.loc[:ts]
         bar_high = float(window["high"].iloc[-1])
         bar_low = float(window["low"].iloc[-1])
+        close_px = float(window["close"].iloc[-1])
         eod = flatten_eod and is_last_bar_of_day(ts, tf)
         prev_ts = pd.Timestamp(window.index[-2]).to_pydatetime() if len(window) >= 2 else None
-        carried = flatten_eod and pos.is_long and is_new_day(prev_ts, ts)
+        carried = flatten_eod and not pos.is_flat and is_new_day(prev_ts, ts)
 
         # 損切り/利確（stop_loss_pct / take_profit_pct）は on_bar の判断より優先する。
         hit = (
@@ -152,21 +172,26 @@ def _run_strategy_symbol(
                 pos.avg_price, bar_high, bar_low,
                 stop_loss_pct=strat.params.get("stop_loss_pct"),
                 take_profit_pct=strat.params.get("take_profit_pct"),
+                direction=pos.direction,
             )
-            if pos.is_long
+            if not pos.is_flat
             else None
         )
         if hit is not None:
             side, price, reason = "EXIT", hit.price, hit.reason
-        elif pos.is_long and (eod or carried):
+        elif not pos.is_flat and (eod or carried):
             reason = "大引け手仕舞い" if eod else "持ち越し建玉の手仕舞い"
-            side, price = "EXIT", float(window["close"].iloc[-1])
+            side, price = "EXIT", close_px
         else:
             ctx = Context(symbol=symbol_code, now=ts, bars=window, position=pos, params=strat.params)
             sig = strat.on_bar(ctx)
-            if sig is None or (eod and sig.side == "BUY"):
+            if sig is None or (eod and sig.side in OPEN_SIDES):
                 continue
-            side, price, reason = sig.side, float(window["close"].iloc[-1]), sig.reason
+            if sig.side == "SELL" and pos.is_short:
+                continue  # 旧来の SELL は買い建玉の手仕舞いとしてだけ扱う
+            side, price, reason = sig.side, close_px, sig.reason
+        if side in ("EXIT", "COVER") and pos.is_short:
+            side = "COVER"  # 売建の手仕舞い＝買戻し
 
         key = idempotency_key(strat_row.name, symbol_code, ts)
         if session.exec(select(Signal).where(Signal.idempotency_key == key)).first():
@@ -178,10 +203,14 @@ def _run_strategy_symbol(
             max_age = get_config().trading.max_signal_age_sec
             if age.total_seconds() > max_age:
                 blocked_reason = f"古い足のシグナル（確定から{int(age.total_seconds())}秒 > {max_age}秒）"
-            elif side == "BUY" and pos.is_long:
-                blocked_reason = "建玉あり（買い増ししない）"
-            elif side in ("EXIT", "SELL") and pos.is_flat:
-                blocked_reason = "建玉なし（売るものがない）"
+            elif side in OPEN_SIDES and not pos.is_flat:
+                blocked_reason = "建玉あり（追加で建てない）"
+            elif side in CLOSE_SIDES and pos.is_flat:
+                blocked_reason = "建玉なし（手仕舞うものがない）"
+            elif side == "SHORT" and trade_type != "margin":
+                blocked_reason = "空売りは取引区分=margin（信用）のときだけ"
+            elif side in OPEN_SIDES and trade_type == "margin" and not MARGIN_ORDERS_SUPPORTED:
+                blocked_reason = "信用の実発注はまだ未対応（bridge の信用返済が実装待ち）"
             elif orders.has_in_flight_order(session, strat_row.id, symbol_code):
                 blocked_reason = "決着待ちの発注が残っています"
             else:
@@ -209,20 +238,23 @@ def _run_strategy_symbol(
             pos = paper.current_position(session, strat_row.id, symbol_code)
         elif is_live_trading:
             if not blocked_reason:
+                if side in OPEN_SIDES:
+                    o_type, m_type = trade_type, margin_type_for(strat.params, tf)
+                else:
+                    # 手仕舞いは建てたときの取引区分・信用区分に合わせる
+                    opened = orders.last_open_order(session, strat_row.id, symbol_code)
+                    o_type = opened.trade_type if opened else "cash"
+                    m_type = opened.margin_type if opened else 0
                 orders.queue_order(
                     session, strat_row, symbol_code, side, qty_hint, reason,
                     idempotency_key=key, ref_price=price,
+                    trade_type=o_type, margin_type=m_type if o_type == "margin" else 0,
                 )
                 # 実際に受理されたかは bridge の報告待ちだが、同一足内で矛盾したシグナルを
                 # 出さないよう楽観的にポジションを進めておく（ブロックされた場合は進めない）。
-                if side == "BUY":
-                    pos = Position(qty=qty_hint, avg_price=price)
-                elif side in ("EXIT", "SELL"):
-                    pos = Position()
-        elif side == "BUY":
-            pos = Position(qty=qty_hint, avg_price=price)
-        elif side in ("EXIT", "SELL"):
-            pos = Position()
+                pos = _advance(pos, side, qty_hint, price)
+        else:
+            pos = _advance(pos, side, qty_hint, price)
         if notify:
             send(format_signal(strat_row.name, symbol_code, name, side, price, signal_reason))
 
@@ -231,6 +263,14 @@ def _run_strategy_symbol(
     session.add(cur)
     session.commit()
     return fired
+
+
+def _advance(pos: Position, side: str, qty: int, price: float) -> Position:
+    if side in OPEN_SIDES and pos.is_flat:
+        return Position(qty=qty * OPEN_SIDES[side], avg_price=price)
+    if side in CLOSE_SIDES and not pos.is_flat:
+        return Position()
+    return pos
 
 
 def run_once(session: Session, *, notify: bool = True, now: datetime | None = None) -> list[Signal]:

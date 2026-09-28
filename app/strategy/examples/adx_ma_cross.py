@@ -43,8 +43,12 @@ class AdxMaCross(Strategy):
         if ctx.position.is_flat:
             if adx_now >= float(p["adx_min"]) and crossed_up(fast, slow):
                 return Signal("BUY", int(p["qty"]), reason=f"GC（ADX{adx_now:.0f} 強）")
+            if self.allow_short and adx_now >= float(p["adx_min"]) and crossed_down(fast, slow):
+                return Signal("SHORT", int(p["qty"]), reason=f"DC（ADX{adx_now:.0f} 強）")
             return None
 
         if ctx.position.is_long and crossed_down(fast, slow):
             return Signal("EXIT", reason=f"DC（ADX{adx_now:.0f}）")
+        if ctx.position.is_short and crossed_up(fast, slow):
+            return Signal("EXIT", reason=f"GC（ADX{adx_now:.0f}）")
         return None

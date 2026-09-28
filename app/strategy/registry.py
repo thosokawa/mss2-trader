@@ -17,10 +17,16 @@ BUILTIN = {
 }
 
 
-# どの戦略にも共通で持たせるリスク管理パラメータ（損切り/利確/大引けをまたぐか）。
-# app/engine/stops.py・eod.py が strategy.params から読む。既定は従来どおりの挙動
-# （損切り/利確は None＝無効、hold_overnight は True＝持ち越す）。
-UNIVERSAL_DEFAULTS = {"stop_loss_pct": None, "take_profit_pct": None, "hold_overnight": True}
+# どの戦略にも共通で持たせるパラメータ（損切り/利確/大引けをまたぐか/空売り/取引区分）。
+# app/engine/stops.py・eod.py・live.py 等が strategy.params から読む。既定は従来どおりの挙動
+# （損切り/利確は None＝無効、hold_overnight は True＝持ち越す、空売りしない、現物）。
+UNIVERSAL_DEFAULTS = {
+    "stop_loss_pct": None,
+    "take_profit_pct": None,
+    "hold_overnight": True,
+    "allow_short": False,
+    "trade_type": "cash",
+}
 UNIVERSAL_META = {
     "stop_loss_pct": {
         "label": "損切り(%)", "type": "number",
@@ -34,6 +40,16 @@ UNIVERSAL_META = {
         "label": "大引けをまたぐ", "type": "bool",
         "help": "OFFにすると日中足(1m/5m/15m)では15:20までに確定する最後の足で成行手仕舞いし、"
                 "その足では新規買いしない（デイトレ）。日足では無視",
+    },
+    "allow_short": {
+        "label": "空売りする", "type": "bool",
+        "help": "オンにすると買いと対称な条件で売建（ショート）もする。"
+                "実発注では取引区分=margin（信用）が必要",
+    },
+    "trade_type": {
+        "label": "取引区分", "choices": ["cash", "margin"],
+        "help": "実発注（mode=live）の注文種別。cash=現物 / margin=信用（大引けをまたがないならいちにち信用、"
+                "またぐなら一般信用・無期限）。バックテスト・ペーパーの結果には影響しない",
     },
 }
 

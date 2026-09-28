@@ -41,7 +41,8 @@ class PaperBroker(Broker):
     def place(self, symbol: str, signal: Signal, ref_price: float) -> OrderResult:
         self._seq += 1
         slip = ref_price * self.slippage_bps / 10_000
-        px = ref_price + slip if signal.side == "BUY" else ref_price - slip
+        # 買う側（新規買い・売建の買戻し）は高く、売る側（手仕舞い売り・売建）は安く約定する
+        px = ref_price + slip if signal.side in ("BUY", "COVER") else ref_price - slip
         qty = int(signal.qty or 0)
         self.fills.append(
             {"ts": datetime.now(UTC), "symbol": symbol, "side": signal.side, "qty": qty, "price": px}

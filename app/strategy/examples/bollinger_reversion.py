@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from app.strategy.base import Context, Signal, Strategy
-from app.strategy.indicators import bollinger_bands, crossed_up
+from app.strategy.indicators import bollinger_bands, crossed_down, crossed_up
 
 
 class BollingerReversion(Strategy):
@@ -44,11 +44,23 @@ class BollingerReversion(Strategy):
                     int(p["qty"]),
                     reason=f"下限反発 終値{price:.1f}>下限{lower.iloc[-1]:.1f}",
                 )
+            if self.allow_short and crossed_down(c, upper):
+                return Signal(
+                    "SHORT",
+                    int(p["qty"]),
+                    reason=f"上限反落 終値{price:.1f}<上限{upper.iloc[-1]:.1f}",
+                )
             return None
 
         if ctx.position.is_long:
             target = upper if p["exit_at"] == "upper" else mid
             label = "上限" if p["exit_at"] == "upper" else "中心線"
             if price >= float(target.iloc[-1]):
+                return Signal("EXIT", reason=f"{label}到達 終値{price:.1f}")
+        if ctx.position.is_short:
+            # 売建は鏡写し: exit_at=upper なら下限まで、mid なら中心線まで下がったら買戻し
+            target = lower if p["exit_at"] == "upper" else mid
+            label = "下限" if p["exit_at"] == "upper" else "中心線"
+            if price <= float(target.iloc[-1]):
                 return Signal("EXIT", reason=f"{label}到達 終値{price:.1f}")
         return None

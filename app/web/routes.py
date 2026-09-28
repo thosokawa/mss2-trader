@@ -382,6 +382,7 @@ def backtest_run(
                 qty=t.qty,
                 pnl=t.pnl,
                 return_pct=t.return_pct,
+                side=t.side,
             )
         )
     s.commit()
@@ -717,7 +718,8 @@ def performance(request: Request, s: Session = Depends(get_session)):
         unrealized = 0.0
         for t in (t for t in trades if t.status == "open"):
             last = paper.latest_price(s, t.symbol_code)
-            u = (last - t.entry_price) * t.qty if last else 0.0
+            direction = -1 if t.side == "SHORT" else 1
+            u = (last - t.entry_price) * t.qty * direction if last else 0.0
             unrealized += u
             opens.append({"t": t, "last": last, "unrealized": u})
         m = paper.summarize(closed)

@@ -16,6 +16,8 @@ import pandas as pd
 
 @dataclass
 class Position:
+    """建玉。qty > 0 が買い持ち（ロング）、qty < 0 が売り持ち（ショート＝信用の売建）。"""
+
     qty: int = 0
     avg_price: float = 0.0
 
@@ -27,10 +29,23 @@ class Position:
     def is_long(self) -> bool:
         return self.qty > 0
 
+    @property
+    def is_short(self) -> bool:
+        return self.qty < 0
+
+    @property
+    def direction(self) -> int:
+        """+1=ロング / -1=ショート / 0=ノーポジ。損益は (価格差) × |qty| × direction。"""
+        return (self.qty > 0) - (self.qty < 0)
+
 
 @dataclass
 class Signal:
-    side: str  # "BUY" | "SELL" | "EXIT"
+    # "BUY"   : 新規買い（ロング）
+    # "SHORT" : 新規売り（ショート＝信用の売建。allow_short のときだけ出す）
+    # "EXIT"  : 今の建玉を手仕舞う（ロングなら売り、ショートなら買い戻し）
+    # "SELL"  : 旧来の書き方。ロングの手仕舞いとして扱う（EXIT と同じ）
+    side: str
     qty: int | None = None  # None なら戦略パラメータ / リスク層が決める
     reason: str = ""
     order_type: str = "MKT"  # "MKT" | "LMT"
@@ -60,6 +75,14 @@ class Strategy:
 
     def __init__(self, params: dict | None = None):
         self.params = {**self.default_params, **(params or {})}
+
+    @property
+    def allow_short(self) -> bool:
+        """全戦略共通パラメータ allow_short（空売りする）。on_bar で SHORT を出してよいか。"""
+        v = self.params.get("allow_short", False)
+        if isinstance(v, str):
+            return v.strip().lower() in ("true", "1", "yes", "on")
+        return bool(v)
 
     def on_bar(self, ctx: Context) -> Signal | None:  # pragma: no cover - 抽象
         raise NotImplementedError

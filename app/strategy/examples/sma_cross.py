@@ -10,7 +10,8 @@ from app.strategy.base import Context, Signal, Strategy
 
 class SmaCross(Strategy):
     timeframe = "5m"
-    description = "短期SMAが長期SMAを上抜けで買い、下抜けで手仕舞い"
+    description = ("短期SMAが長期SMAを上抜けで買い、下抜けで手仕舞い"
+                   "（空売りありなら下抜けで売建、上抜けで買戻し）")
     default_params = {"fast": 5, "slow": 20, "qty": 100}
     param_meta = {
         "fast": {"label": "短期SMA期間", "help": "短期の単純移動平均を計算する本数"},
@@ -36,4 +37,9 @@ class SmaCross(Strategy):
                           reason=f"GC fast{fast_n}={f:.1f} > slow{slow_n}={sl:.1f}")
         if prev >= 0 > cur and ctx.position.is_long:
             return Signal("EXIT", reason=f"DC fast{fast_n}={f:.1f} < slow{slow_n}={sl:.1f}")
+        if prev >= 0 > cur and ctx.position.is_flat and self.allow_short:
+            return Signal("SHORT", int(self.params["qty"]),
+                          reason=f"DC fast{fast_n}={f:.1f} < slow{slow_n}={sl:.1f}")
+        if prev <= 0 < cur and ctx.position.is_short:
+            return Signal("EXIT", reason=f"GC fast{fast_n}={f:.1f} > slow{slow_n}={sl:.1f}")
         return None
