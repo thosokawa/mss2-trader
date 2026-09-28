@@ -92,7 +92,7 @@ python bridge\bridge.py --workbook rss_bridge.xlsx --orders-workbook rss_orders.
 5. 注文確認画面が出る設定だと `status="cancelled"`（ダイアログを閉じただけ）になる。
    自動化するなら確認画面を出さない設定が必要（MarketSpeed II 側の設定を確認）
 
-### 信用取引（実装中）
+### 信用取引（実装済み・実弾未検証）
 
 公式オンラインヘルプで確認した仕様:
 - 新規 `RssMarginOpenOrder(発注ID,発注トリガー,銘柄コード,売買区分,注文区分,SOR区分,信用区分,
@@ -100,17 +100,28 @@ python bridge\bridge.py --workbook rss_bridge.xlsx --orders-workbook rss_orders.
   売買区分 1=売建 3=買建、信用区分 1=制度 2=一般(無期限) 3=一般(14日) 4=一般(いちにち)、口座区分 0/1
 - 返済 `RssMarginCloseOrder(…,信用区分,注文数量,価格区分,注文価格,執行条件,注文期限,口座区分,
   建日,建単価,建市場,逆指値…)`（20引数）。売買区分 1=売埋 3=買埋。**建日(YYYYMMDD)・建単価・
-  建市場(1=東証…)は必須で省略不可** → 返済する建玉を `RssMarginPositionList` で特定する必要がある
-- `RssMarginPositionList` の取得項目: 銘柄コード, 銘柄名称, 口座区分, 建市場, 信用区分, 弁済期限,
-  売買, 建玉数量, 発注数量, 建値, 建日, 最終返済日, 時価, …
-- 値の形式（建日が日付型か文字列か、建市場が「東証」か等）は未確認。信用建玉がある状態で:
+  建市場(1=東証 3=名証 4=JNX 5=JAX)は必須で省略不可**
+
+実装（`bridge/bridge.py`、シート構成は `bridge/rss_layout.py`）:
+- `rss_orders.xlsx` に `margin_open` / `margin_close` / `margin_positions` シートを使う。古いブックに
+  無ければ bridge が起動後最初の発注時に自動で追加する（作り直し不要）
+- 新規: 成行・本日中。信用区分は戦略の `hold_overnight` で決まる（OFF=いちにち 4 / ON=一般無期限 2）
+- 返済: `margin_positions`（`RssMarginPositionList`）から、銘柄・売買（買建↔売埋 / 売建↔買埋）・
+  信用区分・口座区分が一致し、**建日が bot の新規建ての日（Order.open_date）** で、返済注文中でない
+  （建玉数量−発注数量 > 0）建玉を選び、その建日・建値・建市場で `RssMarginCloseOrder` を出す。
+  約定が分かれて建玉が複数行になっていれば行ごとに注文（発注IDは 1,000,000,000 + Order.id×10 + k）
+- 該当する建玉が無い／一部しか発注できなかったときは `error` を報告 → backend が自動 DISARM
+- **bot と同じ日に、同じ銘柄・同じ信用区分・同じ売買で手動の建玉を作らないこと**（区別できない）
+
+実機で確認した建玉一覧の値（2026-09-28、`--probe-account` のブック）: 銘柄コード=`5401.0`、
+口座区分=`'特定'`、建市場=`'東証'`/`'JAX'`（SOR 経由だと JAX になる）、信用区分=`'一般'`、
+弁済期限=`'1日'`/`'無期限'`、売買=`'買建'`、建玉数量=`100.0`、発注数量=`0.0`、建値=`688.4`、
+建日=`20260928.0`、一覧の終わりに `'--------'` の行。開いた直後は `応答待ち` のことがある。
+確認用ブックの作り方:
   ```powershell
-  python bridge\build_workbook.py --probe-account      # bridge\rss_account_probe.xlsx を生成して Excel で開く
+  python bridge\build_workbook.py --probe-account
   python bridge\bridge.py --dump --workbook bridge\rss_account_probe.xlsx --sheet positions
   ```
-
-それまで backend は信用の新規建てを発注しない（`live.MARGIN_ORDERS_SUPPORTED=False`）。bridge も
-`trade_type=margin` や SHORT/COVER の注文は Excel に書かずに `rejected` を返す（二重の防御）。
 
 ### 既知の制限（v1）
 

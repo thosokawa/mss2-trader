@@ -155,8 +155,9 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
 すべて反映される。信用の金利・貸株料は含まない。</p>
 <p><strong>取引区分</strong>（<code>trade_type</code>）は実発注の注文種別。<code>cash</code>=現物、
 <code>margin</code>=信用（大引けをまたがない戦略はいちにち信用、またぐ戦略は一般信用・無期限）。
-空売りの実発注は <code>margin</code> のときだけ。<strong>⚠ 信用の実発注はまだ未対応</strong>
-（返済に必要な建玉一覧の読み取りを実装中）で、今は信用の新規建てシグナルは「発注見送り」になる。</p>
+空売りの実発注は <code>margin</code> のときだけ。<strong>⚠ 信用の実発注は実弾で未検証</strong>。
+返済は Excel の建玉一覧から「銘柄・売買・信用区分・口座区分・建日（bot が建てた日）」が一致する建玉を選ぶので、
+<strong>bot と同じ日に同じ銘柄・同じ信用区分で手動の建玉を作らない</strong>こと（区別できず返済に使われうる）。</p>
 
 <h4>大引けをまたぐ（デイトレ設定）</h4>
 <p>同じく全戦略共通の <strong>大引けをまたぐ</strong> のチェックを外すと、日中足（1m / 5m / 15m）では

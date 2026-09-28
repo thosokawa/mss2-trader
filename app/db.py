@@ -40,6 +40,7 @@ _ADD_COLUMNS: list[tuple[str, str, str]] = [
     ("papertrade", "side", "TEXT DEFAULT 'LONG'"),
     ("order", "trade_type", "TEXT DEFAULT 'cash'"),
     ("order", "margin_type", "INTEGER DEFAULT 0"),
+    ("order", "open_date", "INTEGER DEFAULT 0"),
 ]
 
 

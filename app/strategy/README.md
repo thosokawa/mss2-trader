@@ -66,8 +66,8 @@ Signal(side, qty=None, reason="", order_type="MKT", limit_price=None)
 
 実発注（mode=live）では空売りは `trade_type="margin"` のときだけ発注する。信用区分は
 `hold_overnight=False`（日中足）ならいちにち信用(4)、それ以外は一般信用・無期限(2)
-（`live.margin_type_for`）。**bridge の信用注文対応（返済に必要な建玉一覧の読み取り）が
-未実装のため、現状 `live.MARGIN_ORDERS_SUPPORTED=False` で信用の新規建ては発注見送りになる。**
+（`live.margin_type_for`）。bridge は信用の新規建て・返済（建玉一覧から建日・建値・建市場を引く）
+に対応済み（`bridge/README.md`「信用取引」）。
 
 ## 損切り / 利確
 

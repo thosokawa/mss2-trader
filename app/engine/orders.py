@@ -53,6 +53,7 @@ def queue_order(
     ref_price: float = 0.0,
     trade_type: str = "cash",
     margin_type: int = 0,
+    open_date: int = 0,
 ) -> Order:
     order = Order(
         strategy_id=strat_row.id,
@@ -67,6 +68,7 @@ def queue_order(
         ref_price=ref_price,
         trade_type=trade_type,
         margin_type=margin_type,
+        open_date=open_date,
         status="new",
         idempotency_key=idempotency_key,
     )
@@ -224,4 +226,11 @@ def order_to_dict(o: Order) -> dict:
         "account_type": o.account_type,
         "trade_type": o.trade_type or "cash",
         "margin_type": o.margin_type or 0,
+        "open_date": o.open_date or 0,
     }
+
+
+def jst_yyyymmdd(ts) -> int:
+    """naive UTC の datetime → JST の日付を yyyymmdd の整数で（RSS の建日と同じ形）。"""
+    d = (ts + timedelta(hours=9)).date()
+    return d.year * 10000 + d.month * 100 + d.day

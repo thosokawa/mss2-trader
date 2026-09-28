@@ -86,9 +86,10 @@ def position_from_signals(
 OPEN_SIDES = {"BUY": 1, "SHORT": -1}
 CLOSE_SIDES = {"EXIT", "SELL", "COVER"}
 
-# bridge が信用注文（RssMarginOpenOrder / RssMarginCloseOrder）に対応するまでは、信用の
-# 新規建てを発注しない（返済できない建玉を作らないため）。バックテスト・ペーパーには無関係。
-MARGIN_ORDERS_SUPPORTED = False
+# 信用の新規建てを発注してよいか。bridge が RssMarginOpenOrder / RssMarginCloseOrder
+# （返済は RssMarginPositionList から建日・建値・建市場を引く）に対応したので True。
+# 信用で問題が出たらここを False にすれば、信用の新規建てだけ止められる（手仕舞いは出る）。
+MARGIN_ORDERS_SUPPORTED = True
 
 
 def margin_type_for(params: dict, timeframe: str) -> int:
@@ -238,17 +239,21 @@ def _run_strategy_symbol(
             pos = paper.current_position(session, strat_row.id, symbol_code)
         elif is_live_trading:
             if not blocked_reason:
+                open_date = 0
                 if side in OPEN_SIDES:
                     o_type, m_type = trade_type, margin_type_for(strat.params, tf)
                 else:
-                    # 手仕舞いは建てたときの取引区分・信用区分に合わせる
+                    # 手仕舞いは建てたときの取引区分・信用区分に合わせ、建てた日を渡す
+                    # （bridge が信用返済で bot の建玉を特定するのに使う）
                     opened = orders.last_open_order(session, strat_row.id, symbol_code)
                     o_type = opened.trade_type if opened else "cash"
                     m_type = opened.margin_type if opened else 0
+                    open_date = orders.jst_yyyymmdd(opened.ts) if opened else 0
                 orders.queue_order(
                     session, strat_row, symbol_code, side, qty_hint, reason,
                     idempotency_key=key, ref_price=price,
                     trade_type=o_type, margin_type=m_type if o_type == "margin" else 0,
+                    open_date=open_date,
                 )
                 # 実際に受理されたかは bridge の報告待ちだが、同一足内で矛盾したシグナルを
                 # 出さないよう楽観的にポジションを進めておく（ブロックされた場合は進めない）。

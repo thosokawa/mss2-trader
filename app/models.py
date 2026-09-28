@@ -203,6 +203,9 @@ class Order(SQLModel, table=True):
     trade_type: str = "cash"
     # 信用区分（margin のとき）: 1=制度 2=一般(無期限) 3=一般(14日) 4=一般(いちにち)。現物は 0
     margin_type: int = 0
+    # 手仕舞い注文のとき、建てた注文の日付（JST, yyyymmdd）。bridge が信用返済で建玉一覧から
+    # bot の建玉（建日が一致するもの）を選ぶのに使う。新規建てでは 0
+    open_date: int = 0
     order_type: str = "MKT"
     limit_price: float | None = None
     account_type: str = "0"  # RssStockOrder の口座区分: 0:特定 1:一般 2:NISA 3:旧NISA

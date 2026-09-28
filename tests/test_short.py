@@ -204,8 +204,9 @@ def test_live_short_blocked_for_cash_trade_type():
         assert s.exec(select(Order).where(Order.strategy_id == st.id)).all() == []
 
 
-def test_live_margin_orders_blocked_until_bridge_supports_them():
+def test_live_margin_orders_blocked_when_disabled(monkeypatch):
     init_db()
+    monkeypatch.setattr(live, "MARGIN_ORDERS_SUPPORTED", False)
     t0 = datetime(2026, 3, 2, 0, 0)
     with Session(engine) as s, patch("app.engine.live.get_risk_engine", return_value=_armed()):
         st = _setup(s, "9823", "tests.test_short:AlwaysShort",
@@ -216,10 +217,10 @@ def test_live_margin_orders_blocked_until_bridge_supports_them():
         assert s.exec(select(Order).where(Order.strategy_id == st.id)).all() == []
 
 
-def test_live_margin_short_queues_order_with_margin_type(monkeypatch):
-    """bridge 対応後（MARGIN_ORDERS_SUPPORTED=True）の挙動: 信用区分を付けて売建し、損切りで買戻す。"""
+def test_live_margin_short_queues_order_with_margin_type():
+    """信用区分を付けて売建し、損切りで買戻す（買戻しには建てた日を付ける）。"""
     init_db()
-    monkeypatch.setattr(live, "MARGIN_ORDERS_SUPPORTED", True)
+    assert live.MARGIN_ORDERS_SUPPORTED
     eng = _armed()
     t0 = datetime(2026, 3, 2, 0, 0)
     with Session(engine) as s, patch("app.engine.live.get_risk_engine", return_value=eng), \
@@ -240,6 +241,7 @@ def test_live_margin_short_queues_order_with_margin_type(monkeypatch):
         assert [f.side for f in fired] == ["COVER"]
         cover = s.exec(select(Order).where(Order.strategy_id == st.id, Order.side == "COVER")).one()
         assert (cover.trade_type, cover.margin_type) == ("margin", 4)  # 建てたときに合わせる
+        assert cover.open_date == orders.jst_yyyymmdd(o.ts)
         orders.claim_pending(s)
         orders.apply_report(s, cover.id, status="sent")
         assert eng.state.day_realized_pnl == pytest.approx(-3000.0)  # (1030-1000)×100 の損
@@ -252,14 +254,14 @@ def test_margin_type_for_overnight():
     assert live.margin_type_for({"hold_overnight": False}, "1d") == 2  # 日足は持ち越す
 
 
-def test_bridge_rejects_margin_orders_without_touching_excel():
+def test_bridge_rejects_impossible_orders_without_touching_excel():
     from tests.test_bridge_orders import bridge
 
     relay = bridge.OrderRelay("does-not-exist.xlsx")
     for order in (
-        {"id": 1, "symbol_code": "9984", "side": "SHORT", "qty": 100, "trade_type": "margin"},
-        {"id": 2, "symbol_code": "9984", "side": "BUY", "qty": 100, "trade_type": "margin"},
-        {"id": 3, "symbol_code": "9984", "side": "COVER", "qty": 100, "trade_type": "cash"},
+        {"id": 1, "symbol_code": "9984", "side": "SHORT", "qty": 100, "trade_type": "cash"},
+        {"id": 2, "symbol_code": "9984", "side": "COVER", "qty": 100, "trade_type": "cash"},
+        {"id": 3, "symbol_code": "9984", "side": "BUY", "qty": 100, "trade_type": "fx"},
     ):
         res = relay.place(order, 1.0)  # Excel を開こうとすれば例外になる
-        assert res["status"] == "rejected" and "信用" in res["error"]
+        assert res["status"] == "rejected" and "未対応" in res["error"]

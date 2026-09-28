@@ -23,7 +23,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from rss_layout import (  # noqa: E402
+    N_ROWS,
+    ORDER_SHEETS,
+    POSITION_ITEMS,
+    POSITIONS_SHEET,
+    col_letter,
+    order_formula,
+    positions_formula,
+)
 from sqlmodel import Session, select  # noqa: E402
 
 from app.db import engine, init_db  # noqa: E402
@@ -44,14 +54,6 @@ PROBE_FIELDS = [
     "VWAP", "約定回数", "市場コード",
 ]
 
-# --orders 用。RssStockOrder（国内株式・現物注文）の引数（20個、A〜T列）。
-# bridge.py の ORDER_INPUT_COLS と対応関係を保つこと。
-ORDER_ARG_HEADER = [
-    "発注ID", "発注トリガー", "銘柄コード", "売買区分", "注文区分", "SOR区分",
-    "注文数量", "価格区分", "注文価格", "執行条件", "注文期限", "口座区分",
-    "逆指値条件価格", "逆指値条件区分", "逆指値価格区分", "逆指値価格",
-    "セット注文区分", "セット注文価格", "セット注文執行条件", "セット注文期限",
-]
 
 
 # --probe-account 用。口座系一覧関数の取得項目（公式オンラインヘルプ「取得項目一覧」の表記どおり）。
@@ -161,39 +163,41 @@ def build_account_probe(out_path: Path) -> None:
     print("  python bridge\\bridge.py --dump --workbook bridge\\rss_account_probe.xlsx --sheet positions")
 
 
-def build_orders(out_path: Path, n_rows: int = 300) -> None:
+def build_orders(out_path: Path, n_rows: int = N_ROWS) -> None:
     """発注専用ブック（1回だけ作って使い回す。quotes ブックとは別ファイル）。
 
     quotes ブックは銘柄セットを変えるたびに作り直すが、orders ブックは
     発注中の状態を持つので自動では作り直さない・書き換えない設計にしてある。
+    シート構成は rss_layout.py（現物・信用新規・信用返済・信用建玉一覧）。既存のブックに
+    信用のシートが無ければ bridge.py が起動時に追加するので、作り直しは不要。
     """
     try:
         from openpyxl import Workbook
-        from openpyxl.utils import get_column_letter
     except ImportError as e:
         raise SystemExit("openpyxl が必要です: pip install openpyxl") from e
 
-    n_args = len(ORDER_ARG_HEADER)  # 20 (A〜T列)
-    status_col = n_args + 1  # U列(21列目)
-
     wb = Workbook()
-    ws = wb.active
-    ws.title = "orders"
-    ws.append([*ORDER_ARG_HEADER, "ステータス"])
-    for row in range(2, n_rows + 2):
-        cell_refs = ",".join(f"{get_column_letter(c)}{row}" for c in range(1, n_args + 1))
-        ws.cell(row=row, column=status_col, value=f"=RssStockOrder({cell_refs})")
-    for c in range(1, n_args + 1):
-        ws.column_dimensions[get_column_letter(c)].width = 11
-    ws.column_dimensions[get_column_letter(status_col)].width = 45
-    ws.freeze_panes = "A2"
+    wb.remove(wb.active)
+    for sheet, (_func, args) in ORDER_SHEETS.items():
+        ws = wb.create_sheet(sheet)
+        ws.append([*args, "ステータス"])
+        n_args = len(args)
+        for row in range(2, n_rows + 2):
+            ws.cell(row=row, column=n_args + 1, value=order_formula(sheet, row))
+        for c in range(1, n_args + 1):
+            ws.column_dimensions[col_letter(c)].width = 11
+        ws.column_dimensions[col_letter(n_args + 1)].width = 45
+        ws.freeze_panes = "A2"
+    ws = wb.create_sheet(POSITIONS_SHEET)
+    ws.append(POSITION_ITEMS)
+    ws["A2"] = positions_formula()
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(out_path)
-    print(f"生成: {out_path}  (発注用シート、{n_rows}行ぶんの空き)")
+    print(f"生成: {out_path}  (シート: {', '.join([*ORDER_SHEETS, POSITIONS_SHEET])}、各{n_rows}行)")
     print("このファイルは1回作って Excel で開いたままにする（quotes ブックと違い自動では作り直さない）。")
-    print("※ RssStockOrder の実際の発注は未検証。まず MarketSpeed II 側の「発注機能」を"
-          "OFFのままテストし、「発注ロック中」が正しく検出できることを確認してから有効化すること。")
+    print("※ まず MarketSpeed II 側の「発注機能」を OFF のままテストし、「発注ロック中」が"
+          "正しく検出できることを確認してから有効化すること。")
 
 
 def main() -> None:

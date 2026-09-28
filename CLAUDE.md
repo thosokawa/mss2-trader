@@ -41,12 +41,14 @@ P0〜P3 済（雛形・バックテスト・RSSブリッジ・tick→足集約�
 （`hold_overnight`、`app/engine/eod.py`）、空売り（`allow_short`）、取引区分（`trade_type`=cash/margin）。
 通知は Slack / メール（Gmail SMTP、`app/notify.py`）。
 
-**信用取引（進行中）**: 空売りは戦略・バックテスト・ペーパー・live エンジンまで対応済み
-（`Position.qty` マイナス＝売建、Order.side は BUY/SHORT/EXIT/COVER）。実発注の信用注文は
-bridge 未対応のため `app/engine/live.py` の `MARGIN_ORDERS_SUPPORTED=False` で止めている。
-残作業: `RssMarginOpenOrder`（新規、信用区分 4=いちにち / 2=一般無期限）と `RssMarginCloseOrder`
-（返済。建日・建単価・建市場が必須 → `RssMarginPositionList` を読んで特定）を bridge に実装。
-その値の形式は `build_workbook.py --probe-account` のブックで実機確認する（`bridge/README.md`）。
+**信用取引（実装済み・実弾未検証）**: 空売りは戦略・バックテスト・ペーパー・live・bridge まで対応
+（`Position.qty` マイナス＝売建、Order.side は BUY/SHORT/EXIT/COVER、Order.trade_type=cash/margin）。
+bridge は `RssMarginOpenOrder`（信用区分 4=いちにち / 2=一般無期限）と `RssMarginCloseOrder`
+（返済。建日・建単価・建市場は `rss_orders.xlsx` の `margin_positions` シート＝`RssMarginPositionList`
+から、銘柄・売買・信用区分・口座区分・**建日＝bot の新規建ての日（Order.open_date）**が一致する建玉を
+選ぶ）で発注する。シート構成は `bridge/rss_layout.py`。建玉一覧の値の形式は 2026-09-28 に実機で確認済み
+（`tests/test_bridge_margin.py` に実データ）。止めたいときは `app/engine/live.py` の
+`MARGIN_ORDERS_SUPPORTED=False`（信用の新規建てだけ止まり、手仕舞いは出る）。
 
 ## 開発上の重要な注意点
 

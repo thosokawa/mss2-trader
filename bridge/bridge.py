@@ -46,6 +46,17 @@ import httpx  # noqa: E402
 
 from app.config import get_config  # noqa: E402
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from rss_layout import (  # noqa: E402
+    ORDER_SHEETS,
+    POSITION_ITEMS,
+    POSITIONS_SHEET,
+    col_letter,
+    order_formula,
+    positions_formula,
+    status_col,
+)
+
 # quotes シートの列並び（build_workbook.py と一致させること）
 FIELDS = ["現在値", "出来高", "前日比", "最良買気配値", "最良売気配値"]
 FIELD_KEY = {"現在値": "price", "出来高": "volume", "最良買気配値": "bid", "最良売気配値": "ask"}
@@ -111,8 +122,104 @@ def dump_workbook(workbook_path: str, sheet: str = "quotes") -> None:
 
 # ---- 発注リレー（P4・未検証。Windows実機での確認が必要） --------------------
 
-ORDER_ARG_COLS = list("ABCDEFGHIJKLMNOPQRST")  # RssStockOrder の20引数（A〜T列）
-ORDER_STATUS_COL = "U"
+ORDER_STATUS_COL = status_col("orders")  # RssStockOrder のステータス列（U）
+
+# 信用返済は建玉1つ（建日・建単価・建市場の組）ごとに1注文になり、1つの Order が複数の
+# RssMarginCloseOrder に分かれることがある。その発注IDは Order.id と重ならない別の範囲から振る。
+CLOSE_ID_BASE = 1_000_000_000
+CLOSE_ID_SLOTS = 10  # 1 Order あたりの返済注文の上限
+
+MARKET_CODE = {"東証": 1, "名証": 3, "JNX": 4, "JAX": 5}
+ACCOUNT_CODE = {"特定": "0", "一般": "1"}
+MARGIN_TYPE_BY_TERM = {"1日": 4, "無期限": 2, "14日": 3}
+
+
+def _num(v) -> float | None:
+    if isinstance(v, (int, float)):
+        return float(v)
+    try:
+        return float(str(v).replace(",", ""))
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_positions(table: list[list]) -> list[dict]:
+    """margin_positions シート（1行目が見出し）の値から建玉のリストを作る。
+
+    実機の値（2026-09-28 確認）: 銘柄コード=5401.0, 口座区分='特定', 建市場='東証'/'JAX',
+    信用区分='一般'/'制度', 弁済期限='1日'/'無期限', 売買='買建'/'売建', 建玉数量=100.0,
+    発注数量=0.0（返済注文中の数量）, 建値=688.4, 建日=20260928.0。末尾に '--------' の行。
+    """
+    if not table:
+        return []
+    header = [str(h).strip() if h is not None else "" for h in table[0]]
+    idx = {name: i for i, name in enumerate(header)}
+
+    lots = []
+    for row in table[1:]:
+        if not row:
+            break
+
+        def get(name, row=row):
+            i = idx.get(name)
+            return row[i] if i is not None and i < len(row) else None
+
+        code_n = _num(get("銘柄コード"))
+        if code_n is None:
+            break  # '--------'（一覧の終わり）や「応答待ち」
+        term = str(get("弁済期限") or "").strip()
+        kind = str(get("信用区分") or "").strip()
+        margin_type = 1 if kind == "制度" else MARGIN_TYPE_BY_TERM.get(term)
+        date_n = _num(get("建日"))
+        lots.append({
+            "code": str(int(code_n)),
+            "account": ACCOUNT_CODE.get(str(get("口座区分") or "").strip()),
+            "market": MARKET_CODE.get(str(get("建市場") or "").strip()),
+            "margin_type": margin_type,
+            "side": str(get("売買") or "").strip(),
+            "qty": int(_num(get("建玉数量")) or 0),
+            "ordered": int(_num(get("発注数量")) or 0),
+            "price": _num(get("建値")),
+            "date": int(date_n) if date_n else None,
+        })
+    return lots
+
+
+def select_lots(lots: list[dict], order: dict) -> tuple[list[tuple[dict, int]], str]:
+    """返済注文に使う建玉と数量を選ぶ。([(建玉, 数量), ...], 見つからない理由) を返す。
+
+    bot が建てた建玉だけを対象にするため、銘柄・売買・信用区分・口座区分に加えて
+    建日が bot の新規建ての日（order["open_date"]）と一致するものに限る。
+    （同じ日に同じ銘柄・同じ信用区分で手動でも建てていると区別できない — README 参照）
+    """
+    want_side = "売建" if order["side"] == "COVER" else "買建"
+    need = int(order["qty"])
+    open_date = int(order.get("open_date") or 0)
+    cands = [
+        lot for lot in lots
+        if lot["code"] == str(order["symbol_code"])
+        and lot["side"] == want_side
+        and lot["margin_type"] == int(order.get("margin_type") or 0)
+        and lot["account"] == str(order.get("account_type") or "0")
+        and (not open_date or lot["date"] == open_date)
+        and lot["market"] is not None and lot["price"]
+        and lot["qty"] - lot["ordered"] > 0
+    ]
+    cands.sort(key=lambda lot: lot["qty"] - lot["ordered"], reverse=True)
+    picked, left = [], need
+    for lot in cands:
+        if left <= 0:
+            break
+        q = min(left, lot["qty"] - lot["ordered"])
+        picked.append((lot, q))
+        left -= q
+    if left > 0:
+        have = need - left
+        return [], (f"返済できる建玉が足りない（必要{need}株 / 該当{have}株: {order['symbol_code']} "
+                    f"{want_side} 信用区分{order.get('margin_type')} 建日{open_date or '指定なし'}）")
+    if len(picked) > CLOSE_ID_SLOTS:
+        return [], f"建玉が{len(picked)}件に分かれていて返済注文の上限（{CLOSE_ID_SLOTS}件）を超える"
+    return picked, ""
 
 
 def _status_text(value: object) -> str:
@@ -178,32 +285,112 @@ class OrderRelay:
     def place(self, order: dict, resolve_timeout: float) -> dict:
         """1件発注する。{"status": ..., "broker_order_id"?: ..., "error"?: ...} を返す。"""
         trade_type = order.get("trade_type") or "cash"
-        if trade_type != "cash" or order["side"] not in ("BUY", "EXIT", "SELL"):
-            # 信用（新規売建・買戻し含む）は未対応。Excel に一切書かずに拒否する＝確実に未発注。
-            return {"status": "rejected",
-                    "error": f"bridge は信用注文に未対応: trade_type={trade_type} side={order['side']}"}
+        side = order["side"]
+        if trade_type == "cash" and side in ("BUY", "EXIT", "SELL"):
+            return self._place_stock(order, resolve_timeout)
+        if trade_type == "margin" and side in ("BUY", "SHORT"):
+            return self._place_margin_open(order, resolve_timeout)
+        if trade_type == "margin" and side in ("EXIT", "SELL", "COVER"):
+            return self._place_margin_close(order, resolve_timeout)
+        # 想定外の組み合わせ。Excel に一切書かずに拒否する＝確実に未発注。
+        return {"status": "rejected", "error": f"未対応の注文: trade_type={trade_type} side={side}"}
 
+    # ---- シート準備 ----
+
+    def _book(self):
         book = _open_book(self.workbook_path)
-        ws = book.sheets["orders"]
-        row = self.row_for(order["id"])
+        self.ensure_sheets(book)
+        return book
 
-        side_code = 1 if order["side"] in ("EXIT", "SELL") else 3  # 1:売り 3:買い
-        row_values = [
-            order["id"], 0, str(order["symbol_code"]), side_code, 0, 0,
-            int(order["qty"]), 0, None, 1, None, str(order.get("account_type") or "0"),
-            None, None, None, None, None, None, None, None,
-        ]
+    def ensure_sheets(self, book) -> None:
+        """信用のシート（rss_layout）が無い古いブックなら追加する（作り直し不要にするため）。"""
+        names = {s.name for s in book.sheets}
+        for sheet, (_func, args) in ORDER_SHEETS.items():
+            if sheet in names:
+                continue
+            ws = book.sheets.add(sheet, after=book.sheets[-1])
+            ws.range("A1").value = [*args, "ステータス"]
+            col = status_col(sheet)
+            ws.range(f"{col}2:{col}{self.n_rows + 1}").formula = [
+                [order_formula(sheet, r)] for r in range(2, self.n_rows + 2)
+            ]
+            print(f"[orders] シート {sheet} を追加しました")
+        if POSITIONS_SHEET not in names:
+            ws = book.sheets.add(POSITIONS_SHEET, after=book.sheets[-1])
+            ws.range("A1").value = POSITION_ITEMS
+            ws.range("A2").formula = positions_formula()
+            print(f"[orders] シート {POSITIONS_SHEET} を追加しました")
+
+    # ---- 発注 ----
+
+    def _fire(self, ws, sheet: str, order_id: int, values: list, resolve_timeout: float) -> dict:
+        """1行に引数を書いてトリガーを立て、ステータスが確定するまで待つ。"""
+        row = self.row_for(order_id)
+        last = col_letter(len(ORDER_SHEETS[sheet][1]))
+        col = status_col(sheet)
         try:
-            ws.range(f"A{row}:T{row}").value = row_values
+            ws.range(f"A{row}:{last}{row}").value = values
             ws.range(f"B{row}").value = 1  # 発注トリガー 0->1 で発注実行
-            return self._wait_result(
-                lambda: ws.range(f"{ORDER_STATUS_COL}{row}").value, order["id"], resolve_timeout
-            )
+            return self._wait_result(lambda: ws.range(f"{col}{row}").value, order_id, resolve_timeout)
         finally:
             try:
                 ws.range(f"B{row}").value = 0  # 次にこの行を使うときのため戻しておく
             except Exception:  # noqa: BLE001
                 pass
+
+    def _place_stock(self, order: dict, resolve_timeout: float) -> dict:
+        side_code = 1 if order["side"] in ("EXIT", "SELL") else 3  # 1:売り 3:買い
+        values = [
+            order["id"], 0, str(order["symbol_code"]), side_code, 0, 0,
+            int(order["qty"]), 0, None, 1, None, str(order.get("account_type") or "0"),
+            None, None, None, None, None, None, None, None,
+        ]
+        ws = self._book().sheets["orders"]
+        return self._fire(ws, "orders", order["id"], values, resolve_timeout)
+
+    def _place_margin_open(self, order: dict, resolve_timeout: float) -> dict:
+        margin_type = int(order.get("margin_type") or 0)
+        if margin_type not in (1, 2, 3, 4):
+            return {"status": "rejected", "error": f"信用区分が不正: {margin_type}"}
+        side_code = 1 if order["side"] == "SHORT" else 3  # 1:売建 3:買建
+        values = [
+            order["id"], 0, str(order["symbol_code"]), side_code, 0, 0, margin_type,
+            int(order["qty"]), 0, None, 1, None, str(order.get("account_type") or "0"),
+            None, None, None, None,
+            None, None, None, None, None,
+        ]
+        ws = self._book().sheets["margin_open"]
+        return self._fire(ws, "margin_open", order["id"], values, resolve_timeout)
+
+    def read_positions(self, book) -> list[dict]:
+        table = book.sheets[POSITIONS_SHEET].used_range.value or []
+        if table and not isinstance(table[0], list):
+            table = [table]
+        return parse_positions(table)
+
+    def _place_margin_close(self, order: dict, resolve_timeout: float) -> dict:
+        book = self._book()
+        lots = self.read_positions(book)
+        picked, why = select_lots(lots, order)
+        if not picked:
+            # 建玉の認識がずれている（手動で返済済み等）か一覧が未取得。error → backend が DISARM。
+            return {"status": "error", "error": why}
+        side_code = 3 if order["side"] == "COVER" else 1  # 1:売埋 3:買埋
+        ws = book.sheets["margin_close"]
+        results = []
+        for k, (lot, qty) in enumerate(picked):
+            sub_id = CLOSE_ID_BASE + int(order["id"]) * CLOSE_ID_SLOTS + k
+            values = [
+                sub_id, 0, str(order["symbol_code"]), side_code, 0, 0, lot["margin_type"],
+                qty, 0, None, 1, None, str(order.get("account_type") or "0"),
+                lot["date"], lot["price"], lot["market"],
+                None, None, None, None,
+            ]
+            res = self._fire(ws, "margin_close", sub_id, values, resolve_timeout)
+            results.append(res)
+            if res["status"] != "sent":
+                break
+        return combine_close_results(results, len(picked))
 
     def _wait_result(self, read_cell, order_id: int, resolve_timeout: float,
                      poll_sec: float = 0.5, clock=time.time, sleep=time.sleep) -> dict:
@@ -232,6 +419,19 @@ class OrderRelay:
         if reject_text is not None:
             return {"status": "rejected", "error": text}
         return {"status": "timeout", "error": f"未確定のまま待機時間切れ: {text!r}"}
+
+
+def combine_close_results(results: list[dict], n_planned: int) -> dict:
+    """建玉ごとの返済注文の結果を1つの Order の結果にまとめる。"""
+    sent = [r for r in results if r["status"] == "sent"]
+    if len(sent) == n_planned:
+        return {"status": "sent", "broker_order_id": " / ".join(r["broker_order_id"] for r in sent)}
+    last = results[-1]
+    if not sent:
+        return last  # 1件も出ていない（rejected ならそのまま＝確実に未発注）
+    # 一部だけ返済注文が出た → 建玉の認識がずれるので error（backend が DISARM）
+    return {"status": "error",
+            "error": f"返済注文が一部だけ発注された（{len(sent)}/{n_planned}件）: {last.get('error', '')}"}
 
 
 def run_order_relay(orders_url: str, relay: OrderRelay, resolve_timeout: float, client: httpx.Client) -> int:
