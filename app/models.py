@@ -20,6 +20,17 @@ class Symbol(SQLModel, table=True):
     tick_size: float = 1.0
 
 
+class SymbolMaster(SQLModel, table=True):
+    """銘柄マスタ（JPX の東証上場銘柄一覧から取り込む。app/symbols.py）。名前の自動補完に使う。"""
+
+    code: str = Field(primary_key=True, description="証券コード（英字入り 130A 等もある）")
+    name: str = ""
+    market: str = ""  # 市場・商品区分 例 "プライム（内国株式）" "ETF・ETN"
+    sector: str = ""  # 33業種区分
+    as_of: str = ""  # 一覧の日付（yyyymmdd）
+    updated_at: datetime = Field(default_factory=utcnow)
+
+
 class SymbolSet(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True)

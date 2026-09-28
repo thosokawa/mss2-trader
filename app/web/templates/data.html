@@ -39,6 +39,23 @@
   });
 </script>
 
+<article>
+  <h3 style="margin-top:0">銘柄一覧（銘柄名の自動補完用）</h3>
+  {% if master_msg %}<p class="{{ 'pos' if master_ok else 'neg' }}">{{ master_msg }}</p>{% endif %}
+  <p>
+    {% if master.count %}
+      取り込み済み: {{ '{:,}'.format(master.count) }} 銘柄（JPX {{ master.as_of }} 時点、取り込み {{ master.updated_at | jst('%Y-%m-%d %H:%M') }}）
+    {% else %}
+      <span class="neg">未取り込み</span> — 銘柄コードから銘柄名を自動で入れるには、一度「銘柄一覧を更新」を押してください。
+    {% endif %}
+  </p>
+  <form method="post" action="/data/symbols/refresh">
+    <button type="submit" class="secondary">銘柄一覧を更新（JPX から取得）</button>
+  </form>
+  <p><small>日本取引所グループが月次で公開している東証上場銘柄一覧（約4,400銘柄、ETF・REIT含む）を取り込みます。
+  新規上場・社名変更を反映したいときに更新してください（月1回程度で十分）。名前が空の登録済み銘柄もあわせて補完します。</small></p>
+</article>
+
 {% if fetch_results is not none %}
 <h3>取得結果</h3>
 <table>

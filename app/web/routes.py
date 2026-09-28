@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, func, select
 
+from app import symbols
 from app.bars import load_bars
 from app.config import get_config
 from app.db import get_session
@@ -168,13 +169,15 @@ def add_item(
     name: str = Form(""),
     s: Session = Depends(get_session),
 ):
-    code = code.strip()
+    code = symbols.normalize_code(code)
     if code:
-        if not s.get(Symbol, code):
-            s.add(Symbol(code=code, name=name.strip()))
-        elif name.strip():
-            sym = s.get(Symbol, code)
-            sym.name = name.strip()
+        # 名前が空なら銘柄マスタ（JPX 一覧）から補完する
+        name = name.strip() or symbols.lookup_name(s, code)
+        sym = s.get(Symbol, code)
+        if not sym:
+            s.add(Symbol(code=code, name=name))
+        elif name and (name != sym.name):
+            sym.name = name
             s.add(sym)
         exists = s.exec(
             select(SymbolSetItem).where(
@@ -213,6 +216,29 @@ def delete_set(set_id: int, s: Session = Depends(get_session)):
 # ---- データ（足）カバレッジ / 過去データ取得 ---------------------------------
 
 
+@router.get("/api/symbol-name")
+def api_symbol_name(code: str = "", s: Session = Depends(get_session)):
+    """銘柄コード → 銘柄名（銘柄マスタから）。見つからなければ name は空。"""
+    m = symbols.lookup(s, code)
+    return {"code": symbols.normalize_code(code), "name": m.name if m else "",
+            "market": m.market if m else ""}
+
+
+@router.post("/data/symbols/refresh", response_class=HTMLResponse)
+def data_symbols_refresh(request: Request, s: Session = Depends(get_session)):
+    try:
+        res = symbols.refresh_master(s)
+        msg = (f"銘柄一覧を更新しました: {res['count']:,} 銘柄（JPX {res['as_of']} 時点）。"
+               f"名前が空だった銘柄 {res['filled']} 件を補完。")
+        ok = True
+    except Exception as e:  # noqa: BLE001 - ネットワーク/形式エラーを画面に出す
+        msg, ok = f"銘柄一覧の更新に失敗しました: {e}", False
+    return templates.TemplateResponse(
+        request, "data.html",
+        _ctx(request, fetch_results=None, master_msg=msg, master_ok=ok, **_data_coverage_ctx(s)),
+    )
+
+
 def _data_coverage_ctx(s: Session) -> dict:
     rows = s.exec(
         select(
@@ -232,6 +258,7 @@ def _data_coverage_ctx(s: Session) -> dict:
     for it in items:
         set_codes.setdefault(it.set_id, []).append(it.symbol_code)
     return {
+        "master": symbols.master_status(s),
         "rows": rows,
         "names": names,
         "sets": sets,

@@ -48,7 +48,9 @@ def fetch_and_store(session: Session, code: str, interval: str, period: str) -> 
         msg = "データ取得できず（コード/期間/intervalを確認）"
         return {"code": code, "ok": False, "n": 0, "message": msg}
     if not session.get(Symbol, code):
-        session.add(Symbol(code=code))
+        from app.symbols import lookup_name
+
+        session.add(Symbol(code=code, name=lookup_name(session, code)))
         session.commit()
     n = upsert_bars(session, code, interval, df, source="yfinance")
     return {"code": code, "ok": True, "n": n, "start": df.index[0], "end": df.index[-1]}

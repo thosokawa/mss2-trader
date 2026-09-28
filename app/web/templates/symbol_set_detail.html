@@ -6,11 +6,39 @@
 
 <article>
   <form method="post" action="/symbol-sets/{{ ss.id }}/items" class="grid">
-    <input name="code" placeholder="証券コード（例: 7203）" required pattern="[0-9A-Za-z]+">
-    <input name="name" placeholder="銘柄名（任意）">
+    <input name="code" id="code" placeholder="証券コード（例: 7203）" required pattern="[0-9A-Za-z０-９Ａ-Ｚａ-ｚ]+"
+           autocomplete="off">
+    <input name="name" id="name" placeholder="銘柄名（空欄なら自動で補完）">
     <button type="submit">追加</button>
   </form>
+  <small id="name_hint"></small>
 </article>
+
+<script>
+  // 証券コードを入力すると銘柄マスタ（/data の「銘柄一覧を更新」で取り込み）から銘柄名を入れる。
+  // 手で入力した名前は上書きしない（自動で入れた名前だけ入れ替える）。
+  (() => {
+    const code = document.getElementById('code'), name = document.getElementById('name');
+    const hint = document.getElementById('name_hint');
+    let autoFilled = '', timer = null;
+    async function lookup() {
+      const c = code.value.trim();
+      if (c.length < 4) { hint.textContent = ''; return; }
+      try {
+        const r = await fetch('/api/symbol-name?code=' + encodeURIComponent(c));
+        const d = await r.json();
+        if (d.name) {
+          if (!name.value || name.value === autoFilled) { name.value = d.name; autoFilled = d.name; }
+          hint.textContent = d.market ? `${d.name}（${d.market}）` : d.name;
+        } else {
+          if (name.value === autoFilled) { name.value = ''; autoFilled = ''; }
+          hint.textContent = '銘柄一覧に見つかりません（一覧が未取り込みなら /data で更新）';
+        }
+      } catch (e) { hint.textContent = ''; }
+    }
+    code.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(lookup, 250); });
+  })();
+</script>
 
 {% if items %}
 <table>

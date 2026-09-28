@@ -128,7 +128,9 @@ Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 ログは `logs\backend-*.log` / `logs\bridge-*.log`。
 
 Web UI:
-- **銘柄セット** … RSS で監視する銘柄グループ。`build_workbook.py` / `bridge.py --set-id` が参照
+- **銘柄セット** … RSS で監視する銘柄グループ。`build_workbook.py` / `bridge.py --set-id` が参照。
+  証券コードを入れると銘柄名が自動で入る（銘柄マスタ＝JPX の東証上場銘柄一覧。`/data` の
+  「銘柄一覧を更新」で取り込む。`app/symbols.py`）
 - **ライブ** … bridge から届く最新気配と生存監視（5秒自動更新、30秒無受信で「遅延」）
 - **データ** … 蓄積済み足のカバレッジ（時刻は JST 表示、DB は UTC）。
   「過去データを取得」フォームから yfinance 取得も画面上で実行できる
