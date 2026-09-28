@@ -21,3 +21,4 @@ bridge/rss_probe.xlsx
 bridge/rss_orders.xlsx
 # Excel が開いている間に作る一時ロックファイル
 ~$*
+bridge/rss_account_probe.xlsx

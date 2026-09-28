@@ -93,10 +93,10 @@ def read_quotes_via_xlwings(workbook_path: str) -> list[dict]:
     return quotes
 
 
-def dump_workbook(workbook_path: str) -> None:
-    """quotes シートの生の値を型付きで表示する（RSS フィールド名の実地確認用）。"""
+def dump_workbook(workbook_path: str, sheet: str = "quotes") -> None:
+    """シートの生の値を型付きで表示する（RSS 項目名・値の形式の実地確認用）。"""
     book = _open_book(workbook_path)
-    ws = book.sheets["quotes"]
+    ws = book.sheets[sheet]
     rng = ws.used_range
     print(f"workbook : {book.fullname}")
     print(f"used_range: {rng.address}")
@@ -297,6 +297,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--simulate", action="store_true")
     ap.add_argument("--dump", action="store_true", help="Excel の生の値を表示して終了（RSS 項目名の確認用）")
+    ap.add_argument("--sheet", default="quotes", help="--dump で表示するシート名")
     ap.add_argument("--codes", help="カンマ区切り 例: 7203,6501")
     ap.add_argument("--set-id", type=int)
     ap.add_argument("--once", action="store_true")
@@ -312,7 +313,7 @@ def main() -> None:
     args = ap.parse_args()
 
     if args.dump:
-        dump_workbook(args.workbook)
+        dump_workbook(args.workbook, args.sheet)
         return
 
     order_relay = None
