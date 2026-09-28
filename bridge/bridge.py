@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import random
+import re
 import sys
 import time
 from datetime import UTC, datetime
@@ -114,45 +115,71 @@ ORDER_ARG_COLS = list("ABCDEFGHIJKLMNOPQRST")  # RssStockOrder の20引数（A�
 ORDER_STATUS_COL = "U"
 
 
-def _classify_order_status(text: str) -> str:
-    """RssStockOrder のセル表示テキストを大まかな状態に分類する。"""
-    text = (text or "").strip()
+def _status_text(value: object) -> str:
+    """ステータス列のセル値を判定用の文字列にする。
+
+    実機では「=@RssStockOrder(A2,...,T2) => 発注ロック中(...)」のように数式が前に付いて
+    返ってきたので、"=>" があればその後ろだけを使う。
+    """
+    text = "" if value is None else str(value)
+    if "=>" in text:
+        text = text.rsplit("=>", 1)[1]
+    return text.strip()
+
+
+_ORDER_ID_RE = re.compile(r"発注ID\s*[=＝:：]\s*(\d+)")
+
+
+def _classify_order_status(text: str, order_id: int | None = None) -> str:
+    """RssStockOrder のセル表示テキストを大まかな状態に分類する。
+
+    order_id を渡すと「発注済み(発注ID=xxxx)」の ID が一致するときだけ sent とする
+    （一致しなければ前の注文の表示が残っているとみなして waiting）。
+    """
+    text = _status_text(text)
     if not text:
         return "waiting"
     if text.startswith("発注済み"):
+        m = _ORDER_ID_RE.search(text)
+        if order_id is not None and m and int(m.group(1)) != int(order_id):
+            return "waiting"
         return "sent"
     if text in ("待機中", "接続待ち", "応答待ち"):
         return "waiting"
     if text == "キャンセル":
         return "cancelled"
-    # 入力エラー/サーバエラー/発注ロック中/発注ID使用済み 等はまとめて拒否扱い
+    if "使用済み" in text:
+        # 同じ発注IDで既に発注されている＝実際に注文が出ているかもしれない。
+        # backend に error として報告し、自動 DISARM → 人が注文照会で確認する。
+        return "error"
+    # 入力エラー/サーバエラー/発注ロック中 等はまとめて拒否扱い
     return "rejected"
 
 
 class OrderRelay:
     """発注専用ブックへの書き込み・トリガー・状態確定待ちを行う。
 
-    行は使い捨て（300行を使い切ったら先頭に戻って上書きする。少額試験運用の
-    想定なので十分。将来のログ保全が要るなら行数を増やすか別途アーカイブする）。
+    書き込む行は発注ID（= backend の Order.id）から決める: 2 + (id-1) % n_rows。
+    bridge を再起動しても前の注文の行を使い回さない（使い回すと、トリガー直後に前の
+    注文の結果表示を読んでしまう恐れがある）。n_rows 件ごとに一周して上書きする。
     """
+
+    # 拒否系の表示は、この秒数だけ同じ表示が続いてから確定する（トリガー直前の古い
+    # 表示を読んでしまい、実は発注されている注文を「拒否」と誤判定しないため）
+    REJECT_SETTLE_SEC = 1.5
 
     def __init__(self, workbook_path: str, n_rows: int = 300):
         self.workbook_path = workbook_path
         self.n_rows = n_rows
-        self._next_row = 2
 
-    def _take_row(self) -> int:
-        row = self._next_row
-        self._next_row += 1
-        if self._next_row > self.n_rows + 1:
-            self._next_row = 2
-        return row
+    def row_for(self, order_id: int) -> int:
+        return 2 + (int(order_id) - 1) % self.n_rows
 
     def place(self, order: dict, resolve_timeout: float) -> dict:
         """1件発注する。{"status": ..., "broker_order_id"?: ..., "error"?: ...} を返す。"""
         book = _open_book(self.workbook_path)
         ws = book.sheets["orders"]
-        row = self._take_row()
+        row = self.row_for(order["id"])
 
         side_code = 1 if order["side"] in ("EXIT", "SELL") else 3  # 1:売り 3:買い
         row_values = [
@@ -163,29 +190,42 @@ class OrderRelay:
         try:
             ws.range(f"A{row}:T{row}").value = row_values
             ws.range(f"B{row}").value = 1  # 発注トリガー 0->1 で発注実行
-
-            deadline = time.time() + resolve_timeout
-            text = ""
-            kind = "waiting"
-            while time.time() < deadline:
-                text = ws.range(f"{ORDER_STATUS_COL}{row}").value or ""
-                kind = _classify_order_status(text)
-                if kind != "waiting":
-                    break
-                time.sleep(0.5)
-
-            if kind == "waiting":
-                return {"status": "timeout", "error": f"未確定のまま待機時間切れ: {text!r}"}
-            if kind == "sent":
-                return {"status": "sent", "broker_order_id": text}
-            if kind == "cancelled":
-                return {"status": "cancelled", "error": text}
-            return {"status": "rejected", "error": text}
+            return self._wait_result(
+                lambda: ws.range(f"{ORDER_STATUS_COL}{row}").value, order["id"], resolve_timeout
+            )
         finally:
             try:
                 ws.range(f"B{row}").value = 0  # 次にこの行を使うときのため戻しておく
             except Exception:  # noqa: BLE001
                 pass
+
+    def _wait_result(self, read_cell, order_id: int, resolve_timeout: float,
+                     poll_sec: float = 0.5, clock=time.time, sleep=time.sleep) -> dict:
+        """ステータス列を読み続け、確定した結果を返す（Excel に触れる部分は read_cell のみ）。"""
+        deadline = clock() + resolve_timeout
+        text = ""
+        reject_text, reject_since = None, 0.0
+        while clock() < deadline:
+            raw = read_cell()
+            text = _status_text(raw)
+            kind = _classify_order_status(text, order_id)
+            if kind == "sent":
+                return {"status": "sent", "broker_order_id": text}
+            if kind == "cancelled":
+                return {"status": "cancelled", "error": text}
+            if kind == "error":
+                return {"status": "error", "error": f"{text}（同じ発注IDで既に発注済みの可能性）"}
+            if kind == "rejected":
+                if text != reject_text:
+                    reject_text, reject_since = text, clock()
+                elif clock() - reject_since >= self.REJECT_SETTLE_SEC:
+                    return {"status": "rejected", "error": str(raw)}
+            else:
+                reject_text = None
+            sleep(poll_sec)
+        if reject_text is not None:
+            return {"status": "rejected", "error": text}
+        return {"status": "timeout", "error": f"未確定のまま待機時間切れ: {text!r}"}
 
 
 def run_order_relay(orders_url: str, relay: OrderRelay, resolve_timeout: float, client: httpx.Client) -> int:
