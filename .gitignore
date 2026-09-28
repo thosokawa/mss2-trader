@@ -18,3 +18,6 @@ ms2rss_function.pdf
 logs/
 bridge/rss_bridge.xlsx
 bridge/rss_probe.xlsx
+bridge/rss_orders.xlsx
+# Excel が開いている間に作る一時ロックファイル
+~$*
