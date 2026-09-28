@@ -560,7 +560,14 @@ def strategies(request: Request, s: Session = Depends(get_session)):
     return templates.TemplateResponse(
         request,
         "strategies.html",
-        _ctx(request, rows=rows, sets=sets, set_names=set_names, prefill=prefill),
+        _ctx(
+            request,
+            rows=rows,
+            sets=sets,
+            set_names=set_names,
+            prefill=prefill,
+            error=request.query_params.get("error", ""),
+        ),
     )
 
 
@@ -581,6 +588,8 @@ def create_strategy(
         json.loads(params_json or "{}")
     except json.JSONDecodeError:
         return RedirectResponse("/strategies?error=params", status_code=303)
+    if s.exec(select(Strategy).where(Strategy.name == name)).first():
+        return RedirectResponse("/strategies?error=dup_name", status_code=303)
     s.add(
         Strategy(
             name=name,

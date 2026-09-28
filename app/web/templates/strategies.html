@@ -6,6 +6,11 @@
 有効化した時点より後の足だけが対象です。<code>paper</code> モードなら擬似約定して<a href="/performance">成績</a>に反映します。
 <code>live</code> モードは実際に発注します — <a href="/risk">リスク管理</a>で ARM しない限り発注されません。</small></p>
 
+{% if error == "dup_name" %}
+<p class="neg">同じ名前の戦略が既にあります。別の名前を付けてください。</p>
+{% elif error == "params" %}
+<p class="neg">パラメータ（JSON）の形式が正しくありません。</p>
+{% endif %}
 <article>
   <form method="post" action="/strategies">
     <div class="grid">

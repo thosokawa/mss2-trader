@@ -76,6 +76,32 @@ def test_strategy_crud(client):
     assert "SMAテスト戦略" not in r.text
 
 
+def test_strategy_duplicate_name_shows_error(client):
+    data = {
+        "name": "重複名テスト戦略",
+        "class_path": "app.strategy.examples.sma_cross:SmaCross",
+        "timeframe": "5m",
+        "params_json": "{}",
+        "mode": "notify",
+    }
+    client.post("/strategies", data=data)
+    r = client.post("/strategies", data=data, follow_redirects=True)
+    assert r.status_code == 200
+    assert "同じ名前の戦略が既にあります" in r.text
+
+    from sqlmodel import Session, select
+
+    from app.db import engine
+    from app.models import Strategy
+
+    with Session(engine) as s:
+        rows = s.exec(select(Strategy).where(Strategy.name == "重複名テスト戦略")).all()
+        assert len(rows) == 1
+        for st in rows:
+            s.delete(st)
+        s.commit()
+
+
 def test_backtest_form_state_persists_after_run(client):
     from datetime import datetime, timedelta
 
