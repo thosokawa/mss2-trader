@@ -146,10 +146,17 @@ Web UI:
   `config.trading` の各種上限、発注履歴。`config.trading.enabled` と ARMED の両方が
   true でないと発注しない（二重の安全弁）。詳細は `bridge/README.md`「実発注（P4）」
 
-### Slack 通知の設定
+### 通知の設定（Slack / メール）
 
-`config/config.toml` の `[notify]` に Incoming Webhook URL を入れて `dry_run = false`。
+`config/config.toml` の `[notify]` で設定し、`dry_run = false` にすると実際に送る。
 未設定・`dry_run = true` のときは送信せずログ出力のみ（`[notify dry_run] ...`）。
+両方設定すれば両方に送る（`app/notify.py` の `send()`）。
+
+- Slack: `slack_webhook_url` に Incoming Webhook URL
+- メール（Gmail）: `email_to`（送信先、カンマ区切り可）・`smtp_user`（送信元 Gmail アドレス）・
+  `smtp_password`（Google アカウントの **アプリ パスワード**。2段階認証を有効にしてから
+  https://myaccount.google.com/apppasswords で発行する16文字）。3つすべて入れると送る。
+  テスト送信: `.venv\Scripts\python.exe -c "from app.notify import send_email; print(send_email('テスト'))"`
 
 ## テスト
 

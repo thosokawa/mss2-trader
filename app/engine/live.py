@@ -6,7 +6,7 @@
     対象銘柄セットの各銘柄の「まだ評価していない確定足」を on_bar に流す
     -> Signal が返ったら:
        - Signal を DB 保存（origin="live", idempotency_key で重複防止）
-       - notify.send_slack で通知
+       - notify.send で通知（Slack / メール）
        - mode=paper: PaperBroker で擬似約定
        - mode=live : RiskEngine.check() を通過し、決着待ちの発注が無ければ
          Order をキューイング（実際の発注は bridge が非同期で行う。P4）
@@ -37,7 +37,7 @@ from app.engine.eod import flatten_at_close, is_last_bar_of_day, is_new_day
 from app.engine.risk import get_risk_engine
 from app.engine.stops import check_stop_target
 from app.models import LiveCursor, Signal, Strategy, Symbol, SymbolSetItem, utcnow
-from app.notify import format_signal, send_slack
+from app.notify import format_signal, send
 from app.strategy.base import Context, Position
 from app.strategy.registry import load_strategy_class
 
@@ -219,7 +219,7 @@ def _run_strategy_symbol(
         elif side in ("EXIT", "SELL"):
             pos = Position()
         if notify:
-            send_slack(format_signal(strat_row.name, symbol_code, name, side, price, signal_reason))
+            send(format_signal(strat_row.name, symbol_code, name, side, price, signal_reason))
 
     cur.last_bar_ts = latest_ts
     cur.updated_at = utcnow()

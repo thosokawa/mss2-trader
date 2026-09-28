@@ -10,7 +10,12 @@ live_interval_sec = 20.0
 [notify]
 # Slack Incoming Webhook URL。P2 でシグナル通知に使用。
 slack_webhook_url = ""
-# 通知を実際に送らずログ出力だけにする
+# メール通知（Gmail）。3項目すべて入れると送る。smtp_password は Google アカウントの
+# 「アプリ パスワード」（通常のログインパスワードではない。2段階認証の有効化が必要）
+email_to = ""        # 送信先（複数はカンマ区切り。自分宛てなら smtp_user と同じでよい）
+smtp_user = ""       # 送信元の Gmail アドレス
+smtp_password = ""
+# 通知を実際に送らずログ出力だけにする（Slack もメールも。実際に送るなら false）
 dry_run = true
 
 [paper]

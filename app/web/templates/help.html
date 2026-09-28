@@ -13,7 +13,7 @@
     <li><a href="#optimize">最適化（パラメータ探索）</a></li>
     <li><a href="#strategy">戦略</a></li>
     <li><a href="#risk">リスク管理 / 実発注</a></li>
-    <li><a href="#notify">Slack 通知の設定</a></li>
+    <li><a href="#notify">通知の設定（Slack / メール）</a></li>
     <li><a href="#glossary">用語集</a></li>
   </ul>
 </article>
@@ -178,10 +178,16 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
 <p><a href="/risk">/risk</a> 画面で ARMED状態・本日の実現損益・発注履歴（状態・約定数量/価格・
 エラー内容）が確認できる。</p>
 
-<h3 id="notify">Slack 通知の設定</h3>
-<p><code>config\config.toml</code> の <code>[notify]</code> に Incoming Webhook URL を入れて <code>dry_run = false</code>
-にすると、liveエンジンが出したシグナルが実際にSlackへ届く。未設定・<code>dry_run = true</code> のときは
-送信せずログ出力のみ（<code>[notify dry_run] ...</code>）。</p>
+<h3 id="notify">通知の設定（Slack / メール）</h3>
+<p><code>config\config.toml</code> の <code>[notify]</code> を設定して <code>dry_run = false</code>
+にすると、liveエンジンが出したシグナルが実際に届く。未設定・<code>dry_run = true</code> のときは
+送信せずログ出力のみ（<code>[notify dry_run] ...</code>）。両方設定すれば両方に送る。</p>
+<ul>
+  <li>Slack: <code>slack_webhook_url</code> に Incoming Webhook URL</li>
+  <li>メール（Gmail）: <code>email_to</code>（送信先）・<code>smtp_user</code>（送信元の Gmail アドレス）・
+  <code>smtp_password</code>（Google アカウントの<strong>アプリ パスワード</strong>。2段階認証を有効にしてから
+  発行する16文字。通常のログインパスワードは使えない）の3つを入れる</li>
+</ul>
 
 <h3 id="glossary">用語集</h3>
 <p><small>下線が点線になっている項目名（<span class="gloss" title="これがマウスオーバー説明の見本です">例えばこれ</span>）は、

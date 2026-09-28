@@ -27,6 +27,13 @@ class AppCfg:
 class NotifyCfg:
     slack_webhook_url: str = ""
     dry_run: bool = True
+    # メール通知（Gmail の SMTP を想定）。email_to / smtp_user / smtp_password が
+    # すべて入っているときだけ送る。smtp_password は Gmail の「アプリ パスワード」。
+    email_to: str = ""  # 複数ならカンマ区切り
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
 
 
 @dataclass
