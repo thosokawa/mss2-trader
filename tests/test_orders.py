@@ -119,3 +119,83 @@ def test_order_to_dict_shape():
             "id": o.id, "symbol_code": "7008", "side": "BUY", "qty": 100,
             "order_type": "MKT", "limit_price": None, "account_type": "1",
         }
+
+
+# ---- 受理（sent）を約定とみなす扱い -------------------------------------------------
+
+import pytest  # noqa: E402
+
+from app.config import TradingCfg  # noqa: E402
+from app.engine.risk import RiskEngine  # noqa: E402
+
+
+@pytest.fixture()
+def risk(monkeypatch):
+    """apply_report が触る RiskEngine をテストごとの使い捨てに差し替える。"""
+    eng = RiskEngine(TradingCfg(enabled=True, daily_loss_limit=30_000))
+    eng.arm()
+    monkeypatch.setattr(orders, "get_risk_engine", lambda: eng)
+    return eng
+
+
+def test_sent_buy_is_position_at_ref_price_and_not_in_flight(risk):
+    init_db()
+    with Session(engine) as s:
+        st = _strat(s, "7011")
+        o = orders.queue_order(s, st, "7011", "BUY", 100, "GC", ref_price=500.0)
+        orders.apply_report(s, o.id, status="sent", broker_order_id="発注済み(発注ID=1)")
+        pos = orders.current_live_position(s, st.id, "7011")
+        assert pos.is_long and pos.avg_price == 500.0
+        # 受理済みなので次の発注（手仕舞い）をブロックしない
+        assert orders.has_in_flight_order(s, st.id, "7011") is False
+
+
+def test_exit_sent_records_realized_pnl_once(risk):
+    init_db()
+    with Session(engine) as s:
+        st = _strat(s, "7012")
+        buy = orders.queue_order(s, st, "7012", "BUY", 100, "GC", ref_price=1000.0)
+        orders.apply_report(s, buy.id, status="sent")
+        assert risk.state.day_realized_pnl == 0.0  # 買いでは損益は出ない
+
+        ex = orders.queue_order(s, st, "7012", "EXIT", 100, "損切り", ref_price=980.0)
+        orders.apply_report(s, ex.id, status="sent")
+        assert risk.state.day_realized_pnl == pytest.approx(-2000.0)
+        assert orders.current_live_position(s, st.id, "7012").is_flat
+
+        # 後から filled が来ても二重に数えない
+        orders.apply_report(s, ex.id, status="filled", filled_qty=100, avg_price=979.0)
+        assert risk.state.day_realized_pnl == pytest.approx(-2000.0)
+        assert risk.state.armed
+
+
+def test_exit_loss_over_daily_limit_disarms(risk):
+    init_db()
+    with Session(engine) as s:
+        st = _strat(s, "7013")
+        buy = orders.queue_order(s, st, "7013", "BUY", 100, "GC", ref_price=3000.0)
+        orders.apply_report(s, buy.id, status="sent")
+        ex = orders.queue_order(s, st, "7013", "EXIT", 100, "損切り", ref_price=2600.0)
+        orders.apply_report(s, ex.id, status="sent")  # -40,000 円 > 30,000 円
+        assert not risk.state.armed
+        assert "日次損失" in risk.state.halted_reason
+
+
+@pytest.mark.parametrize("status", ["timeout", "error"])
+def test_unknown_result_disarms(risk, status):
+    init_db()
+    with Session(engine) as s:
+        st = _strat(s, f"7014{status}")
+        o = orders.queue_order(s, st, f"7014{status}", "BUY", 100, "GC", ref_price=500.0)
+        orders.apply_report(s, o.id, status=status, error="未確定のまま待機時間切れ")
+        assert not risk.state.armed
+        assert f"注文#{o.id}" in risk.state.halted_reason
+
+
+def test_rejected_does_not_disarm(risk):
+    init_db()
+    with Session(engine) as s:
+        st = _strat(s, "7015")
+        o = orders.queue_order(s, st, "7015", "BUY", 100, "GC", ref_price=500.0)
+        orders.apply_report(s, o.id, status="rejected", error="発注ロック中")
+        assert risk.state.armed

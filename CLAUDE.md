@@ -77,3 +77,5 @@ P0〜P3 済（雛形・バックテスト・RSSブリッジ・tick→足集約�
   検出できることを確認してから有効化する」手順を踏む（`bridge/README.md` 参照）。
 - 現状の制限: 成行注文のみ（指値・信用・逆指値は未対応）。「発注済み（受理）」までしか
   自動確認しない — 実際の約定確認（`RssOrderStatus`/`RssOrderList` の追跡）は未実装。
+  代わりに受理（`sent`）を「`Order.ref_price`＝シグナル価格で約定」とみなして建玉・損切り・
+  日次損益を回している（概算）。`timeout`/`error` は自動 DISARM。詳細は `bridge/README.md`。

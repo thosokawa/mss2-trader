@@ -6,6 +6,8 @@ from sqlmodel import Session, select
 from app.db import engine, init_db
 from app.engine import live
 from app.models import Bar, Signal, Strategy, Symbol, SymbolSet, SymbolSetItem
+from app.strategy.base import Signal as StratSignal
+from app.strategy.base import Strategy as BaseStrategy
 
 
 def _add_bars(s: Session, code: str, closes: list[float], start: datetime, tf: str = "5m") -> None:
@@ -253,3 +255,116 @@ def test_live_mode_skips_stale_signal_after_downtime():
         assert len(fired) >= 1
         assert all("古い足のシグナル" in f.reason for f in fired)
         assert s.exec(select(Order).where(Order.strategy_id == st.id)).all() == []
+
+
+def test_live_mode_stop_loss_exit_is_ordered_after_buy_accepted():
+    """買いが受理（sent）されたら、その後の損切りが売り注文として出る。"""
+    init_db()
+    from unittest.mock import patch
+
+    from app.config import TradingCfg
+    from app.engine import orders as orders_mod
+    from app.engine.risk import RiskEngine
+    from app.models import Order
+
+    eng = RiskEngine(
+        TradingCfg(enabled=True, max_qty_per_order=1000, max_notional_per_order=10_000_000,
+                   daily_loss_limit=1_000_000, session_windows=["00:00-23:59"])
+    )
+    eng.arm()
+    code = "9808"
+    t0 = datetime(2026, 3, 2, 0, 0, 0)
+
+    def bar(i: int, c: float) -> datetime:
+        ts = t0 + timedelta(minutes=5 * i)
+        s.add(Bar(symbol_code=code, timeframe="5m", ts=ts, open=c, high=c, low=c, close=c,
+                  volume=1000.0, source="rss"))
+        s.commit()
+        return ts + timedelta(minutes=5, seconds=30)  # 確定直後に評価
+
+    with Session(engine) as s, patch("app.engine.live.get_risk_engine", return_value=eng), \
+            patch("app.engine.orders.get_risk_engine", return_value=eng):
+        s.add(Symbol(code=code, name="テスト銘柄"))
+        ss = SymbolSet(name=f"set-{code}")
+        s.add(ss)
+        s.commit()
+        s.refresh(ss)
+        s.add(SymbolSetItem(set_id=ss.id, symbol_code=code))
+        st = Strategy(
+            name=f"strat-{code}", class_path="tests.test_eod:AlwaysBuy",
+            params_json='{"qty": 100, "stop_loss_pct": 3}', symbol_set_id=ss.id,
+            timeframe="5m", mode="live", enabled=True,
+        )
+        s.add(st)
+        s.commit()
+        s.refresh(st)
+
+        live.run_once(s, notify=False, now=bar(0, 1000.0))  # カーソル初期化
+        live.run_once(s, notify=False, now=bar(1, 1000.0))  # BUY
+        buy = s.exec(select(Order).where(Order.strategy_id == st.id)).one()
+        assert buy.side == "BUY" and buy.ref_price == 1000.0
+
+        # bridge が拾って受理を報告
+        assert [o.id for o in orders_mod.claim_pending(s) if o.symbol_code == code] == [buy.id]
+        orders_mod.apply_report(s, buy.id, status="sent", broker_order_id="発注済み")
+
+        fired = live.run_once(s, notify=False, now=bar(2, 960.0))  # -4% → 損切り
+        assert [f.side for f in fired] == ["EXIT"]
+        assert "発注見送り" not in fired[0].reason
+        exit_o = s.exec(
+            select(Order).where(Order.strategy_id == st.id, Order.side == "EXIT")
+        ).one()
+        assert exit_o.status == "new" and exit_o.ref_price == pytest.approx(970.0)
+
+        orders_mod.claim_pending(s)
+        orders_mod.apply_report(s, exit_o.id, status="sent")
+        assert eng.state.day_realized_pnl == pytest.approx(-3000.0)
+        assert orders_mod.current_live_position(s, st.id, code).is_flat
+
+
+
+class BuyEveryBar(BaseStrategy):
+    """建玉に関係なく毎足 BUY を出す（ガードの検証用）。"""
+
+    default_params = {"qty": 100}
+
+    def on_bar(self, ctx):
+        return StratSignal("BUY", reason="every bar")
+
+
+def test_live_mode_blocks_buy_while_long():
+    """建玉がある間の BUY シグナルは発注しない（買い増ししない）。"""
+    init_db()
+    from unittest.mock import patch
+
+    from app.config import TradingCfg
+    from app.engine.risk import RiskEngine
+    from app.models import Order
+
+    eng = RiskEngine(
+        TradingCfg(enabled=True, max_qty_per_order=1000, max_notional_per_order=10_000_000,
+                   daily_loss_limit=1_000_000, session_windows=["00:00-23:59"])
+    )
+    eng.arm()
+    with Session(engine) as s, patch("app.engine.live.get_risk_engine", return_value=eng):
+        st = _make_strategy(s, "9809", mode="live")
+        st.class_path = "tests.test_live:BuyEveryBar"
+        st.params_json = '{"qty": 100}'
+        s.add(st)
+        s.commit()
+        _add_bars(s, "9809", [100.0], BASE)
+        live.run_once(s, notify=False)  # カーソル初期化
+
+        # 1本目: BUY 発注 → 受理された想定
+        _add_bars(s, "9809", [101.0], BASE + timedelta(minutes=5))
+        live.run_once(s, notify=False, now=BASE + timedelta(minutes=10, seconds=30))
+        o = s.exec(select(Order).where(Order.strategy_id == st.id)).one()
+        o.status = "sent"
+        s.add(o)
+        s.commit()
+
+        # 2本目: また BUY が出るが建玉があるので発注しない
+        _add_bars(s, "9809", [102.0], BASE + timedelta(minutes=10))
+        fired = live.run_once(s, notify=False, now=BASE + timedelta(minutes=15, seconds=30))
+        assert len(fired) == 1 and "建玉あり" in fired[0].reason
+        assert len(s.exec(select(Order).where(Order.strategy_id == st.id)).all()) == 1

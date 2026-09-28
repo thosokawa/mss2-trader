@@ -182,8 +182,9 @@ class Order(SQLModel, table=True):
     status の遷移:
       new（backend作成・未着手）
         -> sending（bridgeが取得・処理開始。GET /api/orders/pending が付与）
-        -> sent（RSS側が受理 = セルが「発注済み(発注ID=xxxx)」）
-        -> filled（RssOrderStatus等で約定確認）
+        -> sent（RSS側が受理 = セルが「発注済み(発注ID=xxxx)」）。成行なので
+           約定の自動確認が無い現状は「ref_price で約定した」とみなして建玉を進める
+        -> filled（RssOrderStatus等で約定確認。未実装）
       失敗系: rejected（入力/サーバエラー）, cancelled（確認画面でキャンセル）,
               timeout（セルが確定しないまま待機時間切れ）, error（bridge側の例外）
     """
@@ -203,6 +204,8 @@ class Order(SQLModel, table=True):
     broker_order_id: str = ""  # RSS側の注文番号（発注ID とは別）
     filled_qty: int = 0
     avg_price: float = 0.0
+    # シグナル時点の価格（発注の基準値）。約定価格が分からない間の建値・損益の概算に使う
+    ref_price: float = 0.0
     error: str = ""
     idempotency_key: str = Field(default="", index=True)
     updated_at: datetime = Field(default_factory=utcnow)

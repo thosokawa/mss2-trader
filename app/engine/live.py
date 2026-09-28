@@ -178,6 +178,10 @@ def _run_strategy_symbol(
             max_age = get_config().trading.max_signal_age_sec
             if age.total_seconds() > max_age:
                 blocked_reason = f"古い足のシグナル（確定から{int(age.total_seconds())}秒 > {max_age}秒）"
+            elif side == "BUY" and pos.is_long:
+                blocked_reason = "建玉あり（買い増ししない）"
+            elif side in ("EXIT", "SELL") and pos.is_flat:
+                blocked_reason = "建玉なし（売るものがない）"
             elif orders.has_in_flight_order(session, strat_row.id, symbol_code):
                 blocked_reason = "決着待ちの発注が残っています"
             else:
@@ -206,7 +210,8 @@ def _run_strategy_symbol(
         elif is_live_trading:
             if not blocked_reason:
                 orders.queue_order(
-                    session, strat_row, symbol_code, side, qty_hint, reason, idempotency_key=key
+                    session, strat_row, symbol_code, side, qty_hint, reason,
+                    idempotency_key=key, ref_price=price,
                 )
                 # 実際に受理されたかは bridge の報告待ちだが、同一足内で矛盾したシグナルを
                 # 出さないよう楽観的にポジションを進めておく（ブロックされた場合は進めない）。

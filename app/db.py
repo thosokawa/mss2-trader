@@ -36,6 +36,7 @@ _ADD_COLUMNS: list[tuple[str, str, str]] = [
     ("order", "filled_qty", "INTEGER"),
     ("order", "avg_price", "REAL"),
     ("order", "updated_at", "TIMESTAMP"),
+    ("order", "ref_price", "REAL DEFAULT 0"),
 ]
 
 
