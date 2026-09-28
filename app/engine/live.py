@@ -50,7 +50,7 @@ def evaluate_latest(strategy, bars: pd.DataFrame, symbol: str, position: Positio
         return None
     now = pd.Timestamp(bars.index[-1]).to_pydatetime()
     ctx = Context(symbol=symbol, now=now, bars=bars, position=position or Position(), params=strategy.params)
-    return strategy.on_bar(ctx)
+    return strategy.decide(ctx)
 
 
 def idempotency_key(strategy_name: str, symbol: str, bar_ts: datetime) -> str:
@@ -185,7 +185,7 @@ def _run_strategy_symbol(
             side, price = "EXIT", close_px
         else:
             ctx = Context(symbol=symbol_code, now=ts, bars=window, position=pos, params=strat.params)
-            sig = strat.on_bar(ctx)
+            sig = strat.decide(ctx)
             if sig is None or (eod and sig.side in OPEN_SIDES):
                 continue
             if sig.side == "SELL" and pos.is_short:

@@ -24,7 +24,7 @@ UNIVERSAL_DEFAULTS = {
     "stop_loss_pct": None,
     "take_profit_pct": None,
     "hold_overnight": True,
-    "allow_short": False,
+    "direction": "long",
     "trade_type": "cash",
 }
 UNIVERSAL_META = {
@@ -41,10 +41,10 @@ UNIVERSAL_META = {
         "help": "OFFにすると日中足(1m/5m/15m)では15:20までに確定する最後の足で成行手仕舞いし、"
                 "その足では新規買いしない（デイトレ）。日足では無視",
     },
-    "allow_short": {
-        "label": "空売りする", "type": "bool",
-        "help": "オンにすると買いと対称な条件で売建（ショート）もする。"
-                "実発注では取引区分=margin（信用）が必要",
+    "direction": {
+        "label": "売買方向", "choices": ["long", "short", "both"],
+        "help": "long=買いのみ / short=売りのみ（買いと対称な条件で売建）/ both=両方。"
+                "売建の実発注には取引区分=margin（信用）が必要",
     },
     "trade_type": {
         "label": "取引区分", "choices": ["cash", "margin"],

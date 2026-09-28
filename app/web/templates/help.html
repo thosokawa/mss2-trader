@@ -149,9 +149,12 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
 に達したら損切りを優先する。<code>/optimize</code> でもカンマ区切りで範囲指定して一緒に最適化できる
 （例: 損切り欄に <code>2,3,5</code>）。</p>
 
-<h4>空売り / 取引区分</h4>
-<p>全戦略共通の <strong>空売りする</strong>（<code>allow_short</code>）をオンにすると、買いと上下対称な
-条件で<strong>売建</strong>（ショート）もする（例: SMAクロスならデッドクロスで売建、ゴールデンクロスで買戻し）。
+<h4>売買方向（空売り） / 取引区分</h4>
+<p>全戦略共通の <strong>売買方向</strong>（<code>direction</code>）で、<code>long</code>=買いのみ（既定・従来どおり）/
+<code>short</code>=売りのみ / <code>both</code>=両方 を選ぶ。売りは買いと上下対称な条件で<strong>売建</strong>
+（ショート）する（例: SMAクロスならデッドクロスで売建、ゴールデンクロスで買戻し）。
+同じ銘柄に「買いのみ」と「売りのみ」の戦略を別々に登録して運用することもできる（建玉・注文は戦略ごとに管理。
+信用の返済は買建/売建で区別される。日次損失リミットは全戦略の合計で判定）。
 バックテスト・ペーパーでは売建の損益（下がれば利益）・損切り/利確（上がったら損切り）・大引け手仕舞いが
 すべて反映される。信用の金利・貸株料は含まない。</p>
 <p><strong>取引区分</strong>（<code>trade_type</code>）は実発注の注文種別。<code>cash</code>=現物、

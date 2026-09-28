@@ -58,12 +58,60 @@ def test_short_stop_and_target_are_mirrored():
 # ---- 戦略 --------------------------------------------------------------------
 
 
-def test_builtin_strategies_have_short_params_and_default_off():
+def test_builtin_strategies_default_to_long_only_cash():
     for cp in BUILTIN.values():
         params = builtin_params()[cp]
-        assert params["allow_short"] is False
+        assert params["direction"] == "long"
         assert params["trade_type"] == "cash"
-        assert load_strategy_class(cp)(params).allow_short is False
+        strat = load_strategy_class(cp)(params)
+        assert strat.allow_long and not strat.allow_short
+
+
+def test_direction_and_legacy_allow_short():
+    assert SmaCross({"direction": "short"}).direction == "short"
+    assert SmaCross({"direction": "both"}).allow_long and SmaCross({"direction": "both"}).allow_short
+    # 旧パラメータ allow_short だけが保存されている戦略
+    assert SmaCross({"allow_short": True}).direction == "both"
+    assert SmaCross({"allow_short": "false"}).direction == "long"
+    assert SmaCross({}).direction == "long"
+    # direction があればそちらが優先
+    assert SmaCross({"direction": "long", "allow_short": True}).direction == "long"
+
+
+class BuyThenShort(BaseStrategy):
+    """ノーポジなら BUY と SHORT を交互に出す。方向の絞り込みの検証用。"""
+
+    default_params = {"qty": 100}
+    _n = 0
+
+    def on_bar(self, ctx):
+        if not ctx.position.is_flat:
+            return Signal("EXIT", reason="exit")
+        self._n += 1
+        return Signal("BUY" if self._n % 2 else "SHORT", reason="entry")
+
+
+def test_decide_filters_entries_by_direction():
+    bars = _bars([100.0] * 8)
+    for direction, want in (("long", {"LONG"}), ("short", {"SHORT"}), ("both", {"LONG", "SHORT"})):
+        strat = BuyThenShort({"direction": direction})
+        strat.timeframe = "5m"
+        res = run_backtest(strat, bars, "X", warmup=0)
+        assert {t.side for t in res.trades} == want, direction
+    # 手仕舞い（EXIT）は方向に関係なく通す
+    strat = BuyThenShort({"direction": "short"})
+    sig = strat.decide(Context("X", bars.index[-1], bars, Position(100, 100.0), strat.params))
+    assert sig is not None and sig.side == "EXIT"
+
+
+def test_short_only_sma_cross_never_buys():
+    up = [100 + i for i in range(25)]
+    down = [124 - i * 3 for i in range(10)]
+    up2 = [97 + i * 3 for i in range(10)]
+    strat = SmaCross({"fast": 3, "slow": 10, "direction": "short"})
+    strat.timeframe = "5m"
+    res = run_backtest(strat, _bars(up + down + up2), "X", warmup=0)
+    assert res.trades and all(t.side == "SHORT" for t in res.trades)
 
 
 def test_sma_cross_shorts_on_dead_cross_only_when_allowed():

@@ -56,11 +56,16 @@ Signal(side, qty=None, reason="", order_type="MKT", limit_price=None)
 いまのエンジンは `flat → long → flat` と `flat → short → flat`。同時に持つ建玉は1つで、
 建玉中の追加建て・分割決済・ドテン（同じ足で手仕舞い→反対に建てる）はしない。
 
-## 空売り（allow_short）と取引区分（trade_type）
+## 売買方向（direction）と取引区分（trade_type）
 
-`allow_short`（既定 `False`）・`trade_type`（`"cash"`=現物 / `"margin"`=信用、既定 `"cash"`）も
-全戦略共通パラメータ。`self.allow_short` が True のときだけ `SHORT` を返すこと。同梱の7戦略は
-買いと上下対称な売建ルールを持つ（例: SMA クロスはデッドクロスで売建、ゴールデンクロスで買戻し）。
+`direction`（`"long"`=買いのみ・既定 / `"short"`=売りのみ / `"both"`=両方）・`trade_type`
+（`"cash"`=現物 / `"margin"`=信用、既定 `"cash"`）も全戦略共通パラメータ。旧パラメータ
+`allow_short`（bool）だけが保存された戦略は true→`both`、それ以外→`long` として読む。
+
+エンジンは `on_bar()` を直接呼ばず `Strategy.decide()` を呼び、方向に合わない新規建て
+（`long` なのに `SHORT`、`short` なのに `BUY`）を捨てる（手仕舞いは常に通す）。戦略側は
+`self.allow_short` が True のときだけ `SHORT` を返せばよく、`BUY` を方向で出し分ける必要はない。
+同梱の7戦略は買いと上下対称な売建ルールを持つ（例: SMA クロスはデッドクロスで売建、ゴールデンクロスで買戻し）。
 ショートの損益は (建値 - 手仕舞い値) × 株数、損切り/利確は向きが逆（`stops.py` の `direction`）。
 信用の金利・貸株料はバックテスト・ペーパーでは考慮しない。
 

@@ -38,7 +38,7 @@ P0〜P3 済（雛形・バックテスト・RSSブリッジ・tick→足集約�
 を必ず読むこと。
 
 戦略共通パラメータ: 損切り/利確（`app/engine/stops.py`）、大引けをまたぐか
-（`hold_overnight`、`app/engine/eod.py`）、空売り（`allow_short`）、取引区分（`trade_type`=cash/margin）。
+（`hold_overnight`、`app/engine/eod.py`）、売買方向（`direction`=long/short/both。旧 `allow_short`）、取引区分（`trade_type`=cash/margin）。
 通知は Slack / メール（Gmail SMTP、`app/notify.py`）。
 
 **信用取引（実装済み・実弾未検証）**: 空売りは戦略・バックテスト・ペーパー・live・bridge まで対応

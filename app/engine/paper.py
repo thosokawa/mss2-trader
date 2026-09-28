@@ -4,7 +4,7 @@ mode=paper の戦略が live エンジンでシグナルを出したとき、Pap
 PaperTrade（1往復）を記録する。実発注は一切しない。
 
 - BUY   : 建玉が無ければ買いで開く
-- SHORT : 建玉が無ければ売建で開く（戦略が allow_short のときだけ出る）
+- SHORT : 建玉が無ければ売建で開く（売買方向が short / both のときだけ出る）
 - EXIT / COVER : 建玉があれば仕切って損益確定（SELL は買い建玉の手仕舞いとしてだけ扱う）
 ポジションは PaperTrade（status=open）から復元する（売建は qty をマイナスで返す）。
 """

@@ -1,7 +1,8 @@
 """過去足に対して Strategy.on_bar() を1本ずつ流し、擬似的に売買してパフォーマンスを測る。
 
 割り切り:
-- 買い（BUY）と、戦略が allow_short なら売建（SHORT）。同時に持つ建玉は1つ（ドテンはしない）
+- 買い（BUY）と売建（SHORT）。どちらを建てるかは売買方向 direction（買いのみ/売りのみ/両方）。
+  同時に持つ建玉は1つ（ドテンはしない）
 - 約定は「シグナルが出た足の終値」で成立（スリッページ/板は考慮しない）
 - 手数料は commission_per_trade（片道・円）で概算。信用の金利・貸株料は考慮しない
 - 損益は (手仕舞い値 - 建値) × 株数 × 方向（ロング +1 / ショート -1）
@@ -124,7 +125,7 @@ def run_backtest(
                 close(now, hit.price, hit.reason)
             else:
                 ctx = Context(symbol=symbol, now=now, bars=window, position=position, params=strategy.params)
-                sig = strategy.on_bar(ctx)
+                sig = strategy.decide(ctx)
                 if sig is not None:
                     if sig.side in OPEN_SIDES and position.is_flat and not eod:
                         qty = int(sig.qty or strategy.params.get("qty", 100))
