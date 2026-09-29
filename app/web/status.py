@@ -101,62 +101,71 @@ def system_status(s: Session, now_utc: datetime | None = None) -> dict:
         "today_failed": sum(1 for o in today_orders if o.status in ("rejected", "error", "timeout")),
         "today_pending": sum(1 for o in today_orders if o.status in ("new", "sending")),
         "today_signals": today_signals,
-        "day_pnl": eng.state.day_realized_pnl,
+        "day_pnl": live_pnl_today(s, now),
         "margin_supported": MARGIN_ORDERS_SUPPORTED,
         "now": now,
     }
 
 
-def strategy_overview(s: Session) -> list[dict]:
-    """有効な戦略ごとの状況（対象銘柄の現在値・建玉・最後のシグナル）。ダッシュボード用。"""
-    import json
-
+def strategy_state(s: Session, st: Strategy, names: dict | None = None) -> dict:
+    """1つの戦略の今の状況（対象銘柄ごとの現在値・建玉・含み損益、最後のシグナル）。"""
     from app.engine import paper
     from app.engine.live import position_from_signals
     from app.models import Symbol
     from app.symbols import parse_codes
+    from app.web.strategy_view import describe, load_params
+
+    if names is None:
+        names = {sym.code: sym.name for sym in s.exec(select(Symbol)).all()}
+    params = load_params(st)
+    qty_hint = int(params.get("qty", 100) or 100)
+    rows = []
+    for code in parse_codes(st.symbols):
+        if st.mode == "live":
+            pos = orders_engine.current_live_position(s, st.id, code, qty_hint)
+        elif st.mode == "paper":
+            pos = paper.current_position(s, st.id, code)
+        else:
+            pos = position_from_signals(s, st.id, code, qty_hint)
+        tick = s.exec(
+            select(Tick).where(Tick.symbol_code == code, Tick.price > 0).order_by(Tick.ts.desc())
+        ).first()
+        last = tick.price if tick else None
+        unrealized = (
+            (last - pos.avg_price) * abs(pos.qty) * pos.direction
+            if last and not pos.is_flat and pos.avg_price else None
+        )
+        rows.append({"code": code, "name": names.get(code, ""), "price": last,
+                     "tick_ts": tick.received_at if tick else None, "pos": pos,
+                     "unrealized": unrealized})
+    codes = [r["code"] for r in rows]
+    last_sig = s.exec(
+        select(Signal)
+        .where(Signal.strategy_id == st.id, Signal.symbol_code.in_(codes))
+        .order_by(Signal.ts.desc(), Signal.id.desc())
+    ).first() if codes else None
+    d = describe(st)
+    return {
+        "st": st, "rows": rows, "last_signal": last_sig, "desc": d,
+        "direction": d["direction"], "trade_type": d["trade_type"], "hold_overnight": d["hold_overnight"],
+    }
+
+
+def strategy_overview(s: Session) -> list[dict]:
+    """有効な戦略ごとの状況。ダッシュボード用。"""
+    from app.models import Symbol
 
     names = {sym.code: sym.name for sym in s.exec(select(Symbol)).all()}
-    out = []
     enabled = select(Strategy).where(Strategy.enabled == True, Strategy.deleted == False)  # noqa: E712
-    for st in s.exec(enabled.order_by(Strategy.name)).all():
-        try:
-            params = json.loads(st.params_json or "{}")
-        except ValueError:
-            params = {}
-        qty_hint = int(params.get("qty", 100) or 100)
-        rows = []
-        for code in parse_codes(st.symbols):
-            if st.mode == "live":
-                pos = orders_engine.current_live_position(s, st.id, code, qty_hint)
-            elif st.mode == "paper":
-                pos = paper.current_position(s, st.id, code)
-            else:
-                pos = position_from_signals(s, st.id, code, qty_hint)
-            tick = s.exec(
-                select(Tick).where(Tick.symbol_code == code, Tick.price > 0).order_by(Tick.ts.desc())
-            ).first()
-            last = tick.price if tick else None
-            unrealized = (
-                (last - pos.avg_price) * abs(pos.qty) * pos.direction
-                if last and not pos.is_flat and pos.avg_price else None
-            )
-            rows.append({"code": code, "name": names.get(code, ""), "price": last,
-                         "tick_ts": tick.received_at if tick else None, "pos": pos,
-                         "unrealized": unrealized})
-        codes = [r["code"] for r in rows]
-        last_sig = s.exec(
-            select(Signal)
-            .where(Signal.strategy_id == st.id, Signal.symbol_code.in_(codes))
-            .order_by(Signal.ts.desc(), Signal.id.desc())
-        ).first() if codes else None
-        out.append({
-            "st": st, "rows": rows, "last_signal": last_sig,
-            "direction": params.get("direction") or ("both" if params.get("allow_short") else "long"),
-            "trade_type": params.get("trade_type") or "cash",
-            "hold_overnight": params.get("hold_overnight", True),
-        })
-    return out
+    return [strategy_state(s, st, names) for st in s.exec(enabled.order_by(Strategy.name)).all()]
+
+
+def live_pnl_today(s: Session, now_utc: datetime | None = None) -> float:
+    """本日（JST）に手仕舞った実発注の往復の損益（概算）の合計。発注履歴から計算するので
+    backend を再起動しても消えない（RiskEngine の日次集計はプロセス内メモリで再起動で 0 に戻る）。"""
+    day0 = jst_day_start_utc(now_utc or utcnow())
+    trips = orders_engine.round_trips(s)
+    return sum(t["pnl"] for t in trips if t["pnl"] is not None and t["exit_ts"] >= day0)
 
 
 def _age_text(sec: float) -> str:

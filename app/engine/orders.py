@@ -148,6 +148,76 @@ def open_positions(session: Session) -> list[dict]:
     return out
 
 
+def round_trips(session: Session, strategy_id: int | None = None) -> list[dict]:
+    """発注履歴から実発注の往復（建て → 手仕舞い）を組み立てる。古い順。
+
+    建値・手仕舞い値は約定価格、無ければ ref_price（シグナル時点の価格）なので損益は概算。
+    手動決済の記録（manual）で閉じた往復は手仕舞い値が分からないので pnl=None。
+    発注中（new/sending）・失敗（rejected 等）の注文は数えない。
+    """
+    stmt = select(Order).order_by(Order.id)
+    if strategy_id is not None:
+        stmt = stmt.where(Order.strategy_id == strategy_id)
+    open_by: dict[tuple, Order] = {}
+    trips: list[dict] = []
+    for o in session.exec(stmt).all():
+        if o.status in TERMINAL_FAILURE or o.status in IN_FLIGHT:
+            continue
+        key = (o.strategy_id, o.symbol_code)
+        cur = open_by.get(key)
+        if o.side in OPEN_SIDES:
+            if cur is None:
+                open_by[key] = o
+            continue
+        if o.side not in CLOSE_SIDES or cur is None or (o.side == "SELL" and cur.side == "SHORT"):
+            continue
+        direction = OPEN_SIDES[cur.side]
+        entry = _exec_price(cur)
+        manual = o.status == MANUAL
+        exit_px = None if manual else (_exec_price(o) or None)
+        qty = cur.filled_qty or cur.qty
+        pnl = (exit_px - entry) * qty * direction if exit_px and entry else None
+        trips.append({
+            "strategy_id": o.strategy_id,
+            "strategy_name": cur.strategy_name or o.strategy_name,
+            "symbol_code": o.symbol_code,
+            "side": "SHORT" if direction < 0 else "LONG",
+            "trade_type": cur.trade_type,
+            "qty": qty,
+            "entry_ts": cur.ts,
+            "entry_price": entry,
+            "entry_reason": cur.reason,
+            "exit_ts": o.ts,
+            "exit_price": exit_px,
+            "exit_reason": o.reason,
+            "pnl": pnl,
+            "return_pct": (exit_px / entry - 1) * 100 * direction if pnl is not None and entry else None,
+            "manual": manual,
+        })
+        del open_by[key]
+    return trips
+
+
+def summarize_trips(trips: list[dict]) -> dict:
+    """往復の一覧から成績指標（paper.summarize の実発注版）。損益不明（手動決済）は件数だけ数える。"""
+    known = [t["pnl"] for t in trips if t["pnl"] is not None]
+    n = len(known)
+    out = {"trades": len(trips), "known": n, "manual": len(trips) - n}
+    if not n:
+        return out
+    wins = [p for p in known if p > 0]
+    gross_loss = -sum(p for p in known if p <= 0)
+    out.update({
+        "realized_pnl": round(sum(known), 0),
+        "win_rate_pct": round(100 * len(wins) / n, 1),
+        "avg_pnl": round(sum(known) / n, 0),
+        "profit_factor": round(sum(wins) / gross_loss, 2) if gross_loss else None,
+        "best": round(max(known), 0),
+        "worst": round(min(known), 0),
+    })
+    return out
+
+
 def record_manual_close(session: Session, strategy_id: int, symbol_code: str) -> Order | None:
     """MarketSpeed II で手動で決済した建玉を「決済済み」として記録する（発注はしない）。"""
     pos = current_live_position(session, strategy_id, symbol_code)

@@ -116,6 +116,8 @@
         <form method="get" action="/strategies" style="display:inline">
           <input type="hidden" name="class_path" value="{{ class_path }}">
           <input type="hidden" name="params_json" value="{{ r.params | tojson }}">
+          <input type="hidden" name="symbols" value="{{ selected_symbol }}">
+          {% if selected_timeframe and selected_timeframe != '1d' %}<input type="hidden" name="timeframe" value="{{ selected_timeframe }}">{% endif %}
           <button type="submit" class="outline">戦略登録</button>
         </form>
       </td>

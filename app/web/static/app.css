@@ -72,3 +72,14 @@ header nav li a { white-space: nowrap; }
 }
 th { white-space: nowrap; }
 td.nowrap { white-space: nowrap; }
+
+/* ---- 見出し＋右寄せボタン / 操作ボタン群 ---- */
+.titlebar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; }
+.titlebar h2 { margin: 0; }
+.titlebar [role="button"], .titlebar button { width: auto; margin: 0; }
+.actions { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+.actions form { margin: 0; }
+.actions [role="button"].small { padding: .15rem .6rem; font-size: .8rem; }
+.stratlist td { vertical-align: top; }
+details.livecard { border: 1px solid var(--pico-muted-border-color); border-radius: 8px; padding: .5rem .8rem; margin: .6rem 0; }
+details.livecard summary { font-size: .92rem; }

@@ -3,141 +3,54 @@
 {% from "_macros.html" import autorefresh with context %}
 {% block content %}
 {{ trading_tabs() }}
-<h2>戦略</h2>
-<p><small>有効にすると live エンジンが {{ '設定間隔ごと' }}に対象銘柄の確定足へ <code>on_bar()</code> を流し、
-シグナルを <a href="/signals">シグナル</a> 履歴に記録して通知（メール / Slack）します（発注はしません）。
-有効化した時点より後の足だけが対象です。<code>paper</code> モードなら擬似約定して<a href="/performance">成績</a>に反映します。
-「実発注」モードは実際に発注します — <a href="/risk">概要</a>で発注許可を ON にしない限り発注されません。
-有効な戦略の対象銘柄は自動で RSS の株価取り込み対象になります（bridge が30秒ほどで反映）。</small></p>
+<div class="titlebar">
+  <h2>戦略</h2>
+  <a href="/strategies/new" role="button">＋ 戦略を追加</a>
+</div>
+<p><small>有効にした戦略は、対象銘柄の足が確定するたびに判定してシグナルを記録・通知します。モードが「ペーパー」なら擬似約定して
+<a href="/performance">成績</a>に記録、「実発注」なら<a href="/risk">概要</a>で発注許可が ON のときだけ実際に発注します。
+有効な戦略の対象銘柄は自動でデータ収集の対象になります。名前をクリックすると詳細（設定・成績・シグナル）と編集。</small></p>
+
+{% if error_msg %}<p class="neg">{{ error_msg }}</p>{% endif %}
 
 <div {{ autorefresh("strat-warn", 10) }}>
 {% if no_ticks %}
 <p class="neg">株価がまだ一度も届いていない銘柄: {% for c in no_ticks %}{{ c }} {{ names.get(c, '') }}{% if not loop.last %}、{% endif %}{% endfor %}
 <br><small>bridge が起動していない、または反映待ち（30秒ほど）の可能性があります。株価が届かない銘柄は足ができずシグナルも出ません。</small></p>
 {% endif %}
-
 </div>
-{% if error_code == "dup_name" %}
-<p class="neg">同じ名前の戦略が既にあります。別の名前を付けてください。</p>
-{% elif error_code == "params" %}
-<p class="neg">パラメータ（JSON）の形式が正しくありません。</p>
-{% elif error_code == "no_symbols" %}
-<p class="neg">対象銘柄（証券コード）を1つ以上入れてください。</p>
-{% elif error_code == "open_position" %}
-<p class="neg">この戦略は実発注の建玉を持っています。建玉のある銘柄を外したり戦略を削除したりすると、bot がその建玉を
-管理しなくなります（損切り・手仕舞いが出ない）。先に手仕舞うか、手動で決済して <a href="/risk">自動売買</a> で
-「手動決済を記録」してください。</p>
-{% endif %}
-<article>
-  <form method="post" action="/strategies">
-    <div class="grid">
-      <label>名前<input name="name" placeholder="例: トヨタ 5分SMA" required></label>
-      <label>ロジック
-        <select name="class_path" id="class_path" required>
-          {% for label, cp in builtin.items() %}<option value="{{ cp }}" {% if prefill.class_path==cp %}selected{% endif %}>{{ label }} ({{ cp }})</option>{% endfor %}
-        </select>
-      </label>
-      <label>対象銘柄（証券コード。複数はカンマ区切り）
-        <input name="symbols" id="symbols" placeholder="例: 9984 または 9984,5016" required autocomplete="off">
-        <small id="symbols_hint"></small>
-      </label>
-    </div>
-    <div class="grid">
-      <label>足<select name="timeframe"><option>5m</option><option>1m</option><option>15m</option></select></label>
-      <label>モード
-        <select name="mode">
-          <option value="notify">通知のみ</option>
-          <option value="paper">ペーパートレード（擬似約定で成績を記録）</option>
-          <option value="live">実発注（発注許可 ON のときだけ発注）</option>
-        </select>
-      </label>
-    </div>
-
-    <strong>パラメータ</strong>
-    <div class="pf-fields" id="param_fields"></div>
-    <details id="json_details">
-      <summary><small>JSON で直接編集</small></summary>
-      <textarea id="params_json_visible" rows="4">{{ prefill.params_json or '{"fast": 5, "slow": 20, "qty": 100}' }}</textarea>
-    </details>
-    <input type="hidden" name="params_json" id="params_json">
-
-    <button type="submit" style="margin-top:.6rem">追加</button>
-  </form>
-</article>
-
-<script src="/static/param_form.js"></script>
-<script>
-  const STRAT_PARAMS = {{ builtin_params | tojson }};
-  const STRAT_META = {{ builtin_param_meta | tojson }};
-  const _sel = document.getElementById('class_path');
-  const _jsonArea = document.getElementById('params_json_visible');
-
-  const pf = ParamForm.mount({
-    containerEl: document.getElementById('param_fields'),
-    hiddenEl: document.getElementById('params_json'),
-    jsonAreaEl: _jsonArea,
-    allowRanges: false,
-  });
-
-  let initial = null;
-  try { initial = JSON.parse(_jsonArea.value); } catch (e) { /* 壊れたJSON、defaultsで組む */ }
-  pf.rebuild(STRAT_PARAMS[_sel.value] || {}, STRAT_META[_sel.value] || {}, initial);
-
-  _sel.addEventListener('change', () => {
-    pf.rebuild(STRAT_PARAMS[_sel.value] || {}, STRAT_META[_sel.value] || {}, null);
-  });
-
-  // 対象銘柄の入力に合わせて銘柄名を表示する（銘柄マスタ /data の「銘柄一覧を更新」から）
-  (() => {
-    const input = document.getElementById('symbols'), hint = document.getElementById('symbols_hint');
-    let timer = null;
-    async function show() {
-      const codes = input.value.split(/[,\s、，]+/).map(c => c.trim()).filter(c => c.length >= 4);
-      const parts = await Promise.all(codes.map(async c => {
-        try {
-          const d = await (await fetch('/api/symbol-name?code=' + encodeURIComponent(c))).json();
-          return d.name ? `${d.code} ${d.name}` : `${d.code}（銘柄一覧に見つかりません）`;
-        } catch (e) { return c; }
-      }));
-      hint.textContent = parts.join(' / ');
-    }
-    input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(show, 300); });
-  })();
-</script>
 
 <div {{ autorefresh("strat-list", 5) }}>
 {% if rows %}
-<table>
-  <thead><tr><th>名前</th><th>ロジック</th><th>対象銘柄</th><th>足</th><th>モード</th><th>状態</th><th></th></tr></thead>
+<table class="stratlist">
+  <thead><tr><th>戦略</th><th>対象銘柄</th><th>モード</th><th>状態</th><th></th></tr></thead>
   <tbody>
-  {% for st in rows %}
+  {% for o in rows %}
+    {% set st = o.st %}
     <tr>
-      <td>{{ st.name }}<br><small>{{ st.params_json }}</small></td>
-      <td><small>{{ st.class_path }}</small></td>
       <td>
-        {% for c in parse_codes(st.symbols) %}{{ c }} {{ names.get(c, '') }}<br>{% else %}<span class="neg">未設定</span><br>{% endfor %}
-        <details><summary><small>変更</small></summary>
-          <form method="post" action="/strategies/{{ st.id }}/symbols">
-            <input name="symbols" value="{{ st.symbols }}" required>
-            <button class="outline" type="submit">更新</button>
-          </form>
-        </details>
+        <a href="/strategies/{{ st.id }}"><strong>{{ st.name }}</strong></a><br>
+        <small>{{ o.desc.summary }}</small>
       </td>
-      <td>{{ st.timeframe }}</td>
-      <td>{{ st.mode | mode_label }}</td>
+      <td class="nowrap">
+        {% for r in o.rows %}{{ r.code }} <small>{{ r.name }}</small>
+          {% if not r.pos.is_flat %}<span class="tag tag-live">{{ '売建' if r.pos.is_short else '買建' }} {{ r.pos.qty | abs }}</span>{% endif %}<br>
+        {% else %}<span class="neg">未設定</span>{% endfor %}
+      </td>
+      <td><span class="tag tag-{{ st.mode }}">{{ st.mode | mode_label }}</span></td>
       <td>{% if st.enabled %}<span class="pos">稼働中</span>{% else %}<span class="neg">停止</span>{% endif %}</td>
-      <td style="white-space:nowrap">
-        <form method="post" action="/strategies/{{ st.id }}/toggle" style="display:inline">
-          <button class="outline" type="submit">{{ '停止' if st.enabled else '有効化' }}</button>
+      <td class="actions">
+        <form method="post" action="/strategies/{{ st.id }}/toggle" class="inline">
+          <button class="outline small" type="submit"
+            {% if not st.enabled and st.mode == 'live' %}onclick="return confirm('実発注モードの戦略を有効にします。発注許可が ON なら実際に発注されます。よろしいですか？')"{% endif %}>
+            {{ '停止' if st.enabled else '有効化' }}</button>
         </form>
-        <form method="post" action="/strategies/{{ st.id }}/delete" style="display:inline" onsubmit="return confirm('削除しますか？')">
-          <button class="secondary outline" type="submit">削除</button>
-        </form>
+        <a href="/strategies/{{ st.id }}/edit" role="button" class="outline small">編集</a>
       </td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
-{% else %}<p>まだ戦略がありません。</p>{% endif %}
+{% else %}<p>まだ戦略がありません。「＋ 戦略を追加」から登録してください。</p>{% endif %}
 </div>
 {% endblock %}

@@ -64,9 +64,11 @@ def test_strategy_crud(client):
     r = client.get("/strategies")
     assert "SMAテスト戦略" in r.text
     assert "停止" in r.text  # 既定は無効
-    assert 'value="7974,8035"' in r.text
+    # 一覧は JSON ではなく要約文
+    assert "SMAクロス（5/20）" in r.text and "&#34;fast&#34;" not in r.text
 
     strategy_id = max(int(x) for x in re.findall(r"/strategies/(\d+)/toggle", r.text))
+    assert 'value="7974,8035"' in client.get(f"/strategies/{strategy_id}/edit").text
     # 無効の間は株価の取り込み対象に入らない
     assert "8035" not in client.get("/api/quote-codes").json()["codes"]
     r = client.post(f"/strategies/{strategy_id}/toggle", follow_redirects=True)
@@ -74,7 +76,7 @@ def test_strategy_crud(client):
     assert "8035" in client.get("/api/quote-codes").json()["codes"]
 
     r = client.post(f"/strategies/{strategy_id}/symbols", data={"symbols": "7974"}, follow_redirects=True)
-    assert 'value="7974"' in r.text
+    assert 'value="7974"' in client.get(f"/strategies/{strategy_id}/edit").text
     assert "8035" not in client.get("/api/quote-codes").json()["codes"]
 
     r = client.post(f"/strategies/{strategy_id}/delete", follow_redirects=True)
@@ -363,7 +365,7 @@ def test_stop_loss_take_profit_appear_in_all_param_forms(client):
 
     escaped_stop = json.dumps("損切り(%)")[1:-1]
     escaped_tp = json.dumps("利確(%)")[1:-1]
-    for path in ("/backtest", "/strategies", "/optimize"):
+    for path in ("/backtest", "/strategies/new", "/optimize"):
         r = client.get(path)
         assert r.status_code == 200
         assert escaped_stop in r.text, f"{path} に損切りの universal param が無い"
@@ -454,16 +456,16 @@ def test_deleted_strategy_id_is_not_reused(client):
             "timeframe": "5m", "params_json": "{}", "mode": "notify"}
     client.post("/strategies", data={**data, "name": "消す戦略"})
     r = client.get("/strategies")
-    old_id = max(int(x) for x in re.findall(r"/strategies/(\d+)/delete", r.text))
+    old_id = max(int(x) for x in re.findall(r"/strategies/(\d+)/toggle", r.text))
     client.post(f"/strategies/{old_id}/delete")
     r = client.post("/strategies", data={**data, "name": "消す戦略"}, follow_redirects=True)
     assert "同じ名前" not in r.text  # 同じ名前で作り直せる
-    new_id = max(int(x) for x in re.findall(r"/strategies/(\d+)/delete", r.text))
+    new_id = max(int(x) for x in re.findall(r"/strategies/(\d+)/toggle", client.get("/strategies").text))
     assert new_id != old_id
     with Session(engine) as s:
         old = s.get(Strategy, old_id)
         assert old.deleted and not old.enabled and "削除済み" in old.name
-        assert f"/strategies/{old_id}/" not in r.text  # 一覧には出ない
+        assert f"/strategies/{old_id}/" not in client.get("/strategies").text  # 一覧には出ない
         assert s.exec(select(Strategy).where(Strategy.name == "消す戦略")).one().id == new_id
 
 
@@ -547,3 +549,110 @@ def test_symbols_page_and_tabs(client):
         assert 'aria-current="page">自動売買</a>' in html, path
     assert "実発注" in client.get("/strategies").text  # モード名は日本語
     client.post(f"/strategies/{sid}/toggle")
+
+
+def test_strategy_new_detail_edit_flow(client):
+    """追加 → 詳細（日本語の設定表示）→ 編集（パラメータ変更）→ 詳細に反映。"""
+    import re
+
+    r = client.post("/strategies", data={
+        "name": "編集フロー戦略", "class_path": "app.strategy.examples.macd_cross:MacdCross",
+        "symbols": "7203", "timeframe": "1m", "mode": "notify",
+        "params_json": '{"fast": 12, "slow": 26, "signal": 9, "qty": 100, "stop_loss_pct": 0.5,'
+                       ' "hold_overnight": false, "direction": "both"}',
+    }, follow_redirects=True)
+    assert r.status_code == 200
+    sid = int(re.search(r"/strategies/(\d+)/edit", r.text).group(1))
+    # 詳細: パラメータは日本語の項目名
+    assert "MACD短期期間" in r.text and "損切り" in r.text and "0.5%" in r.text
+    assert "買い・売り" in r.text and "またがない" in r.text and "通知のみ" in r.text
+
+    # 編集フォームは既存値で埋まっている
+    r = client.get(f"/strategies/{sid}/edit")
+    assert 'value="編集フロー戦略"' in r.text and "&#34;stop_loss_pct&#34;: 0.5" in r.text
+
+    # パラメータ・名前・モードを変える
+    r = client.post(f"/strategies/{sid}/edit", data={
+        "name": "編集フロー戦略2", "class_path": "app.strategy.examples.macd_cross:MacdCross",
+        "symbols": "7203", "timeframe": "1m", "mode": "paper",
+        "params_json": '{"fast": 10, "slow": 30, "signal": 9, "qty": 200, "stop_loss_pct": 1}',
+    }, follow_redirects=True)
+    assert "編集フロー戦略2" in r.text and "ペーパー" in r.text and "200 株" in r.text and "1%" in r.text
+
+    # 名前の重複はフォームにエラーを出して入力を保つ
+    client.post("/strategies", data={"name": "別の戦略", "symbols": "7203", "params_json": "{}",
+                                     "class_path": "app.strategy.examples.sma_cross:SmaCross"})
+    r = client.post(f"/strategies/{sid}/edit", data={
+        "name": "別の戦略", "class_path": "app.strategy.examples.macd_cross:MacdCross",
+        "symbols": "7203", "timeframe": "1m", "mode": "paper", "params_json": "{}"})
+    assert "同じ名前" in r.text and 'value="別の戦略"' in r.text
+
+
+def test_strategy_edit_is_locked_while_live_position_open(client):
+    import re
+
+    from sqlmodel import Session
+
+    from app.db import engine
+    from app.engine import orders
+    from app.models import Strategy
+
+    r = client.post("/strategies", data={
+        "name": "建玉ロック戦略", "class_path": "app.strategy.examples.sma_cross:SmaCross",
+        "symbols": "9931,9932", "timeframe": "1m", "mode": "live", "params_json": '{"qty": 100}',
+    }, follow_redirects=True)
+    sid = int(re.search(r"/strategies/(\d+)/edit", r.text).group(1))
+    with Session(engine) as s:
+        st = s.get(Strategy, sid)
+        o = orders.queue_order(s, st, "9931", "BUY", 100, "test", ref_price=1000.0)
+        o.status = "sent"
+        s.add(o)
+        s.commit()
+
+    r = client.get(f"/strategies/{sid}/edit")
+    assert "変えられません" in r.text
+    base = {"name": "建玉ロック戦略", "class_path": "app.strategy.examples.sma_cross:SmaCross",
+            "timeframe": "1m", "mode": "live", "params_json": '{"qty": 100, "stop_loss_pct": 2}'}
+    # モード変更・建玉のある銘柄の除外は拒否
+    r = client.post(f"/strategies/{sid}/edit", data={**base, "symbols": "9931,9932", "mode": "paper"})
+    assert "建玉を持っています" in r.text
+    r = client.post(f"/strategies/{sid}/edit", data={**base, "symbols": "9932"})
+    assert "建玉を持っています" in r.text
+    # パラメータ（損切り）の変更と、建玉の無い銘柄の除外は OK
+    r = client.post(f"/strategies/{sid}/edit", data={**base, "symbols": "9931"}, follow_redirects=True)
+    assert "2%" in r.text
+    with Session(engine) as s:
+        assert s.get(Strategy, sid).symbols == "9931"
+        orders.record_manual_close(s, sid, "9931")
+
+
+def test_performance_shows_live_round_trips(client):
+    from sqlmodel import Session
+
+    from app.db import engine
+    from app.engine import orders
+    from app.models import Strategy
+
+    with Session(engine) as s:
+        st = Strategy(name="成績テスト戦略", class_path="a:B", symbols="9941", mode="live")
+        s.add(st)
+        s.commit()
+        s.refresh(st)
+        for side, px in (("BUY", 1000.0), ("EXIT", 1012.5), ("BUY", 1010.0), ("EXIT", 1005.0)):
+            o = orders.queue_order(s, st, "9941", side, 100, side, ref_price=px)
+            o.status = "sent"
+            s.add(o)
+        s.commit()
+        trips = orders.round_trips(s, st.id)
+        assert [t["pnl"] for t in trips] == [1250.0, -500.0]
+        m = orders.summarize_trips(trips)
+        assert m["realized_pnl"] == 750 and m["win_rate_pct"] == 50.0 and m["profit_factor"] == 2.5
+
+    r = client.get("/performance")
+    assert "実発注" in r.text and "成績テスト戦略" in r.text and "+750円" in r.text
+    assert "1,000.0 → 1,012.5" in r.text
+
+
+def test_signals_filter_by_strategy(client):
+    r = client.get("/signals", params={"strategy_id": 999999})
+    assert r.status_code == 200 and "すべての戦略" in r.text

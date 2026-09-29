@@ -502,6 +502,7 @@ def optimize_run(
         _ctx(
             request, symbols=symbols, result=top, run_id=run.id, combos=len(rows),
             class_path=class_path, selected_symbol=symbol_code, rank_by=rank_by,
+            selected_timeframe=timeframe,
         ),
     )
 
@@ -538,45 +539,94 @@ def optimization_detail(run_id: int, request: Request, s: Session = Depends(get_
 
 
 @router.get("/signals", response_class=HTMLResponse)
-def signals(request: Request, s: Session = Depends(get_session)):
-    rows = s.exec(select(Signal).order_by(Signal.ts.desc()).limit(300)).all()
-    return templates.TemplateResponse(request, "signals.html", _ctx(request, rows=rows))
+def signals(request: Request, strategy_id: int | None = None, s: Session = Depends(get_session)):
+    """自動売買 › シグナル。?strategy_id= で戦略ごとに絞り込む。"""
+    stmt = select(Signal)
+    if strategy_id:
+        stmt = stmt.where(Signal.strategy_id == strategy_id)
+    rows = s.exec(stmt.order_by(Signal.ts.desc(), Signal.id.desc()).limit(300)).all()
+    return templates.TemplateResponse(
+        request, "signals.html",
+        _ctx(request, rows=rows, strategies=_active_strategies(s), strategy_id=strategy_id),
+    )
 
 
 # ---- 戦略（live エンジンで回す） -------------------------------------------
 
 
-@router.get("/strategies", response_class=HTMLResponse)
-def strategies(request: Request, s: Session = Depends(get_session)):
-    rows = s.exec(
+STRATEGY_ERRORS = {
+    "dup_name": "同じ名前の戦略が既にあります。別の名前を付けてください。",
+    "params": "パラメータ（JSON）の形式が正しくありません。",
+    "no_symbols": "対象銘柄（証券コード）を1つ以上入れてください。",
+    "open_position": "この戦略は実発注の建玉を持っています。建玉がある間は、ロジック・足・モードの変更、"
+                     "建玉のある銘柄を外すこと、戦略の削除はできません"
+                     "（bot がその建玉を管理しなくなり、損切り・手仕舞いが出なくなるため）。"
+                     "先に手仕舞うか、手動で決済して 自動売買 › 概要 で「手動決済を記録」してください。",
+}
+
+
+def _active_strategies(s: Session) -> list[Strategy]:
+    return s.exec(
         select(Strategy).where(Strategy.deleted == False).order_by(Strategy.created_at.desc())  # noqa: E712
     ).all()
+
+
+@router.get("/strategies", response_class=HTMLResponse)
+def strategies(request: Request, s: Session = Depends(get_session)):
+    """自動売買 › 戦略: 一覧（設定は要約文で表示）。"""
+    if request.query_params.get("class_path"):
+        # /optimizations の「この設定で戦略登録」→ 追加画面へ（パラメータを引き継ぐ）
+        return RedirectResponse(f"/strategies/new?{request.url.query}", status_code=303)
     names = {sym.code: sym.name for sym in s.exec(select(Symbol)).all()}
-    # 取り込み中の銘柄（有効な戦略の銘柄 ∪ 監視銘柄）のうち、まだ株価が1件も届いていないもの
     received = set(s.exec(select(Tick.symbol_code).distinct()).all())
     no_ticks = [c for c in symbols.quote_codes(s) if c not in received]
-    # /optimizations の「この設定で戦略登録」からの遷移でパラメータを事前入力する
-    prefill = {
-        "class_path": request.query_params.get("class_path", ""),
-        "params_json": request.query_params.get("params_json", ""),
-    }
+    rows = [status_mod.strategy_state(s, st, names) for st in _active_strategies(s)]
     return templates.TemplateResponse(
         request,
         "strategies.html",
-        _ctx(
-            request,
-            rows=rows,
-            names=names,
-            parse_codes=symbols.parse_codes,
-            no_ticks=no_ticks,
-            prefill=prefill,
-            error_code=request.query_params.get("error", ""),
-        ),
+        _ctx(request, rows=rows, names=names, no_ticks=no_ticks,
+             error_msg=STRATEGY_ERRORS.get(request.query_params.get("error", ""), "")),
     )
+
+
+def _strategy_form(request: Request, *, st: Strategy | None, values: dict, error_code: str = "",
+                   locked: list[str] | None = None):
+    return templates.TemplateResponse(
+        request,
+        "strategy_form.html",
+        _ctx(request, st=st, v=values, error_msg=STRATEGY_ERRORS.get(error_code, error_code),
+             locked=locked or []),
+    )
+
+
+@router.get("/strategies/new", response_class=HTMLResponse)
+def strategy_new(request: Request):
+    q = request.query_params
+    values = {"name": "", "class_path": q.get("class_path", ""), "symbols": q.get("symbols", ""),
+              "timeframe": q.get("timeframe", "5m"), "mode": "notify",
+              "params_json": q.get("params_json", "")}
+    return _strategy_form(request, st=None, values=values)
+
+
+def _validate_strategy_form(s: Session, values: dict, exclude_id: int | None = None) -> str:
+    if not values["name"]:
+        return "名前を入れてください。"
+    try:
+        if not isinstance(json.loads(values["params_json"] or "{}"), dict):
+            return "params"
+    except json.JSONDecodeError:
+        return "params"
+    dup = s.exec(select(Strategy).where(Strategy.name == values["name"])).first()
+    if dup and dup.id != exclude_id:
+        return "dup_name"
+    if not symbols.parse_codes(values["symbols"]):
+        return "no_symbols"
+    return ""
 
 
 @router.post("/strategies")
 def create_strategy(
+    request: Request,
     name: str = Form(...),
     class_path: str = Form(...),
     symbols_text: str = Form("", alias="symbols"),
@@ -585,36 +635,142 @@ def create_strategy(
     mode: str = Form("notify"),
     s: Session = Depends(get_session),
 ):
-    name = name.strip()
-    if not name:
-        return RedirectResponse("/strategies", status_code=303)
-    try:
-        json.loads(params_json or "{}")
-    except json.JSONDecodeError:
-        return RedirectResponse("/strategies?error=params", status_code=303)
-    if s.exec(select(Strategy).where(Strategy.name == name)).first():
-        return RedirectResponse("/strategies?error=dup_name", status_code=303)
+    values = {"name": name.strip(), "class_path": class_path.strip(), "symbols": symbols_text,
+              "timeframe": timeframe, "mode": mode, "params_json": params_json.strip() or "{}"}
+    err = _validate_strategy_form(s, values)
+    if err:
+        return _strategy_form(request, st=None, values=values, error_code=err)
     codes = symbols.parse_codes(symbols_text)
-    if not codes:
-        return RedirectResponse("/strategies?error=no_symbols", status_code=303)
     symbols.ensure_symbols(s, codes)
-    s.add(
-        Strategy(
-            name=name,
-            class_path=class_path.strip(),
-            params_json=params_json.strip() or "{}",
-            symbols=",".join(codes),
-            timeframe=timeframe,
-            mode=mode,
-            enabled=False,
-        )
+    st = Strategy(
+        name=values["name"],
+        class_path=values["class_path"],
+        params_json=values["params_json"],
+        symbols=",".join(codes),
+        timeframe=timeframe,
+        mode=mode,
+        enabled=False,
     )
+    s.add(st)
     s.commit()
-    return RedirectResponse("/strategies", status_code=303)
+    s.refresh(st)
+    return RedirectResponse(f"/strategies/{st.id}", status_code=303)
+
+
+def _get_strategy(s: Session, strategy_id: int) -> Strategy | None:
+    st = s.get(Strategy, strategy_id)
+    return st if st and not st.deleted else None
+
+
+@router.get("/strategies/{strategy_id}", response_class=HTMLResponse)
+def strategy_detail(strategy_id: int, request: Request, s: Session = Depends(get_session)):
+    """戦略の詳細: 設定（日本語の項目名）・今の状況・成績・シグナル・発注。"""
+    st = _get_strategy(s, strategy_id)
+    if not st:
+        return RedirectResponse("/strategies", status_code=303)
+    state = status_mod.strategy_state(s, st)
+    trips = list(reversed(orders_engine.round_trips(s, st.id)))
+    paper_trades = s.exec(
+        select(PaperTrade).where(PaperTrade.strategy_id == st.id)
+        .order_by(PaperTrade.entry_ts.desc()).limit(50)
+    ).all()
+    paper_closed = [t for t in paper_trades if t.status == "closed"]
+    return templates.TemplateResponse(
+        request,
+        "strategy_detail.html",
+        _ctx(
+            request,
+            state=state,
+            d=state["desc"],
+            trips=trips[:50],
+            live_summary=orders_engine.summarize_trips(trips),
+            paper_trades=paper_trades,
+            paper_summary=paper.summarize(paper_closed),
+            signals=s.exec(
+                select(Signal).where(Signal.strategy_id == st.id)
+                .order_by(Signal.ts.desc(), Signal.id.desc()).limit(30)
+            ).all(),
+            orders=s.exec(
+                select(Order).where(Order.strategy_id == st.id)
+                .order_by(Order.ts.desc(), Order.id.desc()).limit(30)
+            ).all(),
+            open_codes=_open_live_codes(s, st.id),
+            error_msg=STRATEGY_ERRORS.get(request.query_params.get("error", ""), ""),
+        ),
+    )
+
+
+def _locked_fields(s: Session, st: Strategy) -> list[str]:
+    """建玉がある間は変えられない項目（変えると bot がその建玉を管理しなくなる）。"""
+    return ["class_path", "timeframe", "mode"] if _open_live_codes(s, st.id) else []
+
+
+@router.get("/strategies/{strategy_id}/edit", response_class=HTMLResponse)
+def strategy_edit(strategy_id: int, request: Request, s: Session = Depends(get_session)):
+    st = _get_strategy(s, strategy_id)
+    if not st:
+        return RedirectResponse("/strategies", status_code=303)
+    values = {"name": st.name, "class_path": st.class_path, "symbols": st.symbols,
+              "timeframe": st.timeframe, "mode": st.mode, "params_json": st.params_json}
+    return _strategy_form(request, st=st, values=values, locked=_locked_fields(s, st))
+
+
+@router.post("/strategies/{strategy_id}/edit")
+def strategy_update(
+    strategy_id: int,
+    request: Request,
+    name: str = Form(...),
+    class_path: str = Form(""),
+    symbols_text: str = Form("", alias="symbols"),
+    timeframe: str = Form(""),
+    params_json: str = Form("{}"),
+    mode: str = Form(""),
+    s: Session = Depends(get_session),
+):
+    st = _get_strategy(s, strategy_id)
+    if not st:
+        return RedirectResponse("/strategies", status_code=303)
+    locked = _locked_fields(s, st)
+    values = {"name": name.strip(), "class_path": class_path.strip() or st.class_path,
+              "symbols": symbols_text, "timeframe": timeframe or st.timeframe,
+              "mode": mode or st.mode, "params_json": params_json.strip() or "{}"}
+    err = _validate_strategy_form(s, values, exclude_id=st.id)
+    codes = symbols.parse_codes(symbols_text)
+    if not err and locked:
+        changed = [f for f in locked if values[f] != getattr(st, f)]
+        removed = [c for c in _open_live_codes(s, st.id) if c not in codes]
+        if changed or removed:
+            err = "open_position"
+    if err:
+        return _strategy_form(request, st=st, values=values, error_code=err, locked=locked)
+
+    old_codes = set(symbols.parse_codes(st.symbols))
+    reset_all = values["timeframe"] != st.timeframe or values["class_path"] != st.class_path
+    symbols.ensure_symbols(s, codes)
+    st.name = values["name"]
+    st.class_path = values["class_path"]
+    st.params_json = values["params_json"]
+    st.symbols = ",".join(codes)
+    st.timeframe = values["timeframe"]
+    st.mode = values["mode"]
+    s.add(st)
+    # 足・ロジックを変えたら全銘柄、銘柄を足したらその銘柄を「今より後の足だけ」から評価し直す
+    for c in s.exec(select(LiveCursor).where(LiveCursor.strategy_id == st.id)).all():
+        if reset_all or c.symbol_code not in old_codes:
+            s.delete(c)
+    s.commit()
+    return RedirectResponse(f"/strategies/{st.id}", status_code=303)
+
+
+def _back(next_url: str, default: str = "/strategies") -> RedirectResponse:
+    """フォームの next（戻り先）へ。外部 URL には飛ばさない。"""
+    ok = next_url.startswith("/") and not next_url.startswith("//")
+    return RedirectResponse(next_url if ok else default, status_code=303)
 
 
 @router.post("/strategies/{strategy_id}/toggle")
-def toggle_strategy(strategy_id: int, s: Session = Depends(get_session)):
+def toggle_strategy(strategy_id: int, next_url: str = Form("/strategies", alias="next"),
+                    s: Session = Depends(get_session)):
     st = s.get(Strategy, strategy_id)
     if st:
         st.enabled = not st.enabled
@@ -625,7 +781,7 @@ def toggle_strategy(strategy_id: int, s: Session = Depends(get_session)):
             for c in s.exec(select(LiveCursor).where(LiveCursor.strategy_id == strategy_id)).all():
                 s.delete(c)
         s.commit()
-    return RedirectResponse("/strategies", status_code=303)
+    return _back(next_url)
 
 
 def _open_live_codes(s: Session, strategy_id: int) -> list[str]:
@@ -792,8 +948,28 @@ def performance(request: Request, s: Session = Depends(get_session)):
                 "trades": trades[:50],
             }
         )
+    # 実発注: 発注履歴から往復（建て→手仕舞い）を組み立てた概算の成績。戦略ごと（削除済みも含む）
+    day0 = status_mod.jst_day_start_utc(_now_utc())
+    by_strategy: dict[int, list[dict]] = {}
+    for t in orders_engine.round_trips(s):
+        by_strategy.setdefault(t["strategy_id"], []).append(t)
+    live_cards = []
+    for sid, trips in by_strategy.items():
+        st = s.get(Strategy, sid)
+        known_today = [t["pnl"] for t in trips if t["pnl"] is not None and t["exit_ts"] >= day0]
+        live_cards.append({
+            "strategy_id": sid,
+            "name": trips[-1]["strategy_name"],
+            "alive": bool(st and not st.deleted),
+            "metrics": orders_engine.summarize_trips(trips),
+            "today": round(sum(known_today), 0),
+            "trips": list(reversed(trips))[:30],
+        })
+    live_cards.sort(key=lambda c: (not c["alive"], c["name"]))
+    live_total = orders_engine.summarize_trips(orders_engine.round_trips(s))
     return templates.TemplateResponse(
-        request, "performance.html", _ctx(request, cards=cards, names=names)
+        request, "performance.html",
+        _ctx(request, cards=cards, names=names, live_cards=live_cards, live_total=live_total),
     )
 
 

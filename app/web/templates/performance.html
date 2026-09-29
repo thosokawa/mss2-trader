@@ -3,7 +3,51 @@
 {% from "_macros.html" import autorefresh with context %}
 {% block content %}
 {{ trading_tabs() }}
-<h2>成績 — ペーパートレード</h2>
+<h2>成績</h2>
+
+<div {{ autorefresh("perf-live", 10) }}>
+<h3>実発注 <small>（発注履歴から計算した概算。受理＝シグナル価格で約定とみなす）</small></h3>
+{% if live_cards %}
+{% set m = live_total %}
+<div class="metrics">
+  <div><div class="k">往復（全戦略）</div><div class="v">{{ m.trades }}</div></div>
+  {% if m.known %}
+  <div><div class="k">実現損益（合計）</div><div class="v {{ 'pos' if m.realized_pnl > 0 else 'neg' if m.realized_pnl < 0 else '' }}">{{ '{:+,.0f}'.format(m.realized_pnl) }}円</div></div>
+  <div><div class="k gloss" title="{{ '勝率'|gloss }}">勝率</div><div class="v">{{ m.win_rate_pct }}%</div></div>
+  <div><div class="k gloss" title="{{ 'PF'|gloss }}">PF</div><div class="v">{{ m.profit_factor if m.profit_factor is not none else '—' }}</div></div>
+  {% endif %}
+  {% if m.manual %}<div><div class="k">手動決済（損益不明）</div><div class="v">{{ m.manual }}</div></div>{% endif %}
+</div>
+{% for c in live_cards %}
+<details {% if loop.first %}open{% endif %} class="livecard">
+  <summary>
+    <strong>{% if c.alive %}<a href="/strategies/{{ c.strategy_id }}">{{ c.name }}</a>{% else %}{{ c.name }} <small class="neg">（削除済み）</small>{% endif %}</strong>
+    — 往復 {{ c.metrics.trades }}
+    {% if c.metrics.known %} / 実現損益 <span class="{{ 'pos' if c.metrics.realized_pnl > 0 else 'neg' if c.metrics.realized_pnl < 0 else '' }}">{{ '{:+,.0f}'.format(c.metrics.realized_pnl) }}円</span>
+      / 勝率 {{ c.metrics.win_rate_pct }}%{% endif %}
+    / 本日 <span class="{{ 'pos' if c.today > 0 else 'neg' if c.today < 0 else '' }}">{{ '{:+,.0f}'.format(c.today) }}円</span>
+  </summary>
+  <table>
+    <thead><tr><th>建て</th><th>手仕舞い</th><th>銘柄</th><th>売買</th><th>株数</th><th>建値 → 手仕舞い値</th><th>損益</th><th>%</th></tr></thead>
+    <tbody>
+    {% for t in c.trips %}
+      <tr title="{{ t.entry_reason }} / {{ t.exit_reason }}">
+        <td>{{ t.entry_ts | jst('%m/%d %H:%M') }}</td><td>{{ t.exit_ts | jst('%m/%d %H:%M') }}</td>
+        <td>{{ t.symbol_code }} <small>{{ names.get(t.symbol_code, '') }}</small></td>
+        <td>{{ '売建' if t.side == 'SHORT' else '買建' }}{% if t.trade_type == 'margin' %}（信用）{% endif %}</td><td>{{ t.qty }}</td>
+        <td>{{ '{:,.1f}'.format(t.entry_price) }} → {{ '{:,.1f}'.format(t.exit_price) if t.exit_price else '手動決済' }}</td>
+        <td class="{{ 'pos' if (t.pnl or 0) > 0 else 'neg' if (t.pnl or 0) < 0 else '' }}">{{ '{:+,.0f}'.format(t.pnl) if t.pnl is not none else '—' }}</td>
+        <td>{{ '{:+.2f}'.format(t.return_pct) if t.return_pct is not none else '—' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</details>
+{% endfor %}
+{% else %}<p>実発注の往復はまだありません。</p>{% endif %}
+</div>
+
+<h3>ペーパートレード</h3>
 <p><small>mode=<code>paper</code> の<a href="/strategies">戦略</a>が live エンジンでシグナルを出すと PaperBroker で擬似約定します。
 実発注はしません。含み損益は最新ティック価格で評価。</small></p>
 

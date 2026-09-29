@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% from "_tabs.html" import trading_tabs with context %}
+{% block content %}
+{{ trading_tabs() }}
+{% if st %}
+<p><a href="/strategies/{{ st.id }}">← {{ st.name }}</a></p>
+<h2>戦略を編集</h2>
+{% else %}
+<p><a href="/strategies">← 戦略一覧</a></p>
+<h2>戦略を追加</h2>
+{% endif %}
+
+{% if error_msg %}<article class="err">{{ error_msg }}</article>{% endif %}
+{% if locked %}
+<p class="neg"><small>この戦略は実発注の建玉を持っているので、ロジック・足・モードは変えられません（建玉のある銘柄も外せません）。
+パラメータ（損切り等）と名前は変更できます。</small></p>
+{% endif %}
+
+<article>
+  <form method="post" action="{{ '/strategies/%d/edit' % st.id if st else '/strategies' }}" id="strategy_form"
+        data-orig-mode="{{ v.mode }}">
+    <div class="grid">
+      <label>名前<input name="name" value="{{ v.name }}" placeholder="例: トヨタ 5分SMA" required></label>
+      <label>ロジック
+        <select name="class_path" id="class_path" required {% if 'class_path' in locked %}disabled{% endif %}>
+          {% for label, cp in builtin.items() %}<option value="{{ cp }}" {% if v.class_path == cp %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        {% if 'class_path' in locked %}<input type="hidden" name="class_path" value="{{ v.class_path }}">{% endif %}
+      </label>
+      <label>対象銘柄（証券コード。複数はカンマ区切り）
+        <input name="symbols" id="symbols" value="{{ v.symbols }}" placeholder="例: 9984 または 9984,5016" required autocomplete="off">
+        <small id="symbols_hint"></small>
+      </label>
+    </div>
+    <div class="grid">
+      <label>足
+        <select name="timeframe" {% if 'timeframe' in locked %}disabled{% endif %}>
+          {% for tf in ["1m", "5m", "15m"] %}<option {% if v.timeframe == tf %}selected{% endif %}>{{ tf }}</option>{% endfor %}
+        </select>
+        {% if 'timeframe' in locked %}<input type="hidden" name="timeframe" value="{{ v.timeframe }}">{% endif %}
+      </label>
+      <label>モード
+        <select name="mode" id="mode" {% if 'mode' in locked %}disabled{% endif %}>
+          <option value="notify" {% if v.mode == 'notify' %}selected{% endif %}>通知のみ</option>
+          <option value="paper" {% if v.mode == 'paper' %}selected{% endif %}>ペーパートレード（擬似約定で成績を記録）</option>
+          <option value="live" {% if v.mode == 'live' %}selected{% endif %}>実発注（発注許可 ON のときだけ発注）</option>
+        </select>
+        {% if 'mode' in locked %}<input type="hidden" name="mode" value="{{ v.mode }}">{% endif %}
+      </label>
+    </div>
+
+    <strong>パラメータ</strong>
+    <div class="pf-fields" id="param_fields"></div>
+    <details id="json_details">
+      <summary><small>JSON で直接編集</small></summary>
+      <textarea id="params_json_visible" rows="4">{{ v.params_json or '{}' }}</textarea>
+    </details>
+    <input type="hidden" name="params_json" id="params_json">
+
+    <button type="submit" style="margin-top:.6rem">{{ '保存' if st else '追加' }}</button>
+    {% if st %}<a href="/strategies/{{ st.id }}" role="button" class="secondary outline">キャンセル</a>{% endif %}
+  </form>
+</article>
+
+<script src="/static/param_form.js"></script>
+<script>
+  const STRAT_PARAMS = {{ builtin_params | tojson }};
+  const STRAT_META = {{ builtin_param_meta | tojson }};
+  const _sel = document.getElementById('class_path');
+  const _jsonArea = document.getElementById('params_json_visible');
+
+  const pf = ParamForm.mount({
+    containerEl: document.getElementById('param_fields'),
+    hiddenEl: document.getElementById('params_json'),
+    jsonAreaEl: _jsonArea,
+    allowRanges: false,
+  });
+
+  let initial = null;
+  try { initial = JSON.parse(_jsonArea.value); } catch (e) { /* 壊れたJSON、defaultsで組む */ }
+  pf.rebuild(STRAT_PARAMS[_sel.value] || {}, STRAT_META[_sel.value] || {}, initial);
+
+  _sel.addEventListener('change', () => {
+    pf.rebuild(STRAT_PARAMS[_sel.value] || {}, STRAT_META[_sel.value] || {}, null);
+  });
+
+  // 実発注モードに切り替えて保存するときは確認する
+  document.getElementById('strategy_form').addEventListener('submit', (e) => {
+    const form = e.target, mode = document.getElementById('mode').value;
+    if (mode === 'live' && form.dataset.origMode !== 'live' &&
+        !confirm('モードを「実発注」にします。戦略が有効で発注許可が ON なら実際に発注されます。よろしいですか？')) {
+      e.preventDefault();
+    }
+  });
+
+  // 対象銘柄の入力に合わせて銘柄名を表示する（銘柄マスタ: 銘柄・データ › 過去データ・銘柄一覧 で更新）
+  (() => {
+    const input = document.getElementById('symbols'), hint = document.getElementById('symbols_hint');
+    let timer = null;
+    async function show() {
+      const codes = input.value.split(/[,\s、，]+/).map(c => c.trim()).filter(c => c.length >= 4);
+      const parts = await Promise.all(codes.map(async c => {
+        try {
+          const d = await (await fetch('/api/symbol-name?code=' + encodeURIComponent(c))).json();
+          return d.name ? `${d.code} ${d.name}` : `${d.code}（銘柄一覧に見つかりません）`;
+        } catch (e) { return c; }
+      }));
+      hint.textContent = parts.join(' / ');
+    }
+    input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(show, 300); });
+    show();
+  })();
+</script>
+{% endblock %}
