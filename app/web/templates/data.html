@@ -1,7 +1,9 @@
 {% extends "base.html" %}
+{% from "_tabs.html" import data_tabs with context %}
 {% from "_macros.html" import autorefresh with context %}
 {% block content %}
-<h2>取得済みデータ</h2>
+{{ data_tabs() }}
+<h2>過去データ・銘柄一覧</h2>
 
 <article>
   <h3 style="margin-top:0">過去データを取得</h3>

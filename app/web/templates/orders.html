@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% from "_macros.html" import autorefresh with context %}
+{% from "_tabs.html" import trading_tabs with context %}
+{% block content %}
+{{ trading_tabs() }}
+<h2>発注履歴</h2>
+<p><small>bot が出した注文（実発注の戦略のみ）。<code>sent</code>=受理（成行なのでシグナル価格で約定とみなす）、
+<code>rejected</code>=拒否（未発注）、<code>error</code>/<code>timeout</code>=結果不明（自動で発注許可 OFF）、
+<code>manual</code>=手動決済の記録（発注していない）。</small></p>
+<div {{ autorefresh("orders-list", 5) }}>
+{% if rows %}
+<table>
+  <thead><tr><th>日時</th><th>戦略</th><th>銘柄</th><th>売買</th><th class="gloss" title="{{ 'qty'|gloss }}">数量</th><th>区分</th><th>基準価格</th><th>状態</th><th>エラー / 受理番号</th></tr></thead>
+  <tbody>
+  {% for o in rows %}
+    <tr>
+      <td>{{ o.ts | jst('%Y-%m-%d %H:%M:%S') }}</td>
+      <td>{{ o.strategy_name }}</td>
+      <td>{{ o.symbol_code }}</td>
+      <td>{{ {'BUY': '買い', 'SHORT': '売建', 'EXIT': '手仕舞い(売)', 'SELL': '手仕舞い(売)', 'COVER': '買戻し'}.get(o.side, o.side) }}</td>
+      <td>{{ o.qty }}</td>
+      <td>{{ '信用' if o.trade_type == 'margin' else '現物' }}</td>
+      <td>{{ '{:,.1f}'.format(o.ref_price) if o.ref_price else '—' }}</td>
+      <td class="{{ 'pos' if o.status in ('sent', 'filled') else 'neg' if o.status in ('rejected', 'error', 'timeout') else '' }}">{{ o.status }}</td>
+      <td><small class="{{ 'neg' if o.error }}">{{ o.error or o.broker_order_id }}</small></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p>まだありません。</p>{% endif %}
+</div>
+{% endblock %}

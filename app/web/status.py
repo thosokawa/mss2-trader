@@ -64,15 +64,15 @@ def system_status(s: Session, now_utc: datetime | None = None) -> dict:
 
     # 自動売買の総合状態（ステータスバーの色と文言）
     if not cfg.enabled:
-        level, label = "off", "自動売買 無効（config.trading.enabled=false）"
+        level, label = "off", "自動売買 無効（config の発注設定が無効）"
     elif eng.state.armed and live_enabled:
-        level, label = "on", f"自動売買 稼働中（live 戦略 {len(live_enabled)}）"
+        level, label = "on", f"自動売買 稼働中（発注許可 ON・実発注の戦略 {len(live_enabled)}）"
     elif eng.state.armed:
-        level, label = "warn", "ARM 中（有効な live 戦略なし）"
+        level, label = "warn", "発注許可 ON（稼働中の実発注の戦略なし）"
     elif live_enabled:
-        level, label = "warn", f"DISARM 中 — live 戦略 {len(live_enabled)} は発注しない"
+        level, label = "warn", f"発注許可 OFF — 実発注の戦略 {len(live_enabled)} は発注しない"
     else:
-        level, label = "off", "自動売買 停止中"
+        level, label = "off", "自動売買 停止中（発注許可 OFF）"
 
     if tick_age is None:
         bridge = {"level": "off", "label": "株価 未受信"}

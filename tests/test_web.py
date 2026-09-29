@@ -17,14 +17,14 @@ def test_dashboard_ok(client):
 
 
 def test_watch_symbols_add_and_remove(client):
-    r = client.post("/live/watch", data={"codes": "7203, ６５０１"}, follow_redirects=True)
+    r = client.post("/symbols/watch", data={"codes": "7203, ６５０１"}, follow_redirects=True)
     assert r.status_code == 200
-    assert "/live/watch/7203/delete" in r.text and "/live/watch/6501/delete" in r.text
+    assert "/symbols/watch/7203/delete" in r.text and "/symbols/watch/6501/delete" in r.text
     codes = client.get("/api/quote-codes").json()["codes"]
     assert "7203" in codes and "6501" in codes
 
-    r = client.post("/live/watch/6501/delete", follow_redirects=True)
-    assert "/live/watch/6501/delete" not in r.text
+    r = client.post("/symbols/watch/6501/delete", follow_redirects=True)
+    assert "/symbols/watch/6501/delete" not in r.text
     assert "6501" not in client.get("/api/quote-codes").json()["codes"]
 
 
@@ -385,14 +385,14 @@ def test_backtest_param_form_uses_strategy_meta(client):
 def test_risk_page_and_arm_disarm(client):
     r = client.get("/risk")
     assert r.status_code == 200
-    assert "ARMED" in r.text
+    assert "発注許可" in r.text
 
     r = client.post("/risk/arm", follow_redirects=True)
-    assert "ARM 中（発注する）" in r.text
+    assert "ON（発注する）" in r.text
 
     r = client.post("/risk/disarm", data={"reason": "テスト停止"}, follow_redirects=True)
     assert "テスト停止" in r.text
-    assert "DISARM（発注しない）" in r.text
+    assert "OFF（発注しない）" in r.text
 
 
 def test_status_bar_and_dashboard(client):
@@ -402,7 +402,7 @@ def test_status_bar_and_dashboard(client):
     assert "自動売買" in r.text and "本日の発注" in r.text and "本日の損益" in r.text
 
     client.post("/risk/arm")
-    assert "ARM 中" in client.get("/partials/status").text or "稼働中" in client.get("/partials/status").text
+    assert "発注許可 ON" in client.get("/partials/status").text
     client.post("/risk/disarm", data={"reason": "テスト"})
     assert "停止理由: テスト" in client.get("/partials/status").text
 
@@ -411,14 +411,17 @@ def test_status_bar_and_dashboard(client):
     assert 'hx-get="/partials/status"' in r.text  # ステータスバーは全ページ
     assert 'id="dash"' in r.text and 'hx-select="#dash"' in r.text  # ダッシュボードは自動更新
     assert "稼働中の戦略" in r.text and "本日の発注" in r.text
-    # メニューは「自動売買」（旧リスク管理）
-    assert '>自動売買</a>' in r.text and "リスク管理" not in r.text
+    # メニュー: ダッシュボード / 自動売買 / 銘柄・データ / バックテスト / 最適化 / ヘルプ
+    for label in ("ダッシュボード", "自動売買", "銘柄・データ", "バックテスト", "最適化", "ヘルプ"):
+        assert f">{label}</a>" in r.text, label
+    assert "リスク管理" not in r.text and ">ライブ</a>" not in r.text
 
 
 def test_autorefresh_regions_on_pages(client):
     for path, region in (("/risk", "risk-live"), ("/strategies", "strat-list"),
                          ("/signals", "signals-list"), ("/performance", "perf"),
-                         ("/live", "live-codes"), ("/data", "data-coverage")):
+                         ("/symbols", "symbols-list"), ("/orders", "orders-list"),
+                         ("/data", "data-coverage")):
         r = client.get(path)
         assert r.status_code == 200, path
         assert f'id="{region}"' in r.text and f'hx-select="#{region}"' in r.text, path
@@ -519,3 +522,28 @@ def test_ingest_preopen_bid_ask_only(client):
     # 完全に空なら弾く
     r = client.post("/api/ingest", json={"quotes": [{"code": "7203"}]})
     assert r.json()["received"] == 0
+
+
+def test_symbols_page_and_tabs(client):
+    client.post("/symbols/watch", data={"codes": "7203"})
+    client.post("/strategies", data={
+        "name": "収集理由テスト", "class_path": "app.strategy.examples.sma_cross:SmaCross",
+        "symbols": "7203,6758", "timeframe": "5m", "params_json": "{}", "mode": "live"})
+    import re
+    sid = max(int(x) for x in re.findall(r"/strategies/(\d+)/toggle", client.get("/strategies").text))
+    client.post(f"/strategies/{sid}/toggle")
+
+    r = client.get("/symbols")
+    assert "データ収集中の銘柄" in r.text
+    assert "戦略: 収集理由テスト" in r.text  # 戦略が使っている銘柄は理由を表示
+    assert "/symbols/watch/7203/delete" in r.text  # 監視銘柄は「外す」
+    assert "/symbols/watch/6758/delete" not in r.text  # 戦略だけで収集中の銘柄は外せない
+    assert client.get("/live", follow_redirects=False).status_code == 301
+
+    # 自動売買のタブ
+    for path in ("/risk", "/strategies", "/signals", "/orders", "/performance"):
+        html = client.get(path).text
+        assert 'class="tabs"' in html and 'href="/orders"' in html, path
+        assert 'aria-current="page">自動売買</a>' in html, path
+    assert "実発注" in client.get("/strategies").text  # モード名は日本語
+    client.post(f"/strategies/{sid}/toggle")

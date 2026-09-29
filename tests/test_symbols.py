@@ -79,7 +79,7 @@ def test_strategy_and_watch_register_symbols_with_names():
             "name": "補完テスト戦略", "class_path": "app.strategy.examples.sma_cross:SmaCross",
             "symbols": "6613,130a", "timeframe": "5m", "params_json": "{}", "mode": "notify",
         })
-        c.post("/live/watch", data={"codes": "1540"})
+        c.post("/symbols/watch", data={"codes": "1540"})
     with Session(engine) as s:
         assert s.get(Symbol, "6613").name == "QDレーザ"
         assert s.get(Symbol, "130A").name == "Veritas In Silico"  # コードも大文字にそろう

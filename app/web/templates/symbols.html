@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "_macros.html" import autorefresh with context %}
+{% from "_tabs.html" import data_tabs with context %}
+{% block content %}
+{{ data_tabs() }}
+<h2>データ収集中の銘柄</h2>
+<p><small>RSS で株価を取り込んでいる銘柄の一覧と最新の気配（5秒ごとに自動更新、30秒以上受信が無ければ「遅延」）。
+収集するのは「有効な戦略の対象銘柄」と「監視銘柄」を合わせたもの。bridge が30秒ほどごとにこの一覧を取りに来て
+<code>rss_bridge.xlsx</code> の銘柄を自動で合わせます（再起動不要）。</small></p>
+
+<form method="post" action="/symbols/watch" class="grid addform">
+  <input name="codes" placeholder="監視銘柄を追加（証券コード、複数はカンマ区切り）" required>
+  <button type="submit">追加</button>
+</form>
+<p><small>監視銘柄 = 戦略で使っていなくても株価を集めたい銘柄。戦略の対象銘柄は戦略側で設定します（<a href="/strategies">戦略</a>）。</small></p>
+
+<div {{ autorefresh("symbols-list", 5) }}>
+{% if rows %}
+<table>
+  <thead><tr><th>コード</th><th>銘柄名</th><th>現在値</th><th>買気配</th><th>売気配</th><th>出来高</th><th>気配時刻</th><th>受信</th><th>状態</th><th>収集の理由</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    {% set t = r.tick %}
+    <tr>
+      <td>{{ r.code }}</td><td class="nowrap">{{ r.name }}</td>
+      <td>{{ '{:,.1f}'.format(t.price) if t and t.price else '-' }}</td>
+      <td>{{ '{:,.1f}'.format(t.bid) if t and t.bid else '-' }}</td>
+      <td>{{ '{:,.1f}'.format(t.ask) if t and t.ask else '-' }}</td>
+      <td>{{ '{:,.0f}'.format(t.volume) if t and t.volume else '-' }}</td>
+      <td>{{ t.ts | jst('%H:%M:%S') if t else '-' }}</td>
+      <td>{{ t.received_at | since if t else '-' }}</td>
+      <td>{% if not t %}<span class="neg">未受信</span>{% elif t.stale %}<span class="neg">遅延</span>{% else %}<span class="pos">OK</span>{% endif %}</td>
+      <td class="reason">
+        {% for name in r.used_by %}<span class="tag tag-live" title="この戦略が使っているので収集中（外すには戦略側で銘柄を変更）">戦略: {{ name }}</span> {% endfor %}
+        {% if r.watch %}
+          <form method="post" action="/symbols/watch/{{ r.code }}/delete" class="inline">
+            <span class="tag">監視</span>
+            <button class="secondary outline small" type="submit">外す</button>
+          </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>データ収集中の銘柄はありません。<a href="/strategies">戦略</a>を有効にするか、上のフォームで監視銘柄を追加してください。</p>
+{% endif %}
+</div>
+{% endblock %}

@@ -1,6 +1,8 @@
 {% extends "base.html" %}
+{% from "_tabs.html" import trading_tabs with context %}
 {% from "_macros.html" import autorefresh with context %}
 {% block content %}
+{{ trading_tabs() }}
 <h2>シグナル履歴</h2>
 <p><small>有効化した<a href="/strategies">戦略</a>の確定足シグナルを live エンジンが書き込みます（同時に Slack 通知）。
 バックテストのシグナルはここには出しません（<a href="/backtests">履歴</a>を参照）。</small></p>

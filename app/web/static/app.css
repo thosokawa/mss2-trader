@@ -46,3 +46,29 @@ nav .brand { text-decoration: none; }
 .strat table { margin-bottom: 0; }
 .tag { font-size: .72rem; padding: .05rem .45rem; border-radius: 6px; border: 1px solid currentColor; }
 .tag-live { color: #d94a4a; } .tag-paper { color: #2f7fd1; } .tag-notify { color: var(--pico-muted-color); }
+
+/* ---- サブタブ（_tabs.html） ---- */
+.tabs { display: flex; flex-wrap: wrap; gap: .2rem 1.2rem; border-bottom: 1px solid var(--pico-muted-border-color);
+  margin: .2rem 0 1rem; padding-bottom: .1rem; }
+.tabs a { text-decoration: none; padding: .35rem 0; color: var(--pico-muted-color); border-bottom: 2px solid transparent; }
+.tabs a[aria-current="page"] { color: var(--pico-color); border-bottom-color: var(--pico-primary); font-weight: 600; }
+
+/* ---- 小さなボタン・横並びのフォーム ---- */
+form.inline { display: inline-flex; align-items: center; gap: .4rem; margin: 0; }
+button.small { padding: .15rem .6rem; font-size: .8rem; width: auto; margin: 0; }
+.addform { grid-template-columns: 1fr auto; align-items: start; }
+.addform button { width: auto; }
+td.reason .tag { display: inline-block; margin: .1rem 0; }
+
+/* ---- 狭い画面（スマホ・分割表示）: メニューは項目単位で折り返し、表は横スクロール ---- */
+header nav ul { flex-wrap: wrap; }
+header nav li a { white-space: nowrap; }
+.tabs a { white-space: nowrap; }
+@media (max-width: 760px) {
+  header nav { flex-direction: column; align-items: flex-start; }
+  header nav ul li { padding-top: .2rem; padding-bottom: .2rem; }
+  main table { display: block; overflow-x: auto; white-space: nowrap; }
+  .tabs { gap: .2rem .9rem; }
+}
+th { white-space: nowrap; }
+td.nowrap { white-space: nowrap; }

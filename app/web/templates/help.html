@@ -21,15 +21,14 @@
 <h3 id="screens">画面一覧</h3>
 <table>
   <tbody>
-    <tr><td><a href="/">ダッシュボード</a></td><td>ブリッジ状態・銘柄/足/戦略の件数・最近のシグナル/バックテスト</td></tr>
-    <tr><td><a href="/live">ライブ</a></td><td>bridgeから届く最新気配と生存監視（5秒更新、30秒無受信で「遅延」）</td></tr>
-    <tr><td><a href="/data">データ</a></td><td>蓄積済み足のカバレッジ、過去データ取得フォーム</td></tr>
-    <tr><td><a href="/backtest">バックテスト</a> / <a href="/backtests">履歴</a></td><td>戦略を過去足で検証</td></tr>
-    <tr><td><a href="/optimize">最適化</a> / <a href="/optimizations">履歴</a></td><td>パラメータを総当たりで探索</td></tr>
-    <tr><td><a href="/strategies">戦略</a></td><td>liveエンジンで回すロジックの登録・有効化</td></tr>
-    <tr><td><a href="/signals">シグナル</a></td><td>liveエンジンが記録したシグナル履歴</td></tr>
-    <tr><td><a href="/performance">成績</a></td><td>paperモード戦略の擬似約定・損益</td></tr>
-    <tr><td><a href="/risk">自動売買</a></td><td>実発注のARMEDトグルと発注履歴（<code>mode=live</code>用）</td></tr>
+    <tr><td><a href="/">ダッシュボード</a></td><td>システム全体の今の状態（自動売買・戦略ごとの状況・本日の発注/シグナル・株価の取り込み）</td></tr>
+    <tr><td><a href="/risk">自動売買</a></td><td>タブ: <a href="/risk">概要</a>（発注許可 ON/OFF・建玉・制限）/
+      <a href="/strategies">戦略</a>（登録・有効化・対象銘柄）/ <a href="/signals">シグナル</a> /
+      <a href="/orders">発注履歴</a> / <a href="/performance">成績</a>（ペーパー）</td></tr>
+    <tr><td><a href="/symbols">銘柄・データ</a></td><td>タブ: <a href="/symbols">データ収集中の銘柄</a>（最新気配・監視銘柄の追加/外す）/
+      <a href="/data">過去データ・銘柄一覧</a>（yfinance 取得・取得済みデータ・JPX 銘柄一覧の更新）</td></tr>
+    <tr><td><a href="/backtest">バックテスト</a></td><td>戦略を過去足で検証（タブ: 履歴）</td></tr>
+    <tr><td><a href="/optimize">最適化</a></td><td>パラメータを総当たりで探索（タブ: 履歴）</td></tr>
   </tbody>
 </table>
 
@@ -137,7 +136,7 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
 </table>
 <p>登録は <a href="/strategies">/strategies</a> から。モードは <code>notify</code>（通知のみ）/
 <code>paper</code>（擬似約定して<a href="/performance">成績</a>に反映）/
-<code>live</code>（実発注。<a href="#risk">自動売買</a>で ARM しない限り発注されない）。</p>
+<code>live</code>（実発注。<a href="#risk">自動売買</a>で発注許可を ON にしない限り発注されない）。</p>
 
 <h4>損切り / 利確</h4>
 <p>パラメータ欄の一番下に <strong>損切り(%)</strong> ・ <strong>利確(%)</strong> が全戦略共通で出る
@@ -178,7 +177,7 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
 <strong>すべて</strong>true でないと発注しない（二重・三重の安全弁）:</p>
 <ol>
   <li><code>config/config.toml</code> の <code>[trading] enabled = true</code>（要編集+再起動）</li>
-  <li><a href="/risk">/risk</a> 画面で <strong>ARMED</strong>（backend 再起動で自動的に OFF に戻る）</li>
+  <li><a href="/risk">自動売買 › 概要</a>で<strong>発注許可が ON</strong>（旧称 ARMED。backend 再起動で自動的に OFF に戻る）</li>
   <li>取引時間内（JST）・数量/金額が上限内・日次損失リミット未達（<code>config.trading</code> の各種上限）</li>
   <li>足の確定から <code>max_signal_age_sec</code>（既定120秒）以内のシグナルであること（backend 停止後に
   まとめて評価された古い足のシグナルは「発注見送り: 古い足のシグナル」として記録だけする）</li>
@@ -189,7 +188,7 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
 発注トリガーを立てる → セルの表示が確定するまで待つ → 結果を backend に報告、という流れ。
 セットアップ手順・既知の制限（成行のみ、約定の自動確認は未実装 等）は
 <code>bridge/README.md</code> を参照。</p>
-<p><a href="/risk">/risk</a> 画面で ARMED状態・本日の実現損益・発注履歴（状態・約定数量/価格・
+<p><a href="/risk">自動売買</a>の概要で発注許可の状態・本日の損益・建玉、<a href="/orders">発注履歴</a>タブで注文（状態・
 エラー内容）が確認できる。</p>
 
 <h3 id="notify">通知の設定（Slack / メール）</h3>

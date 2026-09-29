@@ -1,11 +1,12 @@
 {% extends "base.html" %}
+{% from "_tabs.html" import optimize_tabs with context %}
 {% block content %}
+{{ optimize_tabs() }}
 <h2>最適化（パラメータ探索）</h2>
 <p><small>
   選んだ戦略のパラメータを総当たりでバックテストします。期間を「学習」と「検証」に分け、
   <b>検証期間（探索に使っていない後半のデータ）の成績</b>でランキングします（過学習対策のウォークフォワード）。
   学習期間だけ良く検証期間がダメな設定、検証取引が少ない設定は⚠付きで表示 — そのまま信用しないこと。
-  <a href="/optimizations">→ 履歴</a>
 </small></p>
 
 {% if error %}<article class="err">⚠ {{ error }}</article>{% endif %}

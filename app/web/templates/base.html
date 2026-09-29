@@ -20,31 +20,21 @@
 </head>
 <body>
 {% set path = request.url.path %}
-{% macro nav(href, label, prefix=None) -%}
-  <li><a href="{{ href }}" {% if path == href or (prefix and path.startswith(prefix)) %}aria-current="page"{% endif %}>{{ label }}</a></li>
+{# nav(href, label, prefixes): path が href と一致するか prefixes のどれかで始まれば今いるメニュー #}
+{% macro nav(href, label, prefixes=()) -%}
+  {%- set ns = namespace(on=(path == href)) -%}
+  {%- for p in prefixes -%}{%- if path.startswith(p) -%}{%- set ns.on = true -%}{%- endif -%}{%- endfor -%}
+  <li><a href="{{ href }}"{% if ns.on %} aria-current="page"{% endif %}>{{ label }}</a></li>
 {%- endmacro %}
 <header class="container">
   <nav>
     <ul><li><a href="/" class="brand"><strong>mss2-trader</strong></a></li></ul>
     <ul>
       {{ nav("/", "ダッシュボード") }}
-      {{ nav("/risk", "自動売買", "/risk") }}
-      {{ nav("/strategies", "戦略", "/strategies") }}
-      {{ nav("/signals", "シグナル") }}
-      {{ nav("/performance", "成績") }}
-      {{ nav("/live", "ライブ", "/live") }}
-      <li>
-        <details class="dropdown">
-          <summary {% if path.startswith('/backtest') or path.startswith('/optimiz') or path.startswith('/data') %}aria-current="page"{% endif %}>分析</summary>
-          <ul dir="rtl">
-            <li><a href="/backtest">バックテスト</a></li>
-            <li><a href="/backtests">バックテスト履歴</a></li>
-            <li><a href="/optimize">最適化</a></li>
-            <li><a href="/optimizations">最適化履歴</a></li>
-            <li><a href="/data">データ</a></li>
-          </ul>
-        </details>
-      </li>
+      {{ nav("/risk", "自動売買", ("/risk", "/strategies", "/signals", "/orders", "/performance")) }}
+      {{ nav("/symbols", "銘柄・データ", ("/symbols", "/data")) }}
+      {{ nav("/backtest", "バックテスト", ("/backtest",)) }}
+      {{ nav("/optimize", "最適化", ("/optimiz",)) }}
       {{ nav("/help", "ヘルプ") }}
     </ul>
   </nav>
@@ -61,6 +51,6 @@
   {% block content %}{% endblock %}
 </main>
 <footer class="container"><small>画面の表示は数秒ごとに自動で最新になります（入力中は止まります）。
-発注するのは「自動売買」で ARM し、config の <code>trading.enabled</code> が true のときだけです。</small></footer>
+発注するのは「自動売買」で発注許可を ON にし、config の発注設定が有効なときだけです。</small></footer>
 </body>
 </html>

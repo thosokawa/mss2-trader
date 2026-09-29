@@ -6,9 +6,9 @@
   <span class="sb-item sb-bad" title="最後に止まった理由">停止理由: {{ sys.halted_reason }}</span>
 {% endif %}
 <span class="sb-item sb-{{ 'on' if sys.in_session else 'off' }}">{{ sys.phase }}</span>
-<a href="/live" class="sb-item sb-{{ sys.bridge.level }}">{{ sys.bridge.label }}</a>
+<a href="/symbols" class="sb-item sb-{{ sys.bridge.level }}">{{ sys.bridge.label }}</a>
 <a href="/risk" class="sb-item">建玉 {{ sys.positions | length }}</a>
-<a href="/risk" class="sb-item">本日の発注 {{ sys.today_sent }}
+<a href="/orders" class="sb-item">本日の発注 {{ sys.today_sent }}
   {%- if sys.today_failed %} <span class="neg">/ 失敗 {{ sys.today_failed }}</span>{% endif -%}
   {%- if sys.today_pending %} / 処理中 {{ sys.today_pending }}{% endif %}</a>
 <span class="sb-item {{ 'pos' if sys.day_pnl > 0 else 'neg' if sys.day_pnl < 0 else '' }}"

@@ -7,10 +7,10 @@
 {# ---- 自動売買 ---- #}
 <article class="panel panel-{{ sys.level }}">
   <header><strong>自動売買</strong> <span class="sb-main sb-{{ sys.level }}"><span class="dot"></span>{{ sys.label }}</span>
-    <a href="/risk" style="float:right">自動売買の画面 →</a></header>
+    <a href="/risk" style="float:right">自動売買 →</a></header>
   <div class="metrics">
-    <div><div class="k">config.trading.enabled</div><div class="v {{ 'pos' if sys.config_enabled else 'neg' }}">{{ 'true' if sys.config_enabled else 'false' }}</div></div>
-    <div><div class="k">ARM</div><div class="v {{ 'pos' if sys.armed else 'neg' }}">{{ 'ARM 中' if sys.armed else 'DISARM' }}</div></div>
+    <div><div class="k gloss" title="{{ '発注許可'|gloss }}">発注許可</div><div class="v {{ 'pos' if sys.armed else 'neg' }}">{{ 'ON' if sys.armed else 'OFF' }}</div></div>
+    <div><div class="k">config の発注設定</div><div class="v {{ 'pos' if sys.config_enabled else 'neg' }}">{{ '有効' if sys.config_enabled else '無効' }}</div></div>
     <div><div class="k">市場</div><div class="v">{{ sys.phase }}</div></div>
     <div><div class="k">bot の建玉</div><div class="v">{{ sys.positions | length }}</div></div>
     <div><div class="k">本日の発注（受理 / 失敗）</div><div class="v">{{ sys.today_sent }} / <span class="{{ 'neg' if sys.today_failed }}">{{ sys.today_failed }}</span></div></div>
@@ -43,7 +43,7 @@
   <article class="strat">
     <header>
       <strong>{{ o.st.name }}</strong>
-      <span class="tag tag-{{ o.st.mode }}">{{ o.st.mode }}</span>
+      <span class="tag tag-{{ o.st.mode }}">{{ o.st.mode | mode_label }}</span>
       <small>{{ o.st.timeframe }} / {{ {'long': '買いのみ', 'short': '売りのみ', 'both': '買い・売り'}.get(o.direction, o.direction) }}
         / {{ '信用' if o.trade_type == 'margin' else '現物' }}{% if not o.hold_overnight %} / デイトレ{% endif %}</small>
     </header>
@@ -74,7 +74,7 @@
 {# ---- 今日の発注・シグナル ---- #}
 <div class="grid">
   <section>
-    <h3>本日の発注 <small><a href="/risk">すべて →</a></small></h3>
+    <h3>本日の発注 <small><a href="/orders">すべて →</a></small></h3>
     {% if today_orders %}
     <table>
       <thead><tr><th>時刻</th><th>戦略</th><th>銘柄</th><th>売買</th><th>状態</th></tr></thead>
@@ -107,7 +107,7 @@
 </div>
 
 {# ---- 株価の取り込み ---- #}
-<h3>株価の取り込み <small><a href="/live">ライブ →</a></small></h3>
+<h3>株価の取り込み <small><a href="/symbols">銘柄・データ →</a></small></h3>
 <p>
   <span class="sb-item sb-{{ sys.bridge.level }}">{{ sys.bridge.label }}</span>
   取り込み対象: {% for c in quote_codes %}<code>{{ c }}</code> {% else %}なし{% endfor %}

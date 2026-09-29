@@ -1,65 +1,43 @@
 {% extends "base.html" %}
 {% from "_macros.html" import autorefresh with context %}
+{% from "_tabs.html" import trading_tabs with context %}
 {% block content %}
-<h2>自動売買</h2>
-<article class="err">
-  ⚠ ここを ARMED にすると、<code>mode=live</code> の戦略のシグナルが実際に発注されます
-  （config の <code>trading.enabled</code> も true の場合のみ）。<code>config.trading.enabled</code>
-  は <code>config/config.toml</code> を編集して再起動しないと変わりません。ARMED はこの画面の
-  ボタンでいつでも解除でき、backend を再起動すると自動的に解除されます。
-</article>
+{{ trading_tabs() }}
+<h2>自動売買 — 概要</h2>
 
 <div {{ autorefresh("risk-live", 5) }}>
-<div class="metrics">
-  <div><div class="k">config.trading.enabled</div>
-    <div class="v {{ 'pos' if trading_cfg.enabled else 'neg' }}">{{ trading_cfg.enabled }}</div></div>
-  <div><div class="k">ARM</div>
-    <div class="v {{ 'pos' if state.armed else 'neg' }}">{{ 'ARM 中（発注する）' if state.armed else 'DISARM（発注しない）' }}</div></div>
-  <div><div class="k">本日の実現損益</div>
-    <div class="v {{ 'pos' if state.day_realized_pnl>=0 else 'neg' }}">{{ '{:,.0f}'.format(state.day_realized_pnl) }}</div></div>
-  <div><div class="k">停止理由</div><div class="v">{{ state.halted_reason or '—' }}</div></div>
-</div>
+<article class="panel panel-{{ sys.level }}">
+  <header><strong>状態</strong> <span class="sb-main sb-{{ sys.level }}"><span class="dot"></span>{{ sys.label }}</span></header>
+  <div class="metrics">
+    <div><div class="k gloss" title="{{ '発注許可'|gloss }}">発注許可</div>
+      <div class="v {{ 'pos' if state.armed else 'neg' }}">{{ 'ON（発注する）' if state.armed else 'OFF（発注しない）' }}</div></div>
+    <div><div class="k gloss" title="config/config.toml の [trading] enabled。変更は編集して再起動">config の発注設定</div>
+      <div class="v {{ 'pos' if trading_cfg.enabled else 'neg' }}">{{ '有効' if trading_cfg.enabled else '無効' }}</div></div>
+    <div><div class="k">実発注の戦略（稼働中）</div><div class="v">{{ sys.live_enabled | length }}</div></div>
+    <div><div class="k">市場</div><div class="v">{{ sys.phase }}</div></div>
+    <div><div class="k gloss" title="bot の手仕舞いが受理されたときの概算損益の合計（backend 再起動で 0 に戻る）">本日の損益（概算）</div>
+      <div class="v {{ 'pos' if state.day_realized_pnl > 0 else 'neg' if state.day_realized_pnl < 0 else '' }}">{{ '{:+,.0f}'.format(state.day_realized_pnl) }}円</div></div>
+    <div><div class="k">停止理由</div><div class="v">{{ state.halted_reason or '—' }}</div></div>
+  </div>
 
-<article>
+  <div style="margin-top:1rem">
   {% if state.armed %}
-  <form method="post" action="/risk/disarm">
-    <label>停止理由（任意）<input name="reason" placeholder="手動停止"></label>
-    <button type="submit" class="secondary">DISARM（発注を止める）</button>
-  </form>
+    <form method="post" action="/risk/disarm" class="grid addform">
+      <input name="reason" placeholder="止める理由（任意）">
+      <button type="submit" class="secondary">発注を止める（OFF）</button>
+    </form>
   {% else %}
-  <form method="post" action="/risk/arm" onsubmit="return confirm('ARMED にすると mode=live の戦略が実際に発注できるようになります。よろしいですか？')">
-    <button type="submit">ARM（発注を許可する）</button>
-  </form>
+    <form method="post" action="/risk/arm"
+          onsubmit="return confirm('発注許可を ON にすると、実発注モードの戦略のシグナルが実際に発注されます。よろしいですか？')">
+      <button type="submit">発注を許可する（ON）</button>
+    </form>
   {% endif %}
+  </div>
+  <p style="margin:.6rem 0 0"><small>発注するのは「発注許可 ON」かつ「config の発注設定が有効」かつ戦略のモードが「実発注」のときだけ。
+  発注許可はいつでも OFF にでき、backend を再起動すると自動で OFF に戻ります（config の発注設定は
+  <code>config/config.toml</code> を編集して再起動しないと変わりません）。
+  {% if not sys.margin_supported %}信用の新規建ては停止中（現物のみ発注）。{% endif %}</small></p>
 </article>
-
-<h3>制限（config.trading、変更は config.toml 編集 + 再起動）</h3>
-<table>
-  <tbody>
-    <tr><td>1回の注文の数量上限</td><td>{{ trading_cfg.max_qty_per_order }} 株</td></tr>
-    <tr><td>1回の注文の金額上限</td><td>{{ '{:,.0f}'.format(trading_cfg.max_notional_per_order) }} 円</td></tr>
-    <tr><td>日次損失リミット</td><td>{{ '{:,.0f}'.format(trading_cfg.daily_loss_limit) }} 円</td></tr>
-    <tr><td>取引時間帯</td><td>{{ trading_cfg.session_windows | join(', ') }}</td></tr>
-    <tr><td>シグナルの鮮度上限</td><td>足の確定から {{ trading_cfg.max_signal_age_sec }} 秒以内</td></tr>
-    <tr><td>既定の口座区分</td><td>{{ trading_cfg.default_account_type }}（0:特定 1:一般 2:NISA 3:旧NISA）</td></tr>
-  </tbody>
-</table>
-
-<h3>mode=live の戦略</h3>
-{% if live_strategies %}
-<table>
-  <thead><tr><th>名前</th><th>対象銘柄</th><th>状態</th></tr></thead>
-  <tbody>
-  {% for st in live_strategies %}
-    <tr>
-      <td><a href="/strategies">{{ st.name }}</a></td>
-      <td>{{ st.symbols or '—' }}</td>
-      <td>{% if st.enabled %}<span class="pos">稼働中</span>{% else %}<span class="neg">停止</span>{% endif %}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% else %}<p>mode=live の戦略はまだ登録されていません。</p>{% endif %}
 
 <h3>bot が認識している建玉</h3>
 {% if positions %}
@@ -91,25 +69,18 @@ bot がその建玉の手仕舞い注文を出して「建玉が足りない」�
 </table>
 {% else %}<p>bot が認識している建玉はありません。</p>{% endif %}
 
-<h3>発注履歴</h3>
-{% if recent_orders %}
+</div>
+
+<h3>制限 <small>（config/config.toml の [trading]。変更は編集して再起動）</small></h3>
 <table>
-  <thead><tr><th>日時</th><th>戦略</th><th>銘柄</th><th>売買</th><th class="gloss" title="{{ 'qty'|gloss }}">数量</th><th>状態</th><th>約定数量/価格</th><th>エラー</th></tr></thead>
   <tbody>
-  {% for o in recent_orders %}
-    <tr>
-      <td>{{ o.ts | jst('%Y-%m-%d %H:%M:%S') }}</td>
-      <td>{{ o.strategy_name }}</td>
-      <td>{{ o.symbol_code }}</td>
-      <td>{{ o.side }}</td>
-      <td>{{ o.qty }}</td>
-      <td>{{ o.status }}</td>
-      <td>{{ o.filled_qty }} / {{ '%.1f'|format(o.avg_price) if o.avg_price else '—' }}</td>
-      <td><small class="neg">{{ o.error }}</small></td>
-    </tr>
-  {% endfor %}
+    <tr><td>1回の注文の数量上限</td><td>{{ trading_cfg.max_qty_per_order }} 株</td></tr>
+    <tr><td>1回の注文の金額上限</td><td>{{ '{:,.0f}'.format(trading_cfg.max_notional_per_order) }} 円</td></tr>
+    <tr><td>日次損失リミット</td><td>{{ '{:,.0f}'.format(trading_cfg.daily_loss_limit) }} 円</td></tr>
+    <tr><td>取引時間帯</td><td>{{ trading_cfg.session_windows | join(', ') }}</td></tr>
+    <tr><td>シグナルの鮮度上限</td><td>足の確定から {{ trading_cfg.max_signal_age_sec }} 秒以内</td></tr>
+    <tr><td>既定の口座区分</td><td>{{ trading_cfg.default_account_type }}（0:特定 1:一般 2:NISA 3:旧NISA）</td></tr>
   </tbody>
 </table>
-{% else %}<p>まだありません。</p>{% endif %}
-</div>
+<p><small>日次損失リミットに達すると自動で発注許可 OFF。発注の結果が不明（timeout / error）のときも自動で OFF になります。</small></p>
 {% endblock %}

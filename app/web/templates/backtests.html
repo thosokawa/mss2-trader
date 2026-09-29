@@ -1,5 +1,7 @@
 {% extends "base.html" %}
+{% from "_tabs.html" import backtest_tabs with context %}
 {% block content %}
+{{ backtest_tabs() }}
 <h2>バックテスト履歴</h2>
 {% if runs %}
 <table>

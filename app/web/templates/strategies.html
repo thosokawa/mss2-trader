@@ -1,11 +1,13 @@
 {% extends "base.html" %}
+{% from "_tabs.html" import trading_tabs with context %}
 {% from "_macros.html" import autorefresh with context %}
 {% block content %}
+{{ trading_tabs() }}
 <h2>戦略</h2>
 <p><small>有効にすると live エンジンが {{ '設定間隔ごと' }}に対象銘柄の確定足へ <code>on_bar()</code> を流し、
 シグナルを <a href="/signals">シグナル</a> 履歴に記録して通知（メール / Slack）します（発注はしません）。
 有効化した時点より後の足だけが対象です。<code>paper</code> モードなら擬似約定して<a href="/performance">成績</a>に反映します。
-<code>live</code> モードは実際に発注します — <a href="/risk">自動売買</a>で ARM しない限り発注されません。
+「実発注」モードは実際に発注します — <a href="/risk">概要</a>で発注許可を ON にしない限り発注されません。
 有効な戦略の対象銘柄は自動で RSS の株価取り込み対象になります（bridge が30秒ほどで反映）。</small></p>
 
 <div {{ autorefresh("strat-warn", 10) }}>
@@ -44,9 +46,9 @@
       <label>足<select name="timeframe"><option>5m</option><option>1m</option><option>15m</option></select></label>
       <label>モード
         <select name="mode">
-          <option value="notify">notify（通知のみ）</option>
-          <option value="paper">paper（ペーパートレード）</option>
-          <option value="live">live（実発注。要 /risk で ARM）</option>
+          <option value="notify">通知のみ</option>
+          <option value="paper">ペーパートレード（擬似約定で成績を記録）</option>
+          <option value="live">実発注（発注許可 ON のときだけ発注）</option>
         </select>
       </label>
     </div>
@@ -122,7 +124,7 @@
         </details>
       </td>
       <td>{{ st.timeframe }}</td>
-      <td>{{ st.mode }}</td>
+      <td>{{ st.mode | mode_label }}</td>
       <td>{% if st.enabled %}<span class="pos">稼働中</span>{% else %}<span class="neg">停止</span>{% endif %}</td>
       <td style="white-space:nowrap">
         <form method="post" action="/strategies/{{ st.id }}/toggle" style="display:inline">

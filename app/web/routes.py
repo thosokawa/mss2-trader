@@ -65,6 +65,8 @@ def _jst(dt: datetime | str | None, fmt: str = "%m/%d %H:%M") -> str:
 templates.env.filters["jst"] = _jst
 templates.env.filters["gloss"] = gloss
 templates.env.filters["since"] = status_mod.since_text
+MODE_LABELS = {"notify": "通知のみ", "paper": "ペーパー", "live": "実発注"}
+templates.env.filters["mode_label"] = lambda m: MODE_LABELS.get(m, m)
 
 
 def _now_utc() -> datetime:
@@ -136,7 +138,7 @@ def api_quote_codes(s: Session = Depends(get_session)):
     return {"codes": symbols.quote_codes(s)}
 
 
-@router.post("/live/watch")
+@router.post("/symbols/watch")
 def add_watch(codes: str = Form(...), s: Session = Depends(get_session)):
     """監視銘柄を追加（戦略で使っていなくても株価を取り込む）。カンマ/スペース区切りで複数可。"""
     parsed = symbols.parse_codes(codes)
@@ -146,17 +148,17 @@ def add_watch(codes: str = Form(...), s: Session = Depends(get_session)):
         sym.watch = True
         s.add(sym)
     s.commit()
-    return RedirectResponse("/live", status_code=303)
+    return RedirectResponse("/symbols", status_code=303)
 
 
-@router.post("/live/watch/{code}/delete")
+@router.post("/symbols/watch/{code}/delete")
 def delete_watch(code: str, s: Session = Depends(get_session)):
     sym = s.get(Symbol, symbols.normalize_code(code))
     if sym:
         sym.watch = False
         s.add(sym)
         s.commit()
-    return RedirectResponse("/live", status_code=303)
+    return RedirectResponse("/symbols", status_code=303)
 
 
 @router.get("/api/symbol-name")
@@ -272,19 +274,40 @@ def _latest_ticks(s: Session) -> list[dict]:
     return out
 
 
-@router.get("/live", response_class=HTMLResponse)
-def live(request: Request, s: Session = Depends(get_session)):
-    watch = s.exec(select(Symbol).where(Symbol.watch == True).order_by(Symbol.code)).all()  # noqa: E712
+def _collected_rows(s: Session) -> list[dict]:
+    """データ収集中の銘柄（有効な戦略の対象銘柄 ∪ 監視銘柄）ごとの最新気配と、収集している理由。"""
+    names = {sym.code: sym for sym in s.exec(select(Symbol)).all()}
+    used_by: dict[str, list[str]] = {}
+    for st in s.exec(
+        select(Strategy).where(Strategy.enabled == True, Strategy.deleted == False)  # noqa: E712
+    ).all():
+        for c in symbols.parse_codes(st.symbols):
+            used_by.setdefault(c, []).append(st.name)
+    ticks = {r["code"]: r for r in _latest_ticks(s)}
+    rows = []
+    for code in symbols.quote_codes(s):
+        sym = names.get(code)
+        rows.append({
+            "code": code,
+            "name": sym.name if sym else "",
+            "watch": bool(sym and sym.watch),
+            "used_by": used_by.get(code, []),
+            "tick": ticks.get(code),
+        })
+    return rows
+
+
+@router.get("/symbols", response_class=HTMLResponse)
+def symbols_page(request: Request, s: Session = Depends(get_session)):
+    """データ収集中の銘柄（旧「ライブ」）。一覧・最新気配・監視銘柄の追加と削除。"""
     return templates.TemplateResponse(
-        request, "live.html",
-        _ctx(request, rows=_latest_ticks(s), watch=watch, quote_codes=symbols.quote_codes(s)),
+        request, "symbols.html", _ctx(request, rows=_collected_rows(s))
     )
 
 
-@router.get("/live/table", response_class=HTMLResponse)
-def live_table(request: Request, s: Session = Depends(get_session)):
-    """htmx ポーリングで table 部分だけ差し替える。"""
-    return templates.TemplateResponse(request, "_live_table.html", _ctx(request, rows=_latest_ticks(s)))
+@router.get("/live")
+def live_redirect():
+    return RedirectResponse("/symbols", status_code=301)
 
 
 # ---- バックテスト -------------------------------------------------------------
@@ -658,13 +681,6 @@ def delete_strategy(strategy_id: int, s: Session = Depends(get_session)):
 @router.get("/risk", response_class=HTMLResponse)
 def risk_page(request: Request, s: Session = Depends(get_session)):
     eng = get_risk_engine()
-    live_strategies = s.exec(
-        select(Strategy)
-        .where(Strategy.mode == "live", Strategy.deleted == False)  # noqa: E712
-        .order_by(Strategy.created_at.desc())
-    ).all()
-    recent_orders = s.exec(select(Order).order_by(Order.ts.desc()).limit(50)).all()
-    positions = orders_engine.open_positions(s)
     return templates.TemplateResponse(
         request,
         "risk.html",
@@ -672,11 +688,17 @@ def risk_page(request: Request, s: Session = Depends(get_session)):
             request,
             trading_cfg=eng.cfg,
             state=eng.state,
-            live_strategies=live_strategies,
-            recent_orders=recent_orders,
-            positions=positions,
+            sys=status_mod.system_status(s),
+            positions=orders_engine.open_positions(s),
         ),
     )
+
+
+@router.get("/orders", response_class=HTMLResponse)
+def orders_page(request: Request, s: Session = Depends(get_session)):
+    """自動売買 › 発注履歴。"""
+    rows = s.exec(select(Order).order_by(Order.ts.desc(), Order.id.desc()).limit(300)).all()
+    return templates.TemplateResponse(request, "orders.html", _ctx(request, rows=rows))
 
 
 @router.post("/risk/arm")
