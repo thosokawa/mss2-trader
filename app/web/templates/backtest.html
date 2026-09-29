@@ -72,7 +72,7 @@
     <div><div class="k gloss" title="{{ '合計損益'|gloss }}">合計損益</div><div class="v {{ 'up' if result.metrics.total_pnl>=0 else 'dn' }}">{{ '{:,.0f}'.format(result.metrics.total_pnl) }}</div></div>
     <div><div class="k gloss" title="{{ '平均損益'|gloss }}">平均損益</div><div class="v">{{ '{:,.0f}'.format(result.metrics.avg_pnl) }}</div></div>
     <div><div class="k gloss" title="{{ 'PF'|gloss }}">PF</div><div class="v">{{ result.metrics.profit_factor }}</div></div>
-    <div><div class="k gloss" title="{{ '最大DD'|gloss }}">最大DD</div><div class="v neg">{{ '{:,.0f}'.format(result.metrics.max_drawdown) }}</div></div>
+    <div><div class="k gloss" title="{{ '最大DD'|gloss }}">最大DD</div><div class="v dn">{{ '{:,.0f}'.format(result.metrics.max_drawdown) }}</div></div>
   </div>
   <table style="margin-top:1rem">
     <thead><tr>

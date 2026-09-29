@@ -37,6 +37,7 @@ from app.models import (
 )
 from app.strategy.registry import BUILTIN, builtin_param_meta, builtin_params, load_strategy_class
 from app.web import status as status_mod
+from app.web import strategy_view
 from app.web.glossary import GLOSSARY, gloss
 
 router = APIRouter()
@@ -447,7 +448,8 @@ def backtest_run(
 @router.get("/backtests", response_class=HTMLResponse)
 def backtests(request: Request, s: Session = Depends(get_session)):
     runs = s.exec(select(BacktestRun).order_by(BacktestRun.created_at.desc()).limit(100)).all()
-    parsed = [(r, json.loads(r.metrics_json or "{}")) for r in runs]
+    # 条件（パラメータ）は生の JSON ではなく「トレンド×RSI出戻り（10/30/…）・5m・買い・売り…」の要約で出す
+    parsed = [(r, json.loads(r.metrics_json or "{}"), strategy_view.describe(r)) for r in runs]
     return templates.TemplateResponse(request, "backtests.html", _ctx(request, runs=parsed))
 
 
@@ -462,7 +464,8 @@ def backtest_detail(run_id: int, request: Request, s: Session = Depends(get_sess
     return templates.TemplateResponse(
         request,
         "backtest_detail.html",
-        _ctx(request, run=run, metrics=json.loads(run.metrics_json or "{}"), trades=trades),
+        _ctx(request, run=run, metrics=json.loads(run.metrics_json or "{}"), trades=trades,
+             d=strategy_view.describe(run)),
     )
 
 

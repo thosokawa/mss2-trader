@@ -6,17 +6,25 @@
 {% if runs %}
 <table>
   <thead><tr>
-    <th>#</th><th>日時</th><th>戦略</th><th>銘柄</th><th>足</th>
-    <th class="gloss" title="{{ '取引数'|gloss }}">取引</th><th class="gloss" title="{{ '勝率'|gloss }}">勝率</th>
-    <th class="gloss" title="{{ '合計損益'|gloss }}">合計損益</th><th></th>
+    <th>#</th><th>実行日時</th><th>銘柄</th><th>条件</th><th>期間</th>
+    <th class="num gloss" title="{{ '取引数'|gloss }}">取引</th><th class="num gloss" title="{{ '勝率'|gloss }}">勝率</th>
+    <th class="num gloss" title="{{ '合計損益'|gloss }}">合計損益</th><th></th>
   </tr></thead>
   <tbody>
-  {% for r, m in runs %}
+  {% for r, m, d in runs %}
     <tr>
-      <td>{{ r.id }}</td><td>{{ r.created_at.strftime('%m/%d %H:%M') }}</td>
-      <td>{{ r.strategy_name }}</td><td>{{ r.symbol_code }}</td><td>{{ r.timeframe }}</td>
-      <td>{{ m.get('trades', '-') }}</td><td>{{ m.get('win_rate_pct', '-') }}</td>
-      <td class="{{ 'up' if (m.get('total_pnl') or 0)>=0 else 'dn' }}">{{ m.get('total_pnl', '-') }}</td>
+      <td class="mono">{{ r.id }}</td><td class="mono">{{ r.created_at | jst('%m/%d %H:%M') }}</td>
+      <td class="mono">{{ r.symbol_code }}</td>
+      <td><small>{{ d.summary }}</small></td>
+      <td class="mono"><small>{{ r.start | jst('%m/%d') }}〜{{ r.end | jst('%m/%d') }}</small></td>
+      {% if m.get('trades') %}
+      <td class="num mono">{{ m.trades }}</td>
+      <td class="num mono">{{ m.win_rate_pct }}%</td>
+      <td class="num mono {{ m.total_pnl | pnl_cls }}">{{ m.total_pnl | pnl }}</td>
+      {% else %}
+      <td class="num mono">0</td><td class="num muted">—</td>
+      <td class="num"><small class="muted">{{ m.get('error') or m.get('note') or '約定なし' }}</small></td>
+      {% endif %}
       <td><a href="/backtests/{{ r.id }}">詳細</a></td>
     </tr>
   {% endfor %}

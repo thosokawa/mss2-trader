@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 
-from app.models import Strategy
+from app.models import BacktestRun, Strategy
 from app.strategy.registry import BUILTIN, UNIVERSAL_DEFAULTS, builtin_param_meta, builtin_params
 
 LOGIC_LABELS = {cp: label for label, cp in BUILTIN.items()}
@@ -15,7 +15,7 @@ MODE_LABELS = {"notify": "通知のみ", "paper": "ペーパー", "live": "実�
 DIRECTION_LABELS = {"long": "買いのみ", "short": "売りのみ", "both": "買い・売り"}
 
 
-def load_params(st: Strategy) -> dict:
+def load_params(st: Strategy | BacktestRun) -> dict:
     try:
         v = json.loads(st.params_json or "{}")
         return v if isinstance(v, dict) else {}
@@ -41,8 +41,11 @@ def _pct(v) -> str | None:
     return f"{f:g}%" if f > 0 else None
 
 
-def describe(st: Strategy) -> dict:
-    """{logic, summary, logic_params: [(label, value, help)], common: [(label, value, help)], ...}"""
+def describe(st: Strategy | BacktestRun) -> dict:
+    """{logic, summary, logic_params: [(label, value, help)], common: [(label, value, help)], ...}
+
+    バックテスト履歴（BacktestRun: class_path/params_json/timeframe を持ち mode は無い）にも使う。
+    """
     params = load_params(st)
     cp = st.class_path
     defaults = builtin_params().get(cp, {})
@@ -96,7 +99,7 @@ def describe(st: Strategy) -> dict:
         "summary": "・".join(parts),
         "logic_params": logic_params,
         "common": common,
-        "mode_label": MODE_LABELS.get(st.mode, st.mode),
+        "mode_label": MODE_LABELS.get(getattr(st, "mode", ""), getattr(st, "mode", "")),
         "direction": direction,
         "trade_type": trade_type,
         "hold_overnight": hold,

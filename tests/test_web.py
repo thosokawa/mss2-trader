@@ -741,3 +741,38 @@ def test_strategies_are_listed_in_trading_overview(client):
     detail = client.get(f"/strategies/{sid}").text
     assert 'href="/risk" aria-current="page">概要</a>' in detail  # 詳細画面では「概要」タブが選択中
     assert 'href="/risk#strategies" class="backlink"' in detail
+
+
+def test_backtest_history_is_readable(client):
+    """履歴は実行日時を JST で、条件は生の JSON でなく日本語の要約・設定表で出す。"""
+    import json
+    from datetime import datetime
+
+    from sqlmodel import Session
+
+    from app.db import engine
+    from app.models import BacktestRun
+
+    params = {"fast_period": 10, "mid_period": 30, "rsi_period": 14, "direction": "both",
+              "hold_overnight": False, "qty": 100}
+    with Session(engine) as s:
+        run = BacktestRun(strategy_name="TrendRsiReclaim",
+                          class_path="app.strategy.examples.trend_rsi_reclaim:TrendRsiReclaim",
+                          params_json=json.dumps(params), symbol_code="5016", timeframe="5m",
+                          start=datetime(2026, 6, 29, 0, 0), end=datetime(2026, 9, 29, 6, 25),
+                          metrics_json=json.dumps({"trades": 17, "win_rate_pct": 70.6, "total_pnl": 29600.0,
+                                                   "max_drawdown": -27400.0, "profit_factor": 2.02,
+                                                   "best": 12400.0, "worst": -11100.0}),
+                          created_at=datetime(2026, 9, 29, 6, 30, 57))
+        s.add(run)
+        s.commit()
+        s.refresh(run)
+        rid = run.id
+    html = client.get("/backtests").text
+    assert "09/29 15:30" in html  # 06:30 UTC → 15:30 JST
+    assert "トレンド×RSI出戻り（10/30/14" in html and "デイトレ" in html
+    assert "▲ +29,600" in html and "70.6%" in html
+    detail = client.get(f"/backtests/{rid}").text
+    assert "params_json" not in detail and '"mid_period"' not in detail
+    assert "中期MA期間" in detail and "買い・売り" in detail and "またがない" in detail
+    assert "実行 2026-09-29 15:30" in detail
