@@ -437,6 +437,7 @@ def backtest_run(
             symbols=symbols,
             result=result,
             run_id=run.id,
+            symbol_name=_symbol_names(s, [symbol_code])[symbol_code],
             class_path=class_path,
             selected=symbol_code,
             selected_timeframe=timeframe,
@@ -445,12 +446,22 @@ def backtest_run(
     )
 
 
+def _symbol_names(s: Session, codes) -> dict[str, str]:
+    """銘柄コード → 銘柄名。登録済みの Symbol に名前が無ければ銘柄マスタから補う。"""
+    out: dict[str, str] = {}
+    for code in set(codes):
+        sym = s.get(Symbol, code)
+        out[code] = (sym.name if sym and sym.name else "") or symbols.lookup_name(s, code)
+    return out
+
+
 @router.get("/backtests", response_class=HTMLResponse)
 def backtests(request: Request, s: Session = Depends(get_session)):
     runs = s.exec(select(BacktestRun).order_by(BacktestRun.created_at.desc()).limit(100)).all()
     # 条件（パラメータ）は生の JSON ではなく「トレンド×RSI出戻り（10/30/…）・5m・買い・売り…」の要約で出す
     parsed = [(r, json.loads(r.metrics_json or "{}"), strategy_view.describe(r)) for r in runs]
-    return templates.TemplateResponse(request, "backtests.html", _ctx(request, runs=parsed))
+    names = _symbol_names(s, [r.symbol_code for r in runs])
+    return templates.TemplateResponse(request, "backtests.html", _ctx(request, runs=parsed, names=names))
 
 
 @router.get("/backtests/{run_id}", response_class=HTMLResponse)
@@ -465,7 +476,7 @@ def backtest_detail(run_id: int, request: Request, s: Session = Depends(get_sess
         request,
         "backtest_detail.html",
         _ctx(request, run=run, metrics=json.loads(run.metrics_json or "{}"), trades=trades,
-             d=strategy_view.describe(run)),
+             d=strategy_view.describe(run), symbol_name=_symbol_names(s, [run.symbol_code])[run.symbol_code]),
     )
 
 

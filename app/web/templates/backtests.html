@@ -14,7 +14,7 @@
   {% for r, m, d in runs %}
     <tr>
       <td class="mono">{{ r.id }}</td><td class="mono">{{ r.created_at | jst('%m/%d %H:%M') }}</td>
-      <td class="mono">{{ r.symbol_code }}</td>
+      <td><span class="mono">{{ r.symbol_code }}</span>{% if names.get(r.symbol_code) %}<br><small>{{ names[r.symbol_code] }}</small>{% endif %}</td>
       <td><small>{{ d.summary }}</small></td>
       <td class="mono"><small>{{ r.start | jst('%m/%d') }}〜{{ r.end | jst('%m/%d') }}</small></td>
       {% if m.get('trades') %}

@@ -2,7 +2,7 @@
 {% block content %}
 <p><a href="/backtests">← 履歴</a></p>
 <h2>バックテスト #{{ run.id }}</h2>
-<p><strong>{{ d.logic }}</strong> — <span class="mono">{{ run.symbol_code }}</span> / <span class="mono">{{ run.timeframe }}</span><br>
+<p><strong>{{ d.logic }}</strong> — <span class="mono">{{ run.symbol_code }}</span>{% if symbol_name %} {{ symbol_name }}{% endif %} / <span class="mono">{{ run.timeframe }}</span><br>
 <small class="muted">実行 {{ run.created_at | jst('%Y-%m-%d %H:%M') }} ・ 期間 {{ run.start | jst('%Y-%m-%d %H:%M') }} 〜 {{ run.end | jst('%Y-%m-%d %H:%M') }}（JST）</small></p>
 
 <div class="grid2" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-bottom: 1rem">

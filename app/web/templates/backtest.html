@@ -62,7 +62,7 @@
 </script>
 
 {% if result %}
-  <h3>結果 — {{ result.symbol }} / {{ result.timeframe }} <a href="/backtests/{{ run_id }}"><small>保存済み #{{ run_id }}</small></a></h3>
+  <h3>結果 — {{ result.symbol }}{% if symbol_name %} {{ symbol_name }}{% endif %} / {{ result.timeframe }} <a href="/backtests/{{ run_id }}"><small>保存済み #{{ run_id }}</small></a></h3>
   {% if result.metrics.get('error') or result.metrics.get('note') %}
     <p>{{ result.metrics.get('error') or result.metrics.get('note') }}</p>
   {% else %}

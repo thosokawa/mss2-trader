@@ -768,11 +768,17 @@ def test_backtest_history_is_readable(client):
         s.commit()
         s.refresh(run)
         rid = run.id
+    with Session(engine) as s:
+        from app.models import SymbolMaster
+        if not s.get(SymbolMaster, "5016"):
+            s.add(SymbolMaster(code="5016", name="ＪＸ金属"))
+            s.commit()
     html = client.get("/backtests").text
     assert "09/29 15:30" in html  # 06:30 UTC → 15:30 JST
+    assert "ＪＸ金属" in html  # 銘柄コードだけでなく銘柄名も（銘柄マスタから補完）
     assert "トレンド×RSI出戻り（10/30/14" in html and "デイトレ" in html
     assert "▲ +29,600" in html and "70.6%" in html
     detail = client.get(f"/backtests/{rid}").text
     assert "params_json" not in detail and '"mid_period"' not in detail
     assert "中期MA期間" in detail and "買い・売り" in detail and "またがない" in detail
-    assert "実行 2026-09-29 15:30" in detail
+    assert "実行 2026-09-29 15:30" in detail and "ＪＸ金属" in detail
