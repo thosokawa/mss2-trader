@@ -4,6 +4,10 @@
   margin_open      : RssMarginOpenOrder（信用新規） 引数22個 A〜V、ステータス W
   margin_close     : RssMarginCloseOrder（信用返済）引数20個 A〜T、ステータス U
   margin_positions : RssMarginPositionList（信用建玉一覧。返済する建玉の建日・建値・建市場を引く）
+                     A1 に数式、2行目に項目名、3行目からデータ。RSS の一覧関数は数式のセルから下へ
+                     結果を書くので、項目名の上（A1）に置かないと結果が数式を上書きして配信が止まる
+                     （2026-09-29 実機: 1行目に項目名・A2 に数式だと数式が消え、一覧が古いまま固定された）。
+                     正しく置くと A1 は「… => 配信中」を表示し続ける
 
 引数の並びは楽天証券 MarketSpeed II RSS オンラインヘルプ（注文）の関数形式どおり。
 依存ライブラリを持たない（bridge.py から素の import で読めるように）。
@@ -65,5 +69,9 @@ def order_formula(sheet: str, row: int) -> str:
     return f"={func}({refs})"
 
 
+POSITIONS_HEADER_ROW = 2  # 項目名の行（データはその下から）
+
+
 def positions_formula() -> str:
-    return f"=RssMarginPositionList($A$1:${col_letter(len(POSITION_ITEMS))}$1)"
+    """A1 に置く数式。項目名は2行目。"""
+    return f"=RssMarginPositionList($A$2:${col_letter(len(POSITION_ITEMS))}$2)"

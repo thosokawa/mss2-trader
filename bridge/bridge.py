@@ -30,7 +30,7 @@ import random
 import re
 import sys
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 # Windows のコンソール（cp932）でも日本語フィールド名を print できるように
@@ -50,6 +50,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from rss_layout import (  # noqa: E402
     ORDER_SHEETS,
     POSITION_ITEMS,
+    POSITIONS_HEADER_ROW,
     POSITIONS_SHEET,
     col_letter,
     order_formula,
@@ -188,6 +189,45 @@ def parse_positions(table: list[list]) -> list[dict]:
     return lots
 
 
+def today_yyyymmdd() -> int:
+    """JST の今日（建日と同じ yyyymmdd の整数）。"""
+    d = (datetime.now(UTC) + timedelta(hours=9)).date()
+    return d.year * 10000 + d.month * 100 + d.day
+
+
+def fill_from_diff(
+    before: list[dict], after: list[dict], order: dict, today: int
+) -> tuple[int, float | None]:
+    """新規建ての前後の建玉一覧を比べ、この注文で増えた建玉の株数と加重平均の建単価を返す。
+
+    同じ銘柄・売買・信用区分・口座区分で建日が今日の建玉の、(建値, 建市場) ごとの数量の増分を足す。
+    約定が複数の値段・市場に分かれても合算する。増えていなければ (0, None)。
+    """
+    want_side = "売建" if order["side"] == "SHORT" else "買建"
+
+    def keyed(lots):
+        out: dict[tuple, int] = {}
+        for lot in lots:
+            if (lot["code"] == str(order["symbol_code"]) and lot["side"] == want_side
+                    and lot["margin_type"] == int(order.get("margin_type") or 0)
+                    and lot["account"] == str(order.get("account_type") or "0")
+                    and lot["date"] == today and lot["price"]):
+                k = (lot["price"], lot["market"])
+                out[k] = out.get(k, 0) + lot["qty"]
+        return out
+
+    b, a = keyed(before), keyed(after)
+    qty, amount = 0, 0.0
+    for (price, _market), q in a.items():
+        dq = q - b.get((price, _market), 0)
+        if dq > 0:
+            qty += dq
+            amount += price * dq
+    if not qty:
+        return 0, None
+    return qty, round(amount / qty, 4)
+
+
 def select_lots(lots: list[dict], order: dict) -> tuple[list[tuple[dict, int]], str]:
     """返済注文に使う建玉と数量を選ぶ。([(建玉, 数量), ...], 見つからない理由) を返す。
 
@@ -278,6 +318,9 @@ class OrderRelay:
     # 拒否系の表示は、この秒数だけ同じ表示が続いてから確定する（トリガー直前の古い
     # 表示を読んでしまい、実は発注されている注文を「拒否」と誤判定しないため）
     REJECT_SETTLE_SEC = 1.5
+    # 信用の新規建てが受理されたあと、建玉一覧に約定が現れるのを待つ回数と間隔（秒）
+    FILL_CHECK_TRIES = 3
+    FILL_CHECK_WAIT_SEC = 1.5
 
     def __init__(self, workbook_path: str, n_rows: int = 300, sor: int = 1):
         self.workbook_path = workbook_path
@@ -322,9 +365,20 @@ class OrderRelay:
             print(f"[orders] シート {sheet} を追加しました")
         if POSITIONS_SHEET not in names:
             ws = book.sheets.add(POSITIONS_SHEET, after=book.sheets[-1])
-            ws.range("A1").value = POSITION_ITEMS
-            ws.range("A2").formula = positions_formula()
+            self._layout_positions(ws)
             print(f"[orders] シート {POSITIONS_SHEET} を追加しました")
+        else:
+            ws = book.sheets[POSITIONS_SHEET]
+            if not str(ws.range("A1").formula or "").startswith("=RssMarginPositionList"):
+                # 古い配置（1行目に項目名・A2 に数式 → 結果に上書きされて一覧が固定）を作り直す
+                self._layout_positions(ws)
+                print(f"[orders] シート {POSITIONS_SHEET} を正しい配置に作り直しました")
+
+    @staticmethod
+    def _layout_positions(ws) -> None:
+        ws.clear_contents()
+        ws.range("A2").value = POSITION_ITEMS
+        ws.range("A1").formula = positions_formula()
 
     # ---- 発注 ----
 
@@ -364,18 +418,54 @@ class OrderRelay:
             None, None, None, None,
             None, None, None, None, None,
         ]
-        ws = self._book().sheets["margin_open"]
-        return self._fire(ws, "margin_open", order["id"], values, resolve_timeout)
+        book = self._book()
+        before = self.fresh_positions(book) or []
+        res = self._fire(book.sheets["margin_open"], "margin_open", order["id"], values, resolve_timeout)
+        if res.get("status") == "sent":
+            # 受理のあと建玉一覧に約定が現れたら、増えた建玉から実際の建単価・株数を求める
+            for _ in range(self.FILL_CHECK_TRIES):
+                time.sleep(self.FILL_CHECK_WAIT_SEC)
+                after = self.fresh_positions(book)
+                filled_qty, avg = fill_from_diff(before, after or [], order, today_yyyymmdd())
+                if filled_qty:
+                    res.update(filled_qty=filled_qty, avg_price=avg)
+                    break
+        return res
+
+    def refresh_positions(self, book, timeout: float = 15.0, clock=time.time, sleep=time.sleep) -> bool:
+        """建玉一覧を取り直す。RSS の一覧関数は一度取ったデータを使い回すので、A1 の数式を
+        消して入れ直すと最新を取りに行く（2026-09-29 実機で確認）。状態が「配信中」か「完了」に
+        なれば True、時間内にならなければ False。"""
+        ws = book.sheets[POSITIONS_SHEET]
+        ws.range("A1").clear_contents()
+        sleep(1.0)
+        ws.range("A1").formula = positions_formula()
+        deadline = clock() + timeout
+        while clock() < deadline:
+            status = str(ws.range("A1").value or "")
+            if "配信中" in status or "完了" in status:
+                sleep(0.5)  # 行の書き込みが終わるのを少し待つ
+                return True
+            sleep(0.1)
+        return False
 
     def read_positions(self, book) -> list[dict]:
         table = book.sheets[POSITIONS_SHEET].used_range.value or []
         if table and not isinstance(table[0], list):
             table = [table]
-        return parse_positions(table)
+        # 1行目は数式（状態表示）。2行目が項目名、3行目からデータ
+        return parse_positions(table[POSITIONS_HEADER_ROW - 1:])
+
+    def fresh_positions(self, book) -> list[dict] | None:
+        """取り直してから読む。取り直せなければ None。"""
+        return self.read_positions(book) if self.refresh_positions(book) else None
 
     def _place_margin_close(self, order: dict, resolve_timeout: float) -> dict:
         book = self._book()
-        lots = self.read_positions(book)
+        lots = self.fresh_positions(book)
+        if lots is None:
+            return {"status": "error",
+                    "error": "建玉一覧を取り直せなかった（RssMarginPositionList が応答しない）"}
         picked, why = select_lots(lots, order)
         if not picked:
             # 建玉の認識がずれている（手動で返済済み等）か一覧が未取得。error → backend が DISARM。

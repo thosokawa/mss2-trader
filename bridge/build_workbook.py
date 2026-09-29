@@ -186,8 +186,9 @@ def build_orders(out_path: Path, n_rows: int = N_ROWS) -> None:
         ws.column_dimensions[col_letter(n_args + 1)].width = 45
         ws.freeze_panes = "A2"
     ws = wb.create_sheet(POSITIONS_SHEET)
-    ws.append(POSITION_ITEMS)
-    ws["A2"] = positions_formula()
+    ws["A1"] = positions_formula()
+    for c, item in enumerate(POSITION_ITEMS, start=1):
+        ws.cell(row=2, column=c, value=item)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(out_path)

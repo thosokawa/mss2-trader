@@ -48,9 +48,11 @@ P0〜P3 済（雛形・バックテスト・RSSブリッジ・tick→足集約�
 （`hold_overnight`、`app/engine/eod.py`）、売買方向（`direction`=long/short/both。旧 `allow_short`）、取引区分（`trade_type`=cash/margin）。
 通知は Slack / メール（Gmail SMTP、`app/notify.py`）。
 
-**信用取引（2026-09-29 から新規建てを停止中）**: RSS の一覧関数（建玉一覧など）は MarketSpeed II の
-更新アイコンを押さないと最新にならず、bridge が返済に必要な建単価を取れないと判明（bot の返済が失敗）。
-`live.MARGIN_ORDERS_SUPPORTED=False` で信用の新規建ては見送り（現物は動く）。詳細 `bridge/README.md`。
+**信用取引（2026-09-29 に再開・実弾の一往復は未確認）**: RSS の一覧関数は数式のセルから下へ結果を書き
+（数式を項目名の下に置くと上書きされて一覧が固定される）、一度取ったデータを使い回す。bridge は
+`margin_positions` の A1 の数式を入れ直して最新を取ってから返済し、新規建ての前後の差から実際の建単価を報告する。
+詳細 `bridge/README.md`「信用取引」。現物は同じ日に同じ銘柄を回転売買すると差金決済の制限で余力が足りなくなる
+（2回目の買いが拒否された）ので、1分足デイトレは信用向き。
 空売りの仕組み自体は戦略・バックテスト・ペーパー・live・bridge まで対応
 （`Position.qty` マイナス＝売建、Order.side は BUY/SHORT/EXIT/COVER、Order.trade_type=cash/margin）。
 bridge は `RssMarginOpenOrder`（信用区分 4=いちにち / 2=一般無期限）と `RssMarginCloseOrder`

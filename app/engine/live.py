@@ -88,10 +88,10 @@ CLOSE_SIDES = {"EXIT", "SELL", "COVER"}
 
 # 信用の新規建てを発注してよいか。False にすると信用の新規建てだけ「発注見送り」になる
 # （手仕舞い・現物には影響しない）。
-# 2026-09-29 実機で判明: RSS の一覧関数（RssMarginPositionList 等）は MarketSpeed II の
-# 「更新」アイコンを押したときしか最新にならず、bridge が返済に必要な建日・建単価を取れない
-# （bot の買建が一覧に載らず返済が「該当0株」で失敗した）。自動返済の手段が見つかるまで False。
-MARGIN_ORDERS_SUPPORTED = False
+# 経緯（2026-09-29）: 建玉一覧が古いままで bot の返済が「該当0株」で失敗し一旦 False にしたが、
+# 原因は一覧の数式が結果に上書きされていたこと（rss_layout 参照）と、一覧関数がデータを使い回すこと。
+# bridge が返済・新規建ての前後に数式を入れ直して最新を取るようにしたので True に戻した。
+MARGIN_ORDERS_SUPPORTED = True
 
 
 def margin_type_for(params: dict, timeframe: str) -> int:
