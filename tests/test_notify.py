@@ -61,3 +61,24 @@ def test_slack_and_email_both_sent():
         assert notify.send("hello")
     post.assert_called_once()
     smtp.return_value.__enter__.return_value.send_message.assert_called_once()
+
+
+def test_format_signal_with_pnl_in_subject_and_body():
+    pnl = {"pnl": 1200.0, "return_pct": 0.196, "entry": 6110.0, "exit": 6122.0, "qty": 100,
+           "estimate": True}
+    text = notify.format_signal("MACD", "9984", "ソフトバンクグループ", "EXIT", 6122.0, "MACD下抜け", pnl=pnl)
+    first, *rest = text.splitlines()
+    assert first.endswith("+1,200円")  # メールの件名にも出る
+    body = "\n".join(rest)
+    assert "損益: 🔺+1,200円（+0.20%）" in body
+    assert "建値 6,110.0 → 6,122.0 × 100株 買建" in body and "概算" in body
+
+    loss = {"pnl": -3000.0, "return_pct": -3.0, "entry": 1000.0, "exit": 1030.0, "qty": 100, "short": True}
+    text = notify.format_signal("X", "1111", "", "COVER", 1030.0, "損切り", pnl=loss)
+    assert text.splitlines()[0].endswith("-3,000円")
+    assert "損益: 🔻-3,000円（-3.00%）" in text and "売建" in text and "概算" not in text
+
+
+def test_format_signal_without_pnl_is_unchanged():
+    text = notify.format_signal("MACD", "9984", "SBG", "BUY", 6110.0, "MACD上抜け")
+    assert "損益" not in text and text.splitlines()[0].endswith("@6,110.0")

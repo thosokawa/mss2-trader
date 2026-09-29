@@ -230,8 +230,15 @@ def _run_strategy_symbol(
         session.add(row)
         session.commit()
         fired.append(row)
+        pnl = None
         if is_paper:
-            paper.on_signal(session, strat_row, symbol_code, side, price, reason, ts, qty_hint)
+            trade = paper.on_signal(session, strat_row, symbol_code, side, price, reason, ts, qty_hint)
+            if trade is not None and trade.status == "closed" and side in CLOSE_SIDES:
+                pnl = {  # ペーパー約定の実際の損益（スリッページ込み）
+                    "pnl": trade.pnl or 0.0, "return_pct": trade.return_pct or 0.0,
+                    "entry": trade.entry_price, "exit": trade.exit_price or price,
+                    "qty": trade.qty, "short": trade.side == "SHORT",
+                }
             pos = paper.current_position(session, strat_row.id, symbol_code)
         elif is_live_trading:
             if not blocked_reason:
@@ -251,19 +258,35 @@ def _run_strategy_symbol(
                     trade_type=o_type, margin_type=m_type if o_type == "margin" else 0,
                     open_date=open_date,
                 )
+                if side in CLOSE_SIDES:
+                    pnl = _estimate_pnl(pos, price)
                 # 実際に受理されたかは bridge の報告待ちだが、同一足内で矛盾したシグナルを
                 # 出さないよう楽観的にポジションを進めておく（ブロックされた場合は進めない）。
                 pos = _advance(pos, side, qty_hint, price)
         else:
+            if side in CLOSE_SIDES:
+                pnl = _estimate_pnl(pos, price)
             pos = _advance(pos, side, qty_hint, price)
         if notify:
-            send(format_signal(strat_row.name, symbol_code, name, side, price, signal_reason))
+            send(format_signal(strat_row.name, symbol_code, name, side, price, signal_reason, pnl=pnl))
 
     cur.last_bar_ts = latest_ts
     cur.updated_at = utcnow()
     session.add(cur)
     session.commit()
     return fired
+
+
+def _estimate_pnl(pos: Position, price: float) -> dict | None:
+    """手仕舞いの損益の概算（建値＝建てたシグナルの価格、手仕舞い値＝今回のシグナルの価格）。"""
+    if pos.is_flat or not pos.avg_price:
+        return None
+    qty = abs(pos.qty)
+    return {
+        "pnl": (price - pos.avg_price) * qty * pos.direction,
+        "return_pct": (price / pos.avg_price - 1) * 100 * pos.direction,
+        "entry": pos.avg_price, "exit": price, "qty": qty, "short": pos.is_short, "estimate": True,
+    }
 
 
 def _advance(pos: Position, side: str, qty: int, price: float) -> Position:

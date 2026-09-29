@@ -353,3 +353,23 @@ def test_live_mode_blocks_buy_while_long():
         fired = live.run_once(s, notify=False, now=BASE + timedelta(minutes=15, seconds=30))
         assert len(fired) == 1 and "建玉あり" in fired[0].reason
         assert len(s.exec(select(Order).where(Order.strategy_id == st.id)).all()) == 1
+
+
+def test_exit_notification_includes_pnl():
+    """手仕舞いの通知に損益（paper は実際の擬似約定、それ以外は概算）が入る。"""
+    init_db()
+    from unittest.mock import patch
+
+    sent = []
+    with Session(engine) as s, patch("app.engine.live.send", side_effect=lambda t: sent.append(t)):
+        _make_strategy(s, "9810", mode="paper")
+        _add_bars(s, "9810", DECLINE, BASE)
+        live.run_once(s, notify=True)  # カーソル初期化
+        rise_then_fall = RISE + [RISE[-1] - 5 * i for i in range(1, 15)]
+        _add_bars(s, "9810", rise_then_fall, BASE + timedelta(minutes=5 * len(DECLINE)))
+        live.run_once(s, notify=True)
+    exits = [t for t in sent if "手仕舞い" in t.splitlines()[0]]
+    assert exits, sent
+    assert "損益:" in exits[0] and "円" in exits[0].splitlines()[0]
+    buys = [t for t in sent if "買い" in t.splitlines()[0]]
+    assert buys and "損益" not in buys[0]

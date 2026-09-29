@@ -72,8 +72,37 @@ def send_email(text: str, subject: str | None = None) -> bool:
         return False
 
 
-def format_signal(strategy_name: str, symbol: str, name: str, side: str, price: float, reason: str) -> str:
+def format_signal(
+    strategy_name: str,
+    symbol: str,
+    name: str,
+    side: str,
+    price: float,
+    reason: str,
+    pnl: dict | None = None,
+) -> str:
+    """シグナル通知の本文。手仕舞いなら pnl（format_pnl の引数）で損益の行を足す。"""
     icon = {
         "BUY": "🟢 買い", "SELL": "🔴 売り", "SHORT": "🔴 売建", "EXIT": "⚪ 手仕舞い", "COVER": "⚪ 買戻し",
     }.get(side, side)
-    return f"*{icon}* {symbol} {name}  @{price:,.1f}\n戦略: {strategy_name}\n根拠: {reason}"
+    head = f"*{icon}* {symbol} {name}  @{price:,.1f}"
+    if pnl:  # 1行目はメールの件名になるので、損益の金額も入れておく
+        head += f"  {'+' if pnl['pnl'] >= 0 else '-'}{abs(pnl['pnl']):,.0f}円"
+    text = f"{head}\n戦略: {strategy_name}\n根拠: {reason}"
+    if pnl:
+        text += "\n" + format_pnl(**pnl)
+    return text
+
+
+def format_pnl(
+    pnl: float, return_pct: float, entry: float, exit: float, qty: int, short: bool = False,
+    estimate: bool = False,
+) -> str:
+    """例: 損益: +1,200円（+0.20%）建値 6,110.0 → 6,122.0 × 100株 買建"""
+    sign = "+" if pnl >= 0 else "-"
+    mark = "🔺" if pnl > 0 else "🔻" if pnl < 0 else ""
+    note = "（概算: シグナル時点の価格で計算）" if estimate else ""
+    return (
+        f"損益: {mark}{sign}{abs(pnl):,.0f}円（{return_pct:+.2f}%）"
+        f" 建値 {entry:,.1f} → {exit:,.1f} × {qty}株 {'売建' if short else '買建'}{note}"
+    )
