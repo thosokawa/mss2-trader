@@ -65,7 +65,7 @@ Signal(side, qty=None, reason="", order_type="MKT", limit_price=None)
 エンジンは `on_bar()` を直接呼ばず `Strategy.decide()` を呼び、方向に合わない新規建て
 （`long` なのに `SHORT`、`short` なのに `BUY`）を捨てる（手仕舞いは常に通す）。戦略側は
 `self.allow_short` が True のときだけ `SHORT` を返せばよく、`BUY` を方向で出し分ける必要はない。
-同梱の7戦略は買いと上下対称な売建ルールを持つ（例: SMA クロスはデッドクロスで売建、ゴールデンクロスで買戻し）。
+同梱の8戦略は買いと上下対称な売建ルールを持つ（例: SMA クロスはデッドクロスで売建、ゴールデンクロスで買戻し）。
 ショートの損益は (建値 - 手仕舞い値) × 株数、損切り/利確は向きが逆（`stops.py` の `direction`）。
 信用の金利・貸株料はバックテスト・ペーパーでは考慮しない。
 
@@ -118,6 +118,7 @@ Signal(side, qty=None, reason="", order_type="MKT", limit_price=None)
 | `ma_rsi.py` | トレンドフォロー | 終値とMAの関係（上抜け/上方）+ 傾き + RSI帯でエントリー |
 | `trend_rsi_reclaim.py` | アラート専用 | 短期MA>中期MAでRSIが40回復→買い通知 / 短期MA<中期MAでRSIが60割れ→売り通知。ポジションを見ない純粋なアラート（`mode=notify` 向け。売り側は paper/backtest 非対応） |
 | `macd_cross.py` | モメンタム | MACD線がシグナル線を上抜け/下抜け |
+| `macd_trend.py` | モメンタム＋上位足フィルタ | 上位足（例 15分足）の EMA トレンドと同じ向きのときだけ MACD クロスで建てる。上位足は売買する足を戦略内でまとめ直して作る（`indicators.resample_completed`。形成中の上位足は使わない） |
 | `bollinger_reversion.py` | **逆張り** | ボリンジャー下限を割れてから反発で買い、中心線/上限で手仕舞い |
 | `donchian_breakout.py` | ブレイクアウト | 直近N本の高値ブレイクで買い、より短いM本の安値割れで手仕舞い（タートル風） |
 | `adx_ma_cross.py` | フィルタ付きトレンド | ADXでトレンドの強さを確認してから SMAクロスに従う（レンジ相場のダマシ回避） |

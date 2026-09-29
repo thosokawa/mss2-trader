@@ -105,3 +105,32 @@ def crossed_down(a: pd.Series, b: pd.Series) -> bool:
     if len(a) < 2 or len(b) < 2:
         return False
     return bool(a.iloc[-2] >= b.iloc[-2] and a.iloc[-1] < b.iloc[-1])
+
+
+TIMEFRAME_MINUTES = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "60m": 60, "1d": 1440}
+
+
+def resample_completed(bars: pd.DataFrame, timeframe: str, base_minutes: int) -> pd.DataFrame:
+    """足（index=足の開始時刻）を上位足にまとめ直し、**確定した上位足だけ**を返す。
+
+    形成中の最後の上位足（まだ終わっていない）は含めないので、未来の値を見ない。
+    例: 1分足で 10:07 まで来ているとき、15分足は 09:45〜10:00 の足までを返す（10:00〜の足は未確定）。
+    "1d" は日付ごと（ts は naive UTC だが JST の取引時間 9:00〜15:30 は UTC の同じ日に収まる）。
+    足が無い時間（昼休み・夜間）の空の上位足は落とす。
+    """
+    if bars.empty:
+        return bars
+    minutes = TIMEFRAME_MINUTES[timeframe]
+    rule = "1D" if timeframe == "1d" else f"{minutes}min"
+    agg = bars.resample(rule, label="left", closed="left").agg(
+        {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
+    ).dropna(subset=["close"])
+    if agg.empty:
+        return agg
+    last_bar_end = bars.index[-1] + pd.Timedelta(minutes=base_minutes)
+    step = pd.Timedelta(days=1) if timeframe == "1d" else pd.Timedelta(minutes=minutes)
+    last_bin_end = agg.index[-1] + step
+    if timeframe == "1d" or last_bar_end < last_bin_end:
+        # 日足は当日分が確定するのは大引け後なので、当日の足（最後の日）は使わない
+        agg = agg.iloc[:-1]
+    return agg

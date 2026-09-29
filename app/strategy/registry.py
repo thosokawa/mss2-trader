@@ -11,6 +11,7 @@ BUILTIN = {
     "移動平均+RSI": "app.strategy.examples.ma_rsi:MaRsi",
     "トレンド×RSI出戻り": "app.strategy.examples.trend_rsi_reclaim:TrendRsiReclaim",
     "MACDクロス": "app.strategy.examples.macd_cross:MacdCross",
+    "MACDクロス＋上位足トレンド": "app.strategy.examples.macd_trend:MacdTrendFilter",
     "ボリンジャー逆張り": "app.strategy.examples.bollinger_reversion:BollingerReversion",
     "ドンチャンブレイクアウト": "app.strategy.examples.donchian_breakout:DonchianBreakout",
     "ADXフィルタ+MAクロス": "app.strategy.examples.adx_ma_cross:AdxMaCross",
