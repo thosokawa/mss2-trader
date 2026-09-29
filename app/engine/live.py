@@ -3,7 +3,7 @@
 流れ:
   bridge から届いた tick は aggregator が確定足（Bar）にしている。
   live エンジンはそれを読んで、enabled な Strategy ごとに:
-    対象銘柄セットの各銘柄の「まだ評価していない確定足」を on_bar に流す
+    対象銘柄（Strategy.symbols）の各銘柄の「まだ評価していない確定足」を on_bar に流す
     -> Signal が返ったら:
        - Signal を DB 保存（origin="live", idempotency_key で重複防止）
        - notify.send で通知（Slack / メール）
@@ -36,7 +36,7 @@ from app.engine import orders, paper
 from app.engine.eod import flatten_at_close, is_last_bar_of_day, is_new_day
 from app.engine.risk import get_risk_engine
 from app.engine.stops import check_stop_target
-from app.models import LiveCursor, Signal, Strategy, Symbol, SymbolSetItem, utcnow
+from app.models import LiveCursor, Signal, Strategy, Symbol, utcnow
 from app.notify import format_signal, send
 from app.strategy.base import Context, Position
 from app.strategy.registry import load_strategy_class
@@ -86,10 +86,12 @@ def position_from_signals(
 OPEN_SIDES = {"BUY": 1, "SHORT": -1}
 CLOSE_SIDES = {"EXIT", "SELL", "COVER"}
 
-# 信用の新規建てを発注してよいか。bridge が RssMarginOpenOrder / RssMarginCloseOrder
-# （返済は RssMarginPositionList から建日・建値・建市場を引く）に対応したので True。
-# 信用で問題が出たらここを False にすれば、信用の新規建てだけ止められる（手仕舞いは出る）。
-MARGIN_ORDERS_SUPPORTED = True
+# 信用の新規建てを発注してよいか。False にすると信用の新規建てだけ「発注見送り」になる
+# （手仕舞い・現物には影響しない）。
+# 2026-09-29 実機で判明: RSS の一覧関数（RssMarginPositionList 等）は MarketSpeed II の
+# 「更新」アイコンを押したときしか最新にならず、bridge が返済に必要な建日・建単価を取れない
+# （bot の買建が一覧に載らず返済が「該当0株」で失敗した）。自動返済の手段が見つかるまで False。
+MARGIN_ORDERS_SUPPORTED = False
 
 
 def margin_type_for(params: dict, timeframe: str) -> int:
@@ -99,15 +101,9 @@ def margin_type_for(params: dict, timeframe: str) -> int:
 
 
 def _symbols_for(session: Session, strategy: Strategy) -> list[str]:
-    if strategy.symbol_set_id is None:
-        return []
-    return list(
-        session.exec(
-            select(SymbolSetItem.symbol_code)
-            .where(SymbolSetItem.set_id == strategy.symbol_set_id)
-            .order_by(SymbolSetItem.sort_order, SymbolSetItem.id)
-        ).all()
-    )
+    from app.symbols import parse_codes
+
+    return parse_codes(strategy.symbols)
 
 
 def _cursor(session: Session, strategy_id: int, symbol_code: str) -> LiveCursor | None:

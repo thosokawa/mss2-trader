@@ -1,15 +1,27 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>戦略</h2>
-<p><small>有効にすると live エンジンが {{ '設定間隔ごと' }}に対象銘柄セットの確定足へ <code>on_bar()</code> を流し、
+<p><small>有効にすると live エンジンが {{ '設定間隔ごと' }}に対象銘柄の確定足へ <code>on_bar()</code> を流し、
 シグナルを <a href="/signals">シグナル</a> 履歴に記録して Slack へ通知します（発注はしません）。
 有効化した時点より後の足だけが対象です。<code>paper</code> モードなら擬似約定して<a href="/performance">成績</a>に反映します。
-<code>live</code> モードは実際に発注します — <a href="/risk">リスク管理</a>で ARM しない限り発注されません。</small></p>
+<code>live</code> モードは実際に発注します — <a href="/risk">リスク管理</a>で ARM しない限り発注されません。
+有効な戦略の対象銘柄は自動で RSS の株価取り込み対象になります（bridge が30秒ほどで反映）。</small></p>
+
+{% if no_ticks %}
+<p class="neg">株価がまだ一度も届いていない銘柄: {% for c in no_ticks %}{{ c }} {{ names.get(c, '') }}{% if not loop.last %}、{% endif %}{% endfor %}
+<br><small>bridge が起動していない、または反映待ち（30秒ほど）の可能性があります。株価が届かない銘柄は足ができずシグナルも出ません。</small></p>
+{% endif %}
 
 {% if error == "dup_name" %}
 <p class="neg">同じ名前の戦略が既にあります。別の名前を付けてください。</p>
 {% elif error == "params" %}
 <p class="neg">パラメータ（JSON）の形式が正しくありません。</p>
+{% elif error == "no_symbols" %}
+<p class="neg">対象銘柄（証券コード）を1つ以上入れてください。</p>
+{% elif error == "open_position" %}
+<p class="neg">この戦略は実発注の建玉を持っています。建玉のある銘柄を外したり戦略を削除したりすると、bot がその建玉を
+管理しなくなります（損切り・手仕舞いが出ない）。先に手仕舞うか、手動で決済して <a href="/risk">リスク管理</a> で
+「手動決済を記録」してください。</p>
 {% endif %}
 <article>
   <form method="post" action="/strategies">
@@ -20,11 +32,9 @@
           {% for label, cp in builtin.items() %}<option value="{{ cp }}" {% if prefill.class_path==cp %}selected{% endif %}>{{ label }} ({{ cp }})</option>{% endfor %}
         </select>
       </label>
-      <label>銘柄セット
-        <select name="symbol_set_id" required>
-          <option value="">— 選択 —</option>
-          {% for ss in sets %}<option value="{{ ss.id }}">{{ ss.name }}</option>{% endfor %}
-        </select>
+      <label>対象銘柄（証券コード。複数はカンマ区切り）
+        <input name="symbols" id="symbols" placeholder="例: 9984 または 9984,5016" required autocomplete="off">
+        <small id="symbols_hint"></small>
       </label>
     </div>
     <div class="grid">
@@ -71,17 +81,42 @@
   _sel.addEventListener('change', () => {
     pf.rebuild(STRAT_PARAMS[_sel.value] || {}, STRAT_META[_sel.value] || {}, null);
   });
+
+  // 対象銘柄の入力に合わせて銘柄名を表示する（銘柄マスタ /data の「銘柄一覧を更新」から）
+  (() => {
+    const input = document.getElementById('symbols'), hint = document.getElementById('symbols_hint');
+    let timer = null;
+    async function show() {
+      const codes = input.value.split(/[,\s、，]+/).map(c => c.trim()).filter(c => c.length >= 4);
+      const parts = await Promise.all(codes.map(async c => {
+        try {
+          const d = await (await fetch('/api/symbol-name?code=' + encodeURIComponent(c))).json();
+          return d.name ? `${d.code} ${d.name}` : `${d.code}（銘柄一覧に見つかりません）`;
+        } catch (e) { return c; }
+      }));
+      hint.textContent = parts.join(' / ');
+    }
+    input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(show, 300); });
+  })();
 </script>
 
 {% if rows %}
 <table>
-  <thead><tr><th>名前</th><th>ロジック</th><th>銘柄セット</th><th>足</th><th>モード</th><th>状態</th><th></th></tr></thead>
+  <thead><tr><th>名前</th><th>ロジック</th><th>対象銘柄</th><th>足</th><th>モード</th><th>状態</th><th></th></tr></thead>
   <tbody>
   {% for st in rows %}
     <tr>
       <td>{{ st.name }}<br><small>{{ st.params_json }}</small></td>
       <td><small>{{ st.class_path }}</small></td>
-      <td>{{ set_names.get(st.symbol_set_id, '—') }}</td>
+      <td>
+        {% for c in parse_codes(st.symbols) %}{{ c }} {{ names.get(c, '') }}<br>{% else %}<span class="neg">未設定</span><br>{% endfor %}
+        <details><summary><small>変更</small></summary>
+          <form method="post" action="/strategies/{{ st.id }}/symbols">
+            <input name="symbols" value="{{ st.symbols }}" required>
+            <button class="outline" type="submit">更新</button>
+          </form>
+        </details>
+      </td>
       <td>{{ st.timeframe }}</td>
       <td>{{ st.mode }}</td>
       <td>{% if st.enabled %}<span class="pos">稼働中</span>{% else %}<span class="neg">停止</span>{% endif %}</td>

@@ -18,6 +18,8 @@ class Symbol(SQLModel, table=True):
     name: str = ""
     market: str = "東証"
     tick_size: float = 1.0
+    # 監視銘柄（戦略で使っていなくても RSS で株価を取り込む）。/live で追加・削除する
+    watch: bool = False
 
 
 class SymbolMaster(SQLModel, table=True):
@@ -31,6 +33,8 @@ class SymbolMaster(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=utcnow)
 
 
+# 銘柄セット（廃止。2026-09-29 に戦略ごとの Strategy.symbols と Symbol.watch に置き換え）。
+# 既存 DB の移行（app/db.py の _migrate_symbol_sets）のためにテーブル定義だけ残している。
 class SymbolSet(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True)
@@ -80,7 +84,9 @@ class Strategy(SQLModel, table=True):
     name: str = Field(index=True, unique=True)
     class_path: str = Field(description="例 app.strategy.examples.sma_cross:SmaCross")
     params_json: str = "{}"
-    symbol_set_id: int | None = Field(default=None, foreign_key="symbolset.id")
+    # 対象銘柄（カンマ区切りの証券コード 例 "9984,5016"）。app.symbols.parse_codes で読む
+    symbols: str = ""
+    symbol_set_id: int | None = Field(default=None, foreign_key="symbolset.id")  # 廃止（移行用）
     timeframe: str = "5m"
     mode: str = Field(default="notify", description="notify / paper / live")
     enabled: bool = False

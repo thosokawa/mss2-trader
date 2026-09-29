@@ -9,7 +9,7 @@
 Windows でこのブックを Excel で開くと（マーケットスピードII にログイン済みなら）
 RSS 関数が値を返し、bridge.py がその表を読んで backend に送る。
 
-  python build_workbook.py --set-id 1
+  python build_workbook.py --auto        # 有効な戦略の対象銘柄 ∪ 監視銘柄（run_all.ps1 が使う）
   python build_workbook.py --codes 7203,6501,9984 --out rss_bridge.xlsx
 
 ※ フィールド名（"現在値" 等）は楽天証券公式の RSS リファレンスで要確認。
@@ -34,10 +34,9 @@ from rss_layout import (  # noqa: E402
     order_formula,
     positions_formula,
 )
-from sqlmodel import Session, select  # noqa: E402
+from sqlmodel import Session  # noqa: E402
 
 from app.db import engine, init_db  # noqa: E402
-from app.models import SymbolSet, SymbolSetItem  # noqa: E402
 
 # bridge.py の FIELDS と必ず一致させること
 FIELDS = ["現在値", "出来高", "前日比", "最良買気配値", "最良売気配値"]
@@ -78,15 +77,13 @@ ACCOUNT_PROBE_SHEETS = {
 }
 
 
-def load_codes(set_id: int) -> list[str]:
+def auto_codes() -> list[str]:
+    """株価を取り込む銘柄 = 有効な戦略の対象銘柄 ∪ 監視銘柄（app.symbols.quote_codes）。"""
+    from app.symbols import quote_codes
+
     init_db()
     with Session(engine) as s:
-        if not s.get(SymbolSet, set_id):
-            raise SystemExit(f"symbol set id={set_id} が見つかりません")
-        items = s.exec(
-            select(SymbolSetItem).where(SymbolSetItem.set_id == set_id).order_by(SymbolSetItem.sort_order)
-        ).all()
-        return [it.symbol_code for it in items]
+        return quote_codes(s)
 
 
 def build(codes: list[str], out_path: Path) -> None:
@@ -202,7 +199,8 @@ def build_orders(out_path: Path, n_rows: int = N_ROWS) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--set-id", type=int)
+    ap.add_argument("--auto", action="store_true",
+                    help="有効な戦略の対象銘柄 ∪ 監視銘柄でブックを作る（run_all.ps1 が使う）")
     ap.add_argument("--codes", help="カンマ区切り 例: 7203,6501")
     ap.add_argument("--probe", help="項目名の実地確認用ブックを作る（1銘柄コード）")
     ap.add_argument("--orders", action="store_true", help="発注用ブック（rss_orders.xlsx）を作る")
@@ -231,10 +229,13 @@ def main() -> None:
 
     if args.codes:
         codes = [c.strip() for c in args.codes.split(",") if c.strip()]
-    elif args.set_id:
-        codes = load_codes(args.set_id)
+    elif args.auto:
+        codes = auto_codes()
+        if not codes:
+            raise SystemExit("取り込む銘柄がありません（有効な戦略の対象銘柄も監視銘柄も空）。"
+                             "/strategies で戦略を有効にするか /live で監視銘柄を追加してください")
     else:
-        raise SystemExit("--set-id か --codes か --probe か --orders を指定してください")
+        raise SystemExit("--auto か --codes か --probe か --orders を指定してください")
     build(codes, Path(args.out))
 
 

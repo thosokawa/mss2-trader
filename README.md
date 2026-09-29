@@ -18,7 +18,7 @@
 [backend = app/]  FastAPI
   ingest → bars(足集約) → strategy.on_bar() → Signal
      → notify(Slack) / (mode=live かつ ARMED なら) broker.place()
-  Web UI: 銘柄セット / データ / バックテスト / 履歴 / シグナル
+  Web UI: 戦略 / ライブ / データ / バックテスト / 履歴 / シグナル
 [Mac] 同じ strategy.on_bar() を過去足で回して検証（engine/backtest.py）
 ```
 
@@ -38,7 +38,7 @@
 
 | | 内容 | 状態 |
 |---|---|---|
-| P0 | 雛形・DB・銘柄セットUI・履歴取得・バックテスター | 済 |
+| P0 | 雛形・DB・銘柄UI・履歴取得・バックテスター | 済 |
 | P1 | `bridge/` 実装、tick→足 集約、ライブ気配画面 | 済（Windows 実機で RSS 疎通確認まで完了 2026-09） |
 | P2 | live エンジンで足確定→Slack 通知（＝通知だけ完成） | 済（Slack Webhook を設定して実疎通確認が残り） |
 | P3 | PaperBroker でペーパートレード、成績表示 | 済 |
@@ -69,10 +69,10 @@ cp config/config.example.toml config/config.toml   # 任意（無くても examp
 ### ライブ気配パイプラインの動作確認（Mac・Excel不要）
 
 ```bash
-# 1. Web UI で銘柄セットを作り、銘柄を追加（または下の --codes を使う）
+# 1. Web UI で戦略（対象銘柄）を登録・有効化するか /live で監視銘柄を追加（または下の --codes を使う）
 # 2. シミュレーションのブリッジを起動（ランダムウォークの気配を投げ続ける）
 .venv/bin/python bridge/bridge.py --simulate --codes 7203,6501,9984
-#   または  --set-id 1
+#   --codes を省くと backend の /api/quote-codes（有効な戦略の対象銘柄 ∪ 監視銘柄）を使う
 ```
 
 → Web UI の **ライブ** 画面に気配が流れ、数分で **データ** 画面に 1分足/5分足が溜まる。
@@ -94,8 +94,9 @@ Copy-Item config\config.example.toml config\config.toml
 # ターミナル1: backend（起動しっぱなし）
 .venv\Scripts\python -m app.main                   # http://127.0.0.1:8000
 
-# 銘柄セットは Web UI (/symbol-sets) で編集。変更したらブックを作り直す:
-.venv\Scripts\python bridge\build_workbook.py --set-id 1     # bridge\rss_bridge.xlsx
+# 取り込む銘柄 = 有効な戦略の対象銘柄 ∪ 監視銘柄（/live）。その一覧でブックを作る:
+.venv\Scripts\python bridge\build_workbook.py --auto     # bridge\rss_bridge.xlsx
+# 起動後に戦略や監視銘柄を変えても、bridge が30秒ごとに quotes シートの銘柄を自動で合わせる
 
 # マーケットスピードII にログイン（RSS 有効）→ rss_bridge.xlsx を Excel で開く
 
@@ -111,7 +112,7 @@ Copy-Item config\config.example.toml config\config.toml
 
 ```powershell
 .\bridge\run_all.ps1                 # backend → Excel(RSS) → bridge をまとめて起動
-.\bridge\run_all.ps1 -SkipWorkbook   # 銘柄セット未変更ならブック再生成を省略
+.\bridge\run_all.ps1 -SkipWorkbook   # ブック再生成を省略（銘柄の変更は bridge が自動で反映する）
 .\bridge\stop_all.ps1                # backend / bridge を停止（Excel は手動）
 
 .\bridge\install_autostart.ps1            # ログオン時に run_all.ps1 を自動実行（スタートアップに登録・管理者不要）
@@ -128,20 +129,21 @@ Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 ログは `logs\backend-*.log` / `logs\bridge-*.log`。
 
 Web UI:
-- **銘柄セット** … RSS で監視する銘柄グループ。`build_workbook.py` / `bridge.py --set-id` が参照。
-  証券コードを入れると銘柄名が自動で入る（銘柄マスタ＝JPX の東証上場銘柄一覧。`/data` の
-  「銘柄一覧を更新」で取り込む。`app/symbols.py`）
-- **ライブ** … bridge から届く最新気配と生存監視（5秒自動更新、30秒無受信で「遅延」）
+- **ライブ** … bridge から届く最新気配と生存監視（5秒自動更新、30秒無受信で「遅延」）。
+  **監視銘柄**（戦略で使っていなくても株価を取り込む銘柄）の追加・削除もここ。RSS で取り込む銘柄は
+  「有効な戦略の対象銘柄 ∪ 監視銘柄」で自動で決まる（`app/symbols.quote_codes`。旧「銘柄セット」は
+  2026-09-29 に廃止）。銘柄名は銘柄マスタ（JPX の東証上場銘柄一覧。`/data` の「銘柄一覧を更新」）から
 - **データ** … 蓄積済み足のカバレッジ（時刻は JST 表示、DB は UTC）。
   「過去データを取得」フォームから yfinance 取得も画面上で実行できる
-  （銘柄セットを選ぶとコード欄に自動反映。CLI と同じ `app/history.py` を使用）
+  （「候補から反映」で取り込み中の銘柄や戦略の対象銘柄をコード欄に入れられる。CLI と同じ `app/history.py`）
 - **バックテスト / 履歴** … 戦略検証。パラメータは戦略ごとに名前・説明付きの入力欄が自動生成される
   （生JSONを書く必要はない。「JSON で直接編集」から従来どおり手打ちも可能）
 - **最適化** … 戦略のパラメータをカンマ区切りで範囲指定して総当たりバックテスト（例: 短期期間欄に
   `5,10,15`）。期間を学習/検証に分割し、**検証期間（探索に使っていない後半）の成績**でランキング
   （過学習対策）。結果から「戦略登録」でそのパラメータのまま `/strategies` へ。履歴は `/optimizations`
-- **戦略** … live エンジンで回すロジックの登録。有効化すると `live_interval_sec` ごとに
-  対象銘柄セットの確定足へ `on_bar()` を流し、シグナルを記録して Slack 通知（発注はしない）。
+- **戦略** … live エンジンで回すロジックの登録。**対象銘柄（証券コード、カンマ区切りで複数可）を
+  戦略ごとに直接指定**する。有効化すると `live_interval_sec` ごとに対象銘柄の確定足へ `on_bar()` を
+  流し、シグナルを記録して通知。有効な戦略の対象銘柄は自動で RSS の取り込み対象になる。
   有効化した時点より後の足だけが対象。モード `notify` / `paper` / `live`
 - **シグナル** … live エンジンが記録したシグナル履歴
 - **成績** … `paper` モードの戦略の擬似約定（PaperBroker）による往復トレードと

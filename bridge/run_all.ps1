@@ -5,10 +5,12 @@
   手動でも実行可: 2つ目の PowerShell で  .\bridge\run_all.ps1
 
 .PARAMETER SetId
-  build_workbook.py に渡す銘柄セットID（既定 1）。
+  廃止（銘柄セットは 2026-09-29 に廃止）。登録済みのスタートアップが -SetId を渡してくるので
+  受け取るだけで使わない。取り込む銘柄は有効な戦略の対象銘柄と監視銘柄から自動で決まる。
 
 .PARAMETER SkipWorkbook
-  rss_bridge.xlsx を作り直さない（銘柄セットを変えていないとき / 手動管理のとき）。
+  rss_bridge.xlsx を作り直さない（手動管理のとき）。起動後に戦略や監視銘柄を変えても
+  bridge が quotes シートの銘柄を自動で合わせるので、通常は作り直し不要。
 
 .PARAMETER NoBridge
   bridge.py を起動しない（backend と Excel だけ立てる）。
@@ -17,7 +19,7 @@
   Excel を開いてから bridge を起動するまでの待ち秒数（RSS が値を返すまでの猶予、既定 25）。
 #>
 param(
-  [int]$SetId = 1,
+  [int]$SetId = 1,  # 廃止（互換のため受け取るだけ）
   [switch]$SkipWorkbook,
   [switch]$NoBridge,
   [int]$RssWaitSec = 25
@@ -72,7 +74,7 @@ if ($SkipWorkbook) {
   # 止めてしまう。ここだけ緩めて $LASTEXITCODE で判定する。
   $prevEAP = $ErrorActionPreference
   $ErrorActionPreference = 'Continue'
-  $wbOut = & $py (Join-Path $root 'bridge\build_workbook.py') --set-id $SetId 2>&1
+  $wbOut = & $py (Join-Path $root 'bridge\build_workbook.py') --auto 2>&1
   $ErrorActionPreference = $prevEAP
   if ($LASTEXITCODE -eq 0) {
     Write-Host "[workbook] 生成: $workbook"

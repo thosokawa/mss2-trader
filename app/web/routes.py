@@ -33,8 +33,6 @@ from app.models import (
     Signal,
     Strategy,
     Symbol,
-    SymbolSet,
-    SymbolSetItem,
     Tick,
 )
 from app.strategy.registry import BUILTIN, builtin_param_meta, builtin_params, load_strategy_class
@@ -85,7 +83,7 @@ def _ctx(request: Request, **kw):
 def dashboard(request: Request, s: Session = Depends(get_session)):
     counts = {
         "symbols": s.exec(select(func.count()).select_from(Symbol)).one(),
-        "symbol_sets": s.exec(select(func.count()).select_from(SymbolSet)).one(),
+        "quote_codes": len(symbols.quote_codes(s)),
         "bars": s.exec(select(func.count()).select_from(Bar)).one(),
         "backtests": s.exec(select(func.count()).select_from(BacktestRun)).one(),
         "strategies_enabled": s.exec(
@@ -124,96 +122,36 @@ def dashboard(request: Request, s: Session = Depends(get_session)):
     )
 
 
-# ---- 銘柄セット -----------------------------------------------------------------
+# ---- 銘柄（戦略の対象銘柄・監視銘柄。旧「銘柄セット」は廃止） ------------------------
 
 
-@router.get("/symbol-sets", response_class=HTMLResponse)
-def symbol_sets(request: Request, s: Session = Depends(get_session)):
-    sets = s.exec(select(SymbolSet).order_by(SymbolSet.name)).all()
-
-    def _count(set_id: int) -> int:
-        return s.exec(
-            select(func.count()).select_from(SymbolSetItem).where(SymbolSetItem.set_id == set_id)
-        ).one()
-
-    counts = {ss.id: _count(ss.id) for ss in sets}
-    return templates.TemplateResponse(request, "symbol_sets.html", _ctx(request, sets=sets, counts=counts))
+@router.get("/api/quote-codes")
+def api_quote_codes(s: Session = Depends(get_session)):
+    """RSS で株価を取り込む銘柄（有効な戦略の対象銘柄 ∪ 監視銘柄）。bridge が定期的に取りに来る。"""
+    return {"codes": symbols.quote_codes(s)}
 
 
-@router.post("/symbol-sets")
-def create_symbol_set(name: str = Form(...), note: str = Form(""), s: Session = Depends(get_session)):
-    if name.strip():
-        s.add(SymbolSet(name=name.strip(), note=note.strip()))
-        s.commit()
-    return RedirectResponse("/symbol-sets", status_code=303)
-
-
-@router.get("/symbol-sets/{set_id}", response_class=HTMLResponse)
-def symbol_set_detail(set_id: int, request: Request, s: Session = Depends(get_session)):
-    ss = s.get(SymbolSet, set_id)
-    if not ss:
-        return RedirectResponse("/symbol-sets", status_code=303)
-    items = s.exec(
-        select(SymbolSetItem, Symbol)
-        .join(Symbol, Symbol.code == SymbolSetItem.symbol_code)
-        .where(SymbolSetItem.set_id == set_id)
-        .order_by(SymbolSetItem.sort_order, SymbolSetItem.id)
-    ).all()
-    return templates.TemplateResponse(request, "symbol_set_detail.html", _ctx(request, ss=ss, items=items))
-
-
-@router.post("/symbol-sets/{set_id}/items")
-def add_item(
-    set_id: int,
-    code: str = Form(...),
-    name: str = Form(""),
-    s: Session = Depends(get_session),
-):
-    code = symbols.normalize_code(code)
-    if code:
-        # 名前が空なら銘柄マスタ（JPX 一覧）から補完する
-        name = name.strip() or symbols.lookup_name(s, code)
+@router.post("/live/watch")
+def add_watch(codes: str = Form(...), s: Session = Depends(get_session)):
+    """監視銘柄を追加（戦略で使っていなくても株価を取り込む）。カンマ/スペース区切りで複数可。"""
+    parsed = symbols.parse_codes(codes)
+    symbols.ensure_symbols(s, parsed)
+    for code in parsed:
         sym = s.get(Symbol, code)
-        if not sym:
-            s.add(Symbol(code=code, name=name))
-        elif name and (name != sym.name):
-            sym.name = name
-            s.add(sym)
-        exists = s.exec(
-            select(SymbolSetItem).where(
-                SymbolSetItem.set_id == set_id, SymbolSetItem.symbol_code == code
-            )
-        ).first()
-        if not exists:
-            n = s.exec(
-                select(func.count()).select_from(SymbolSetItem).where(SymbolSetItem.set_id == set_id)
-            ).one()
-            s.add(SymbolSetItem(set_id=set_id, symbol_code=code, sort_order=n))
-        s.commit()
-    return RedirectResponse(f"/symbol-sets/{set_id}", status_code=303)
-
-
-@router.post("/symbol-sets/{set_id}/items/{item_id}/delete")
-def delete_item(set_id: int, item_id: int, s: Session = Depends(get_session)):
-    it = s.get(SymbolSetItem, item_id)
-    if it:
-        s.delete(it)
-        s.commit()
-    return RedirectResponse(f"/symbol-sets/{set_id}", status_code=303)
-
-
-@router.post("/symbol-sets/{set_id}/delete")
-def delete_set(set_id: int, s: Session = Depends(get_session)):
-    for it in s.exec(select(SymbolSetItem).where(SymbolSetItem.set_id == set_id)).all():
-        s.delete(it)
-    ss = s.get(SymbolSet, set_id)
-    if ss:
-        s.delete(ss)
+        sym.watch = True
+        s.add(sym)
     s.commit()
-    return RedirectResponse("/symbol-sets", status_code=303)
+    return RedirectResponse("/live", status_code=303)
 
 
-# ---- データ（足）カバレッジ / 過去データ取得 ---------------------------------
+@router.post("/live/watch/{code}/delete")
+def delete_watch(code: str, s: Session = Depends(get_session)):
+    sym = s.get(Symbol, symbols.normalize_code(code))
+    if sym:
+        sym.watch = False
+        s.add(sym)
+        s.commit()
+    return RedirectResponse("/live", status_code=303)
 
 
 @router.get("/api/symbol-name")
@@ -250,19 +188,20 @@ def _data_coverage_ctx(s: Session) -> dict:
         ).group_by(Bar.symbol_code, Bar.timeframe)
     ).all()
     names = {sym.code: sym.name for sym in s.exec(select(Symbol)).all()}
-    sets = s.exec(select(SymbolSet).order_by(SymbolSet.name)).all()
-    items = s.exec(
-        select(SymbolSetItem).order_by(SymbolSetItem.set_id, SymbolSetItem.sort_order)
-    ).all()
-    set_codes: dict[int, list[str]] = {}
-    for it in items:
-        set_codes.setdefault(it.set_id, []).append(it.symbol_code)
+    # 「過去データを取得」のコード欄に一発で入れる候補（取り込み中の全銘柄 / 戦略ごと）
+    presets: dict[str, str] = {}
+    all_codes = symbols.quote_codes(s)
+    if all_codes:
+        presets["取り込み中の全銘柄"] = ",".join(all_codes)
+    for st in s.exec(select(Strategy).order_by(Strategy.name)).all():
+        codes = symbols.parse_codes(st.symbols)
+        if codes:
+            presets[f"戦略: {st.name}"] = ",".join(codes)
     return {
         "master": symbols.master_status(s),
         "rows": rows,
         "names": names,
-        "sets": sets,
-        "set_codes": {k: ",".join(v) for k, v in set_codes.items()},
+        "presets": presets,
     }
 
 
@@ -330,7 +269,11 @@ def _latest_ticks(s: Session) -> list[dict]:
 
 @router.get("/live", response_class=HTMLResponse)
 def live(request: Request, s: Session = Depends(get_session)):
-    return templates.TemplateResponse(request, "live.html", _ctx(request, rows=_latest_ticks(s)))
+    watch = s.exec(select(Symbol).where(Symbol.watch == True).order_by(Symbol.code)).all()  # noqa: E712
+    return templates.TemplateResponse(
+        request, "live.html",
+        _ctx(request, rows=_latest_ticks(s), watch=watch, quote_codes=symbols.quote_codes(s)),
+    )
 
 
 @router.get("/live/table", response_class=HTMLResponse)
@@ -578,8 +521,10 @@ def signals(request: Request, s: Session = Depends(get_session)):
 @router.get("/strategies", response_class=HTMLResponse)
 def strategies(request: Request, s: Session = Depends(get_session)):
     rows = s.exec(select(Strategy).order_by(Strategy.created_at.desc())).all()
-    sets = s.exec(select(SymbolSet).order_by(SymbolSet.name)).all()
-    set_names = {ss.id: ss.name for ss in sets}
+    names = {sym.code: sym.name for sym in s.exec(select(Symbol)).all()}
+    # 取り込み中の銘柄（有効な戦略の銘柄 ∪ 監視銘柄）のうち、まだ株価が1件も届いていないもの
+    received = set(s.exec(select(Tick.symbol_code).distinct()).all())
+    no_ticks = [c for c in symbols.quote_codes(s) if c not in received]
     # /optimizations の「この設定で戦略登録」からの遷移でパラメータを事前入力する
     prefill = {
         "class_path": request.query_params.get("class_path", ""),
@@ -591,8 +536,9 @@ def strategies(request: Request, s: Session = Depends(get_session)):
         _ctx(
             request,
             rows=rows,
-            sets=sets,
-            set_names=set_names,
+            names=names,
+            parse_codes=symbols.parse_codes,
+            no_ticks=no_ticks,
             prefill=prefill,
             error=request.query_params.get("error", ""),
         ),
@@ -603,7 +549,7 @@ def strategies(request: Request, s: Session = Depends(get_session)):
 def create_strategy(
     name: str = Form(...),
     class_path: str = Form(...),
-    symbol_set_id: str = Form(""),
+    symbols_text: str = Form("", alias="symbols"),
     timeframe: str = Form("5m"),
     params_json: str = Form("{}"),
     mode: str = Form("notify"),
@@ -618,12 +564,16 @@ def create_strategy(
         return RedirectResponse("/strategies?error=params", status_code=303)
     if s.exec(select(Strategy).where(Strategy.name == name)).first():
         return RedirectResponse("/strategies?error=dup_name", status_code=303)
+    codes = symbols.parse_codes(symbols_text)
+    if not codes:
+        return RedirectResponse("/strategies?error=no_symbols", status_code=303)
+    symbols.ensure_symbols(s, codes)
     s.add(
         Strategy(
             name=name,
             class_path=class_path.strip(),
             params_json=params_json.strip() or "{}",
-            symbol_set_id=int(symbol_set_id) if symbol_set_id else None,
+            symbols=",".join(codes),
             timeframe=timeframe,
             mode=mode,
             enabled=False,
@@ -648,8 +598,40 @@ def toggle_strategy(strategy_id: int, s: Session = Depends(get_session)):
     return RedirectResponse("/strategies", status_code=303)
 
 
+def _open_live_codes(s: Session, strategy_id: int) -> list[str]:
+    """この戦略が実発注（live）で建玉を持っている銘柄。"""
+    return [p["symbol_code"] for p in orders_engine.open_positions(s) if p["strategy_id"] == strategy_id]
+
+
+@router.post("/strategies/{strategy_id}/symbols")
+def update_strategy_symbols(
+    strategy_id: int, symbols_text: str = Form("", alias="symbols"), s: Session = Depends(get_session)
+):
+    st = s.get(Strategy, strategy_id)
+    if not st:
+        return RedirectResponse("/strategies", status_code=303)
+    codes = symbols.parse_codes(symbols_text)
+    if not codes:
+        return RedirectResponse("/strategies?error=no_symbols", status_code=303)
+    # 建玉がある銘柄を外すと、その建玉を bot が管理しなくなる（損切り・手仕舞いが出ない）
+    if [c for c in _open_live_codes(s, strategy_id) if c not in codes]:
+        return RedirectResponse("/strategies?error=open_position", status_code=303)
+    symbols.ensure_symbols(s, codes)
+    old = set(symbols.parse_codes(st.symbols))
+    st.symbols = ",".join(codes)
+    s.add(st)
+    # 新しく足した銘柄は「今より後の足だけ」から評価する（カーソル初期化は live が行う）
+    for c in s.exec(select(LiveCursor).where(LiveCursor.strategy_id == strategy_id)).all():
+        if c.symbol_code not in old:
+            s.delete(c)
+    s.commit()
+    return RedirectResponse("/strategies", status_code=303)
+
+
 @router.post("/strategies/{strategy_id}/delete")
 def delete_strategy(strategy_id: int, s: Session = Depends(get_session)):
+    if _open_live_codes(s, strategy_id):
+        return RedirectResponse("/strategies?error=open_position", status_code=303)
     for c in s.exec(select(LiveCursor).where(LiveCursor.strategy_id == strategy_id)).all():
         s.delete(c)
     st = s.get(Strategy, strategy_id)
@@ -669,6 +651,7 @@ def risk_page(request: Request, s: Session = Depends(get_session)):
         select(Strategy).where(Strategy.mode == "live").order_by(Strategy.created_at.desc())
     ).all()
     recent_orders = s.exec(select(Order).order_by(Order.ts.desc()).limit(50)).all()
+    positions = orders_engine.open_positions(s)
     return templates.TemplateResponse(
         request,
         "risk.html",
@@ -678,6 +661,7 @@ def risk_page(request: Request, s: Session = Depends(get_session)):
             state=eng.state,
             live_strategies=live_strategies,
             recent_orders=recent_orders,
+            positions=positions,
         ),
     )
 
@@ -685,6 +669,15 @@ def risk_page(request: Request, s: Session = Depends(get_session)):
 @router.post("/risk/arm")
 def risk_arm():
     get_risk_engine().arm()
+    return RedirectResponse("/risk", status_code=303)
+
+
+@router.post("/risk/manual-close")
+def risk_manual_close(
+    strategy_id: int = Form(...), symbol_code: str = Form(...), s: Session = Depends(get_session)
+):
+    """MarketSpeed II で手動決済した建玉を bot 側で「決済済み」にする（発注はしない）。"""
+    orders_engine.record_manual_close(s, strategy_id, symbol_code)
     return RedirectResponse("/risk", status_code=303)
 
 

@@ -46,18 +46,48 @@
 <h3>mode=live の戦略</h3>
 {% if live_strategies %}
 <table>
-  <thead><tr><th>名前</th><th>銘柄セット</th><th>状態</th></tr></thead>
+  <thead><tr><th>名前</th><th>対象銘柄</th><th>状態</th></tr></thead>
   <tbody>
   {% for st in live_strategies %}
     <tr>
       <td><a href="/strategies">{{ st.name }}</a></td>
-      <td>{{ st.symbol_set_id or '—' }}</td>
+      <td>{{ st.symbols or '—' }}</td>
       <td>{% if st.enabled %}<span class="pos">稼働中</span>{% else %}<span class="neg">停止</span>{% endif %}</td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
 {% else %}<p>mode=live の戦略はまだ登録されていません。</p>{% endif %}
+
+<h3>bot が認識している建玉</h3>
+{% if positions %}
+<p><small>bot の発注履歴から計算した建玉（受理＝約定とみなした概算）。MarketSpeed II で手動で決済したときは
+「手動決済を記録」を押して bot 側も決済済みにしてください（押しても発注はしません）。記録しないと、
+bot がその建玉の手仕舞い注文を出して「建玉が足りない」エラーになります。</small></p>
+<table>
+  <thead><tr><th>戦略</th><th>銘柄</th><th>売買</th><th>株数</th><th>建値（概算）</th><th>建てた日時</th><th></th></tr></thead>
+  <tbody>
+  {% for p in positions %}
+    <tr>
+      <td>{{ p.strategy_name }}{% if not p.strategy_exists %} <small class="neg">（戦略は削除済み）</small>{% endif %}</td>
+      <td>{{ p.symbol_code }}</td>
+      <td>{{ '売建' if p.position.is_short else '買建' }}{% if p.opened and p.opened.trade_type == 'margin' %}（信用）{% endif %}</td>
+      <td>{{ p.position.qty | abs }}</td>
+      <td>{{ '%.1f'|format(p.position.avg_price) if p.position.avg_price else '—' }}</td>
+      <td>{{ p.opened.ts | jst('%Y-%m-%d %H:%M') if p.opened else '—' }}</td>
+      <td>
+        <form method="post" action="/risk/manual-close"
+              onsubmit="return confirm('MarketSpeed II で決済済みの建玉として記録します（発注はしません）。よろしいですか？')">
+          <input type="hidden" name="strategy_id" value="{{ p.strategy_id }}">
+          <input type="hidden" name="symbol_code" value="{{ p.symbol_code }}">
+          <button class="secondary outline" type="submit">手動決済を記録</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p>bot が認識している建玉はありません。</p>{% endif %}
 
 <h3>発注履歴</h3>
 {% if recent_orders %}

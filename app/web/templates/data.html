@@ -6,10 +6,10 @@
   <h3 style="margin-top:0">過去データを取得</h3>
   <form method="post" action="/data/fetch">
     <div class="grid">
-      <label>銘柄セットから反映
+      <label>候補から反映
         <select id="set_picker">
           <option value="">— 選択 —</option>
-          {% for ss in sets %}<option value="{{ ss.id }}">{{ ss.name }}</option>{% endfor %}
+          {% for label in presets %}<option value="{{ label }}">{{ label }}</option>{% endfor %}
         </select>
       </label>
       <label>足
@@ -31,7 +31,7 @@
 </article>
 
 <script>
-  const SET_CODES = {{ set_codes | tojson }};
+  const SET_CODES = {{ presets | tojson }};
   const _picker = document.getElementById('set_picker'), _codes = document.getElementById('codes');
   _picker.addEventListener('change', () => {
     const c = SET_CODES[_picker.value];

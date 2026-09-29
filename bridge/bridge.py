@@ -9,7 +9,7 @@
 
   2) シミュレーション（Mac でもOK・Excel不要）: ランダムウォークの気配を生成して送る
      python bridge.py --simulate --codes 7203,6501,9984
-     python bridge.py --simulate --set-id 1
+     python bridge.py --simulate          # 取り込む銘柄は backend の /api/quote-codes から
 
 共通オプション:
   --once            1回だけ送って終了
@@ -121,6 +121,9 @@ def dump_workbook(workbook_path: str, sheet: str = "quotes") -> None:
 
 
 # ---- 発注リレー（P4・未検証。Windows実機での確認が必要） --------------------
+
+# 取り込む銘柄を backend に問い合わせて quotes シートを合わせる間隔（秒）
+QUOTE_SYNC_SEC = 30
 
 ORDER_STATUS_COL = status_col("orders")  # RssStockOrder のステータス列（U）
 
@@ -482,21 +485,43 @@ class Simulator:
         return out
 
 
-def _codes_from_set(set_id: int) -> list[str]:
-    from sqlmodel import Session, select
-
-    from app.db import engine, init_db
-    from app.models import SymbolSetItem
-
-    init_db()
-    with Session(engine) as s:
-        items = s.exec(
-            select(SymbolSetItem).where(SymbolSetItem.set_id == set_id).order_by(SymbolSetItem.sort_order)
-        ).all()
-    return [it.symbol_code for it in items]
+def fetch_quote_codes(client: httpx.Client, url: str) -> list[str]:
+    """backend から株価を取り込む銘柄（有効な戦略の対象銘柄 ∪ 監視銘柄）を取る。"""
+    r = client.get(url)
+    r.raise_for_status()
+    return [str(c) for c in r.json().get("codes", [])]
 
 
-# ---- メインループ ----------------------------------------------------------
+def _code_str(v) -> str:
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v).strip() if v is not None else ""
+
+
+def sync_quote_sheet(workbook_path: str, codes: list[str]) -> bool:
+    """rss_bridge.xlsx の quotes シートの銘柄を codes に合わせる（違うときだけ書き換える）。
+
+    ブックを開き直すと RSS の「発注可能」が解除されるので、開いているブックのセルだけを
+    書き換える（A列にコード、B列以降に =RssMarket(A行,"項目")）。書き換えたら True。
+    """
+    book = _open_book(workbook_path)
+    ws = book.sheets["quotes"]
+    current = ws.range("A2").expand("down").value if ws.range("A2").value is not None else []
+    if not isinstance(current, list):
+        current = [current]
+    if [_code_str(v) for v in current] == list(codes):
+        return False
+    last_col = chr(ord("A") + len(FIELDS))
+    n_old = max(len(current), 1)
+    ws.range(f"A2:{last_col}{n_old + 1}").clear_contents()
+    if codes:
+        # 文字列として入れる（'130A' 等の英字入りコードもそのまま、数値化で先頭0が消えないように）
+        ws.range(f"A2:A{len(codes) + 1}").number_format = "@"
+        ws.range("A2").options(transpose=True).value = [str(c) for c in codes]
+        ws.range(f"B2:{last_col}{len(codes) + 1}").formula = [
+            [f'=RssMarket(A{i},"{f}")' for f in FIELDS] for i in range(2, len(codes) + 2)
+        ]
+    return True
 
 
 def main() -> None:
@@ -506,7 +531,6 @@ def main() -> None:
     ap.add_argument("--dump", action="store_true", help="Excel の生の値を表示して終了（RSS 項目名の確認用）")
     ap.add_argument("--sheet", default="quotes", help="--dump で表示するシート名")
     ap.add_argument("--codes", help="カンマ区切り 例: 7203,6501")
-    ap.add_argument("--set-id", type=int)
     ap.add_argument("--once", action="store_true")
     ap.add_argument("--interval", type=float, default=cfg.poll_interval_sec)
     ap.add_argument("--ingest-url", default=cfg.ingest_url)
@@ -528,17 +552,15 @@ def main() -> None:
         order_relay = OrderRelay(args.orders_workbook, sor=cfg.sor)
         print(f"order relay: {args.orders_workbook} <-> {args.orders_url}")
 
+    client = httpx.Client(timeout=10)
+    quote_codes_url = args.ingest_url.rsplit("/api/", 1)[0] + "/api/quote-codes"
+
     if args.simulate:
-        codes = (
-            args.codes.split(",")
-            if args.codes
-            else _codes_from_set(args.set_id)
-            if args.set_id
-            else []
-        )
-        codes = [c.strip() for c in codes if c.strip()]
+        codes = [c.strip() for c in (args.codes or "").split(",") if c.strip()]
         if not codes:
-            raise SystemExit("--simulate には --codes か --set-id が必要です")
+            codes = fetch_quote_codes(client, quote_codes_url)
+        if not codes:
+            raise SystemExit("--simulate: 取り込む銘柄がありません（--codes か、戦略/監視銘柄を登録）")
         sim = Simulator(codes)
         source = lambda: sim.poll()  # noqa: E731
         print(f"bridge (simulate): {codes} -> {args.ingest_url} ({args.interval}s)")
@@ -546,8 +568,17 @@ def main() -> None:
         source = lambda: read_quotes_via_xlwings(args.workbook)  # noqa: E731
         print(f"bridge: {args.workbook} -> {args.ingest_url} ({args.interval}s)")
 
-    client = httpx.Client(timeout=10)
+    last_sync = 0.0
     while True:
+        # 取り込む銘柄が変わったら（戦略の追加・有効化・監視銘柄の変更）quotes シートを合わせる
+        if not args.simulate and time.time() - last_sync >= QUOTE_SYNC_SEC:
+            last_sync = time.time()
+            try:
+                codes = fetch_quote_codes(client, quote_codes_url)
+                if codes and sync_quote_sheet(args.workbook, codes):
+                    print(f"{datetime.now():%H:%M:%S} [quotes] 取り込み銘柄を更新: {codes}")
+            except Exception as e:  # noqa: BLE001
+                print(f"[warn][quotes] {e}")
         try:
             quotes = source()
             if quotes:

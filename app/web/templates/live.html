@@ -5,4 +5,32 @@
 <div hx-get="/live/table" hx-trigger="load, every 5s" hx-swap="innerHTML">
   {% include "_live_table.html" %}
 </div>
+
+<h3>株価を取り込む銘柄</h3>
+<p><small>RSS で株価を取り込むのは「有効な戦略の対象銘柄」と「監視銘柄」を合わせたもの。bridge が30秒ほどごとに
+この一覧を取りに来て、<code>rss_bridge.xlsx</code> の銘柄を自動で合わせます（再起動不要）。</small></p>
+<p>現在: {% for c in quote_codes %}<code>{{ c }}</code> {% else %}なし{% endfor %}</p>
+
+<h4>監視銘柄（戦略で使っていなくても株価を見たい銘柄）</h4>
+<form method="post" action="/live/watch" class="grid">
+  <input name="codes" placeholder="証券コード（複数はカンマ区切り）" required>
+  <button type="submit">追加</button>
+</form>
+{% if watch %}
+<table>
+  <thead><tr><th>コード</th><th>銘柄名</th><th></th></tr></thead>
+  <tbody>
+  {% for sym in watch %}
+    <tr>
+      <td>{{ sym.code }}</td><td>{{ sym.name }}</td>
+      <td>
+        <form method="post" action="/live/watch/{{ sym.code }}/delete">
+          <button class="secondary outline" type="submit">外す</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p>監視銘柄はありません。</p>{% endif %}
 {% endblock %}

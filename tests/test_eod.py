@@ -7,7 +7,7 @@ from app.db import engine, init_db
 from app.engine import live
 from app.engine.backtest import run_backtest
 from app.engine.eod import flatten_at_close, is_last_bar_of_day
-from app.models import Bar, PaperTrade, Strategy, Symbol, SymbolSet, SymbolSetItem
+from app.models import Bar, PaperTrade, Strategy, Symbol
 from app.strategy.base import Context, Signal
 from app.strategy.base import Strategy as BaseStrategy
 
@@ -136,16 +136,11 @@ def _add(s: Session, code: str, times: list[datetime]) -> None:
 
 def _paper_strategy(s: Session, code: str) -> Strategy:
     s.add(Symbol(code=code, name="テスト銘柄"))
-    ss = SymbolSet(name=f"set-{code}")
-    s.add(ss)
-    s.commit()
-    s.refresh(ss)
-    s.add(SymbolSetItem(set_id=ss.id, symbol_code=code))
     st = Strategy(
         name=f"eod-{code}",
         class_path="tests.test_eod:AlwaysBuy",
         params_json='{"qty": 100, "hold_overnight": false}',
-        symbol_set_id=ss.id,
+        symbols=code,
         timeframe="5m",
         mode="paper",
         enabled=True,

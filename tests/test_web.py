@@ -16,20 +16,21 @@ def test_dashboard_ok(client):
     assert "ダッシュボード" in r.text
 
 
-def test_symbol_set_crud(client):
-    client.post("/symbol-sets", data={"name": "テストセット", "note": ""})
-    r = client.get("/symbol-sets")
-    assert "テストセット" in r.text
-    # 直近で作られたセットの詳細に銘柄追加
-    import re
+def test_watch_symbols_add_and_remove(client):
+    r = client.post("/live/watch", data={"codes": "7203, ６５０１"}, follow_redirects=True)
+    assert r.status_code == 200
+    assert "/live/watch/7203/delete" in r.text and "/live/watch/6501/delete" in r.text
+    codes = client.get("/api/quote-codes").json()["codes"]
+    assert "7203" in codes and "6501" in codes
 
-    set_id = max(int(x) for x in re.findall(r"/symbol-sets/(\d+)\"", r.text))
-    r = client.post(
-        f"/symbol-sets/{set_id}/items",
-        data={"code": "7203", "name": "トヨタ自動車"},
-        follow_redirects=True,
-    )
-    assert "7203" in r.text and "トヨタ自動車" in r.text
+    r = client.post("/live/watch/6501/delete", follow_redirects=True)
+    assert "/live/watch/6501/delete" not in r.text
+    assert "6501" not in client.get("/api/quote-codes").json()["codes"]
+
+
+def test_symbol_sets_page_is_gone(client):
+    assert client.get("/symbol-sets").status_code == 404
+    assert "銘柄セット" not in client.get("/").text
 
 
 def test_strategies_prefill_from_query(client):
@@ -48,16 +49,12 @@ def test_strategies_prefill_from_query(client):
 def test_strategy_crud(client):
     import re
 
-    client.post("/symbol-sets", data={"name": "戦略用セット", "note": ""})
-    r = client.get("/symbol-sets")
-    set_id = max(int(x) for x in re.findall(r"/symbol-sets/(\d+)\"", r.text))
-
     client.post(
         "/strategies",
         data={
             "name": "SMAテスト戦略",
             "class_path": "app.strategy.examples.sma_cross:SmaCross",
-            "symbol_set_id": str(set_id),
+            "symbols": "7974、８０３５",  # 読点・全角も受け付ける
             "timeframe": "5m",
             "params_json": '{"fast": 5, "slow": 20, "qty": 100}',
             "mode": "notify",
@@ -67,10 +64,18 @@ def test_strategy_crud(client):
     r = client.get("/strategies")
     assert "SMAテスト戦略" in r.text
     assert "停止" in r.text  # 既定は無効
+    assert 'value="7974,8035"' in r.text
 
     strategy_id = max(int(x) for x in re.findall(r"/strategies/(\d+)/toggle", r.text))
+    # 無効の間は株価の取り込み対象に入らない
+    assert "8035" not in client.get("/api/quote-codes").json()["codes"]
     r = client.post(f"/strategies/{strategy_id}/toggle", follow_redirects=True)
     assert "稼働中" in r.text
+    assert "8035" in client.get("/api/quote-codes").json()["codes"]
+
+    r = client.post(f"/strategies/{strategy_id}/symbols", data={"symbols": "7974"}, follow_redirects=True)
+    assert 'value="7974"' in r.text
+    assert "8035" not in client.get("/api/quote-codes").json()["codes"]
 
     r = client.post(f"/strategies/{strategy_id}/delete", follow_redirects=True)
     assert "SMAテスト戦略" not in r.text
@@ -80,6 +85,7 @@ def test_strategy_duplicate_name_shows_error(client):
     data = {
         "name": "重複名テスト戦略",
         "class_path": "app.strategy.examples.sma_cross:SmaCross",
+        "symbols": "7203",
         "timeframe": "5m",
         "params_json": "{}",
         "mode": "notify",

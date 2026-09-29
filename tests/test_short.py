@@ -12,7 +12,7 @@ from app.engine import live, orders, paper
 from app.engine.backtest import run_backtest
 from app.engine.risk import RiskEngine
 from app.engine.stops import check_stop_target
-from app.models import Bar, Order, PaperTrade, Strategy, Symbol, SymbolSet, SymbolSetItem
+from app.models import Bar, Order, PaperTrade, Strategy, Symbol
 from app.strategy.base import Context, Position, Signal
 from app.strategy.base import Strategy as BaseStrategy
 from app.strategy.examples.sma_cross import SmaCross
@@ -189,13 +189,8 @@ def test_backtest_equity_for_short_is_inverse():
 
 def _setup(s: Session, code: str, class_path: str, params: str, mode: str) -> Strategy:
     s.add(Symbol(code=code, name="テスト銘柄"))
-    ss = SymbolSet(name=f"set-{code}")
-    s.add(ss)
-    s.commit()
-    s.refresh(ss)
-    s.add(SymbolSetItem(set_id=ss.id, symbol_code=code))
     st = Strategy(name=f"short-{code}", class_path=class_path, params_json=params,
-                  symbol_set_id=ss.id, timeframe="5m", mode=mode, enabled=True)
+                  symbols=code, timeframe="5m", mode=mode, enabled=True)
     s.add(st)
     s.commit()
     s.refresh(st)
@@ -265,10 +260,10 @@ def test_live_margin_orders_blocked_when_disabled(monkeypatch):
         assert s.exec(select(Order).where(Order.strategy_id == st.id)).all() == []
 
 
-def test_live_margin_short_queues_order_with_margin_type():
-    """信用区分を付けて売建し、損切りで買戻す（買戻しには建てた日を付ける）。"""
+def test_live_margin_short_queues_order_with_margin_type(monkeypatch):
+    """信用の発注を有効にした場合: 信用区分を付けて売建し、損切りで買戻す（買戻しには建てた日を付ける）。"""
     init_db()
-    assert live.MARGIN_ORDERS_SUPPORTED
+    monkeypatch.setattr(live, "MARGIN_ORDERS_SUPPORTED", True)
     eng = _armed()
     t0 = datetime(2026, 3, 2, 0, 0)
     with Session(engine) as s, patch("app.engine.live.get_risk_engine", return_value=eng), \

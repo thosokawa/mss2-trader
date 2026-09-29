@@ -5,7 +5,7 @@ from sqlmodel import Session, select
 
 from app.db import engine, init_db
 from app.engine import live
-from app.models import Bar, Signal, Strategy, Symbol, SymbolSet, SymbolSetItem
+from app.models import Bar, Signal, Strategy, Symbol
 from app.strategy.base import Signal as StratSignal
 from app.strategy.base import Strategy as BaseStrategy
 
@@ -24,16 +24,11 @@ def _add_bars(s: Session, code: str, closes: list[float], start: datetime, tf: s
 
 def _make_strategy(s: Session, code: str, enabled: bool = True, mode: str = "notify") -> Strategy:
     s.add(Symbol(code=code, name="テスト銘柄"))
-    ss = SymbolSet(name=f"set-{code}")
-    s.add(ss)
-    s.commit()
-    s.refresh(ss)
-    s.add(SymbolSetItem(set_id=ss.id, symbol_code=code))
     st = Strategy(
         name=f"strat-{code}",
         class_path="app.strategy.examples.sma_cross:SmaCross",
         params_json='{"fast": 5, "slow": 20, "qty": 100}',
-        symbol_set_id=ss.id,
+        symbols=code,
         timeframe="5m",
         mode=mode,
         enabled=enabled,
@@ -99,16 +94,11 @@ def test_stop_loss_closes_paper_trade_before_natural_exit():
 
     with Session(engine) as s:
         s.add(Symbol(code="9804", name="テスト銘柄"))
-        ss = SymbolSet(name="set-9804")
-        s.add(ss)
-        s.commit()
-        s.refresh(ss)
-        s.add(SymbolSetItem(set_id=ss.id, symbol_code="9804"))
         st = Strategy(
             name="strat-9804",
             class_path="app.strategy.examples.sma_cross:SmaCross",
             params_json='{"fast": 5, "slow": 20, "qty": 100, "stop_loss_pct": 3.0}',
-            symbol_set_id=ss.id,
+            symbols="9804",
             timeframe="5m",
             mode="paper",
             enabled=True,
@@ -285,14 +275,9 @@ def test_live_mode_stop_loss_exit_is_ordered_after_buy_accepted():
     with Session(engine) as s, patch("app.engine.live.get_risk_engine", return_value=eng), \
             patch("app.engine.orders.get_risk_engine", return_value=eng):
         s.add(Symbol(code=code, name="テスト銘柄"))
-        ss = SymbolSet(name=f"set-{code}")
-        s.add(ss)
-        s.commit()
-        s.refresh(ss)
-        s.add(SymbolSetItem(set_id=ss.id, symbol_code=code))
         st = Strategy(
             name=f"strat-{code}", class_path="tests.test_eod:AlwaysBuy",
-            params_json='{"qty": 100, "stop_loss_pct": 3}', symbol_set_id=ss.id,
+            params_json='{"qty": 100, "stop_loss_pct": 3}', symbols=code,
             timeframe="5m", mode="live", enabled=True,
         )
         s.add(st)

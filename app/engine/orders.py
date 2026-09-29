@@ -17,6 +17,8 @@
   - timeout / error は結果が不明（実は発注されているかもしれない）ので、建玉には数えないが
     RiskEngine を DISARM して以降の自動発注を止める。MarketSpeed II の注文照会で確認してから
     手動で ARM し直す。
+  - manual は「MarketSpeed II で手動で決済した」ことを /risk から記録したもの。発注はしない
+    （bridge は new しか拾わない）が、建玉の計算では手仕舞いとして数える。
 """
 from __future__ import annotations
 
@@ -34,6 +36,7 @@ UNKNOWN_RESULT = {"error", "timeout"}  # 発注されたか不明 → DISARM し
 TERMINAL_OK = {"filled"}
 EXECUTED = {"sent", "filled"}  # 約定した（とみなす）＝建玉に反映する
 IN_FLIGHT = {"new", "sending"}  # 発注中＝決着まで次の発注をブロック
+MANUAL = "manual"  # 手動決済の記録（発注しない）
 OPEN_SIDES = {"BUY": 1, "SHORT": -1}  # 新規建て（値は方向）
 CLOSE_SIDES = {"EXIT", "SELL", "COVER"}
 
@@ -118,6 +121,52 @@ def last_open_order(session: Session, strategy_id: int, symbol_code: str) -> Ord
 
 def _exec_price(o: Order) -> float:
     return o.avg_price or o.ref_price or 0.0
+
+
+def open_positions(session: Session) -> list[dict]:
+    """bot の注文履歴から見て建玉が残っている (戦略, 銘柄) の一覧。/risk の「建玉」表示用。
+    戦略を削除済みでも注文が残っていれば出す（戦略名は注文に記録された名前）。"""
+    pairs = session.exec(select(Order.strategy_id, Order.symbol_code).distinct()).all()
+    out = []
+    for strategy_id, code in pairs:
+        pos = current_live_position(session, strategy_id, code)
+        if pos.is_flat:
+            continue
+        opened = last_open_order(session, strategy_id, code)
+        out.append({
+            "strategy_id": strategy_id,
+            "strategy_name": opened.strategy_name if opened else "",
+            "strategy_exists": session.get(Strategy, strategy_id) is not None,
+            "symbol_code": code,
+            "position": pos,
+            "opened": opened,
+        })
+    return out
+
+
+def record_manual_close(session: Session, strategy_id: int, symbol_code: str) -> Order | None:
+    """MarketSpeed II で手動で決済した建玉を「決済済み」として記録する（発注はしない）。"""
+    pos = current_live_position(session, strategy_id, symbol_code)
+    if pos.is_flat:
+        return None
+    opened = last_open_order(session, strategy_id, symbol_code)
+    order = Order(
+        strategy_id=strategy_id,
+        strategy_name=opened.strategy_name if opened else "",
+        symbol_code=symbol_code,
+        side="COVER" if pos.is_short else "EXIT",
+        qty=abs(pos.qty),
+        trade_type=opened.trade_type if opened else "cash",
+        margin_type=opened.margin_type if opened else 0,
+        account_type=opened.account_type if opened else get_config().trading.default_account_type,
+        reason="手動決済を記録（bot は発注していない）",
+        status=MANUAL,
+        updated_at=utcnow(),
+    )
+    session.add(order)
+    session.commit()
+    session.refresh(order)
+    return order
 
 
 def has_in_flight_order(session: Session, strategy_id: int, symbol_code: str) -> bool:

@@ -2,7 +2,9 @@
 
 「価格を運ぶだけ」の薄い層。売買ロジックは一切持たない（backend の live エンジンが判断する）。
 
-1. `build_workbook.py` … 銘柄セット（または `--codes`）から RSS 関数を敷いた `rss_bridge.xlsx` を生成
+1. `build_workbook.py --auto` … 取り込む銘柄（有効な戦略の対象銘柄 ∪ 監視銘柄）で RSS 関数を敷いた
+   `rss_bridge.xlsx` を生成（`--codes` で手動指定も可）。起動後の銘柄の変更は `bridge.py` が
+   30秒ごとに backend の `/api/quote-codes` を見て quotes シートを書き換えて合わせる（ブックは開き直さない）
 2. `bridge.py` … MarketSpeed II ログイン後にそのブックを開き、xlwings でセルを
    ポーリング読み取り → backend の `/api/ingest` へ POST
    - `--simulate` … Excel 不要のシミュレーションモード（Mac で疎通確認できる）
@@ -22,7 +24,7 @@ py -3.13 -m venv .venv
 ## 手順（Windows）
 
 1. マーケットスピードII を起動しログイン、「RSS」を有効化
-2. `python build_workbook.py --set-id 1` で `rss_bridge.xlsx` を生成
+2. `python build_workbook.py --auto` で `rss_bridge.xlsx` を生成（`run_all.ps1` が自動で行う）
 3. 生成された `rss_bridge.xlsx` を Excel で開く（RSS 関数が値を返し始める）
 4. `python bridge.py` を起動 → backend にティックが流れる
 
@@ -30,7 +32,7 @@ py -3.13 -m venv .venv
 
 ```
 python bridge.py --simulate --codes 7203,6501,9984
-python bridge.py --simulate --set-id 1
+python bridge.py --simulate              # 銘柄は backend の /api/quote-codes から
 ```
 
 ## RSS 項目名（実機確認済み 2026-09）
@@ -92,7 +94,17 @@ python bridge\bridge.py --workbook rss_bridge.xlsx --orders-workbook rss_orders.
 5. 注文確認画面が出る設定だと `status="cancelled"`（ダイアログを閉じただけ）になる。
    自動化するなら確認画面を出さない設定が必要（MarketSpeed II 側の設定を確認）
 
-### 信用取引（実装済み・実弾未検証）
+### 信用取引（2026-09-29 から新規建てを停止中）
+
+**実機で判明した問題**: RSS の一覧関数（`RssMarginPositionList` / `RssOrderList` / `RssExecutionList`）は
+MarketSpeed II の「マーケットスピード II」タブの**更新アイコンを押したときしか最新にならない**
+（数式の入れ直し・Excel の再計算・ブックの開き直しでは更新されない。開き直すと「応答待ち」のまま止まり、
+さらに RSS の「発注可能」が解除される）。そのため bridge が返済に必要な建日・建単価を取れず、bot の買建の
+返済が「該当0株」で失敗した。自動で更新する手段が見つかるまで `app/engine/live.py` の
+`MARGIN_ORDERS_SUPPORTED=False`（信用の新規建ては「発注見送り」。現物は影響なし）。
+手動で決済した建玉は `/risk` の「bot が認識している建玉」から「手動決済を記録」で bot 側も決済済みにする。
+
+以下は実装済みの内容（再開するときのため）。
 
 公式オンラインヘルプで確認した仕様:
 - 新規 `RssMarginOpenOrder(発注ID,発注トリガー,銘柄コード,売買区分,注文区分,SOR区分,信用区分,

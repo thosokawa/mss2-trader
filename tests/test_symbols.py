@@ -5,7 +5,7 @@ from sqlmodel import Session, select
 from app import symbols
 from app.db import engine, init_db
 from app.main import app
-from app.models import Symbol, SymbolMaster, SymbolSet
+from app.models import Strategy, Symbol, SymbolMaster
 
 # JPX の data_j.xlsx と同じ列（2026-08 時点の実物から抜粋）
 JPX = pd.DataFrame(
@@ -66,22 +66,26 @@ def test_api_symbol_name():
         assert c.get("/api/symbol-name", params={"code": "0000"}).json()["name"] == ""
 
 
-def test_add_item_autofills_name_but_keeps_manual_name():
+def test_parse_codes():
+    assert symbols.parse_codes("9984, 5016 7203") == ["9984", "5016", "7203"]
+    assert symbols.parse_codes("９９８４、130a，9984") == ["9984", "130A"]  # 全角・読点・重複
+    assert symbols.parse_codes("") == []
+
+
+def test_strategy_and_watch_register_symbols_with_names():
     _refresh()
-    with Session(engine) as s:
-        ss = SymbolSet(name="補完テスト")
-        s.add(ss)
-        s.commit()
-        s.refresh(ss)
-        set_id = ss.id
     with TestClient(app) as c:
-        c.post(f"/symbol-sets/{set_id}/items", data={"code": "6613", "name": ""})
-        c.post(f"/symbol-sets/{set_id}/items", data={"code": "130a", "name": ""})
-        c.post(f"/symbol-sets/{set_id}/items", data={"code": "1540", "name": "金ETF"})
+        c.post("/strategies", data={
+            "name": "補完テスト戦略", "class_path": "app.strategy.examples.sma_cross:SmaCross",
+            "symbols": "6613,130a", "timeframe": "5m", "params_json": "{}", "mode": "notify",
+        })
+        c.post("/live/watch", data={"codes": "1540"})
     with Session(engine) as s:
         assert s.get(Symbol, "6613").name == "QDレーザ"
         assert s.get(Symbol, "130A").name == "Veritas In Silico"  # コードも大文字にそろう
-        assert s.get(Symbol, "1540").name == "金ETF"  # 手入力を優先
+        assert s.get(Symbol, "1540").name == "純金上場信託(現物国内保管型)"
+        st = s.exec(select(Strategy).where(Strategy.name == "補完テスト戦略")).one()
+        assert st.symbols == "6613,130A"
 
 
 def test_data_page_shows_master_status():

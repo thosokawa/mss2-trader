@@ -19,7 +19,7 @@ import httpx
 import pandas as pd
 from sqlmodel import Session, delete, select
 
-from app.models import Symbol, SymbolMaster, utcnow
+from app.models import Strategy, Symbol, SymbolMaster, utcnow
 
 JPX_BASE = "https://www.jpx.co.jp"
 JPX_PAGE_URL = f"{JPX_BASE}/markets/statistics-equities/misc/01.html"
@@ -121,3 +121,50 @@ def master_status(session: Session) -> dict:
         return {"count": 0, "as_of": "", "updated_at": None}
     count = len(session.exec(select(SymbolMaster.code)).all())
     return {"count": count, "as_of": first.as_of, "updated_at": first.updated_at}
+
+
+# ---- 戦略の対象銘柄・監視銘柄（銘柄セットの置き換え） ----------------------------
+
+
+def parse_codes(text: str) -> list[str]:
+    """"9984, 5016 7203" / 全角・読点区切りなども受け付けて、正規化・重複除去したコードの列。"""
+    raw = re.split(r"[,\s、，]+", unicodedata.normalize("NFKC", str(text or "")))
+    out: list[str] = []
+    for c in raw:
+        c = normalize_code(c)
+        if c and c not in out:
+            out.append(c)
+    return out
+
+
+def ensure_symbols(session: Session, codes: list[str]) -> None:
+    """Symbol 行が無ければ作る（名前は銘柄マスタから）。名前が空なら補完する。"""
+    for code in codes:
+        sym = session.get(Symbol, code)
+        if sym is None:
+            session.add(Symbol(code=code, name=lookup_name(session, code)))
+        elif not sym.name:
+            sym.name = lookup_name(session, code)
+            session.add(sym)
+    session.commit()
+
+
+def watch_codes(session: Session) -> list[str]:
+    return sorted(session.exec(select(Symbol.code).where(Symbol.watch == True)).all())  # noqa: E712
+
+
+def quote_codes(session: Session) -> list[str]:
+    """RSS で株価を取り込む銘柄 = 有効な戦略の対象銘柄 ∪ 監視銘柄。
+
+    bridge がこの一覧を定期的に取りに来て rss_bridge.xlsx の quotes シートを合わせる
+    （build_workbook.py --auto も同じ一覧でブックを作る）。
+    """
+    codes: list[str] = []
+    for st in session.exec(select(Strategy).where(Strategy.enabled == True)).all():  # noqa: E712
+        codes += parse_codes(st.symbols)
+    codes += watch_codes(session)
+    out: list[str] = []
+    for c in codes:
+        if c not in out:
+            out.append(c)
+    return sorted(out)

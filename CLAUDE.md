@@ -37,11 +37,21 @@ P0〜P3 済（雛形・バックテスト・RSSブリッジ・tick→足集約�
 再起動で ARMED は自動 OFF）。詳細・安全な確認手順は `bridge/README.md`「実発注（P4）」
 を必ず読むこと。
 
+**銘柄の指定（2026-09-29 に銘柄セットを廃止）**: 戦略ごとに対象銘柄を `Strategy.symbols`（カンマ区切り）で
+直接指定。RSS で株価を取り込む銘柄は「有効な戦略の対象銘柄 ∪ 監視銘柄（`Symbol.watch`、/live で編集）」
+（`app/symbols.quote_codes`）。bridge が30秒ごとに `/api/quote-codes` を見て `rss_bridge.xlsx` の quotes
+シートを書き換える。`run_all.ps1` は `build_workbook.py --auto`（`-SetId` は登録済みスタートアップとの互換の
+ため受け取るだけ）。SymbolSet テーブルは旧 DB の移行（`app/db.py _migrate_symbol_sets`）用に定義だけ残す。
+建玉を持つ live 戦略は削除・銘柄の除外ができない（`/risk` で手仕舞い or「手動決済を記録」してから）。
+
 戦略共通パラメータ: 損切り/利確（`app/engine/stops.py`）、大引けをまたぐか
 （`hold_overnight`、`app/engine/eod.py`）、売買方向（`direction`=long/short/both。旧 `allow_short`）、取引区分（`trade_type`=cash/margin）。
 通知は Slack / メール（Gmail SMTP、`app/notify.py`）。
 
-**信用取引（実装済み・実弾未検証）**: 空売りは戦略・バックテスト・ペーパー・live・bridge まで対応
+**信用取引（2026-09-29 から新規建てを停止中）**: RSS の一覧関数（建玉一覧など）は MarketSpeed II の
+更新アイコンを押さないと最新にならず、bridge が返済に必要な建単価を取れないと判明（bot の返済が失敗）。
+`live.MARGIN_ORDERS_SUPPORTED=False` で信用の新規建ては見送り（現物は動く）。詳細 `bridge/README.md`。
+空売りの仕組み自体は戦略・バックテスト・ペーパー・live・bridge まで対応
 （`Position.qty` マイナス＝売建、Order.side は BUY/SHORT/EXIT/COVER、Order.trade_type=cash/margin）。
 bridge は `RssMarginOpenOrder`（信用区分 4=いちにち / 2=一般無期限）と `RssMarginCloseOrder`
 （返済。建日・建単価・建市場は `rss_orders.xlsx` の `margin_positions` シート＝`RssMarginPositionList`
