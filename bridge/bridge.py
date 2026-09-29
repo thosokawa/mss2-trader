@@ -237,13 +237,14 @@ def _status_text(value: object) -> str:
     return text.strip()
 
 
-_ORDER_ID_RE = re.compile(r"発注ID\s*[=＝:：]\s*(\d+)")
+# 実機（2026-09-29）の受理表示は「発注済み(注文ID=15)」。リファレンスの表記「発注ID」も受け付ける
+_ORDER_ID_RE = re.compile(r"(?:注文|発注)ID\s*[=＝:：]\s*(\d+)")
 
 
 def _classify_order_status(text: str, order_id: int | None = None) -> str:
     """RssStockOrder のセル表示テキストを大まかな状態に分類する。
 
-    order_id を渡すと「発注済み(発注ID=xxxx)」の ID が一致するときだけ sent とする
+    order_id を渡すと「発注済み(注文ID=xxxx)」の ID が一致するときだけ sent とする
     （一致しなければ前の注文の表示が残っているとみなして waiting）。
     """
     text = _status_text(text)

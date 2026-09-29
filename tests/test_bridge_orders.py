@@ -66,6 +66,9 @@ def test_classify_sent_requires_matching_order_id():
     # 前の注文（ID=4）の表示が残っているだけなら、まだ確定していない
     assert bridge._classify_order_status("発注済み(発注ID=4)", 5) == "waiting"
     assert bridge._classify_order_status("発注済み(発注ID=5)", 5) == "sent"
+    # 実機（2026-09-29）の表示は「注文ID」
+    assert bridge._classify_order_status(PREFIX + "発注済み(注文ID=14)", 15) == "waiting"
+    assert bridge._classify_order_status(PREFIX + "発注済み(注文ID=15)", 15) == "sent"
 
 
 def test_classify_order_id_already_used_is_error():
