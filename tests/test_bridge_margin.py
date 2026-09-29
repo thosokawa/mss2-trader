@@ -119,8 +119,8 @@ def test_margin_open_writes_22_args():
     assert res["status"] == "sent"
     v = fired["values"]
     assert fired["sheet"] == "margin_open" and len(v) == 22
-    # 発注ID, トリガー, 銘柄, 売買区分(1=売建), 注文区分, SOR, 信用区分(4=いちにち), 数量, 価格区分(0=成行)
-    assert v[:9] == [7, 0, "5401", 1, 0, 0, 4, 100, 0]
+    # 発注ID, トリガー, 銘柄, 売買区分(1=売建), 注文区分, SOR(1=既定), 信用区分(4=いちにち), 数量, 価格区分
+    assert v[:9] == [7, 0, "5401", 1, 0, 1, 4, 100, 0]
     assert v[10] == 1 and v[12] == "0"  # 執行条件=本日中, 口座区分=特定
 
 
@@ -141,7 +141,7 @@ def test_margin_close_uses_position_date_price_market():
     assert sheet == "margin_close" and len(v) == 20
     assert sub_id == bridge.CLOSE_ID_BASE + 42 * bridge.CLOSE_ID_SLOTS  # Order.id と重ならない
     # 売買区分(1=売埋), 信用区分, 数量, 建日, 建単価, 建市場(5=JAX)
-    assert v[3] == 1 and v[6] == 4 and v[7] == 100
+    assert v[3] == 1 and v[5] == 1 and v[6] == 4 and v[7] == 100
     assert v[13:16] == [20260928, 688.4, 5]
 
 
@@ -160,3 +160,21 @@ def test_close_ids_do_not_collide_with_order_ids_or_rows():
     sub = bridge.CLOSE_ID_BASE + 5 * bridge.CLOSE_ID_SLOTS
     assert sub <= 2147483647  # RSS の発注ID上限
     assert 2 <= relay.row_for(sub) <= 301
+
+
+def test_sor_can_be_turned_off_for_stock_orders():
+    fired = {}
+
+    def fake_fire(ws, sheet, order_id, values, timeout):
+        fired.update(sheet=sheet, values=values)
+        return {"status": "sent", "broker_order_id": "発注済み"}
+
+    class _Book:
+        sheets = {"orders": _FakeSheet()}
+
+    for sor, want in ((1, 1), (0, 0)):
+        relay = bridge.OrderRelay("dummy.xlsx", sor=sor)
+        with patch.object(relay, "_book", return_value=_Book()), patch.object(relay, "_fire", fake_fire):
+            order = {"id": 3, "symbol_code": "9984", "side": "BUY", "qty": 100, "trade_type": "cash"}
+            relay.place(order, 1.0)
+        assert fired["sheet"] == "orders" and fired["values"][5] == want

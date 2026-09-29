@@ -275,9 +275,10 @@ class OrderRelay:
     # 表示を読んでしまい、実は発注されている注文を「拒否」と誤判定しないため）
     REJECT_SETTLE_SEC = 1.5
 
-    def __init__(self, workbook_path: str, n_rows: int = 300):
+    def __init__(self, workbook_path: str, n_rows: int = 300, sor: int = 1):
         self.workbook_path = workbook_path
         self.n_rows = n_rows
+        self.sor = 1 if int(sor) else 0  # SOR区分（config の bridge.sor。手数料ゼロコースは 1 必須）
 
     def row_for(self, order_id: int) -> int:
         return 2 + (int(order_id) - 1) % self.n_rows
@@ -341,7 +342,7 @@ class OrderRelay:
     def _place_stock(self, order: dict, resolve_timeout: float) -> dict:
         side_code = 1 if order["side"] in ("EXIT", "SELL") else 3  # 1:売り 3:買い
         values = [
-            order["id"], 0, str(order["symbol_code"]), side_code, 0, 0,
+            order["id"], 0, str(order["symbol_code"]), side_code, 0, self.sor,
             int(order["qty"]), 0, None, 1, None, str(order.get("account_type") or "0"),
             None, None, None, None, None, None, None, None,
         ]
@@ -354,7 +355,7 @@ class OrderRelay:
             return {"status": "rejected", "error": f"信用区分が不正: {margin_type}"}
         side_code = 1 if order["side"] == "SHORT" else 3  # 1:売建 3:買建
         values = [
-            order["id"], 0, str(order["symbol_code"]), side_code, 0, 0, margin_type,
+            order["id"], 0, str(order["symbol_code"]), side_code, 0, self.sor, margin_type,
             int(order["qty"]), 0, None, 1, None, str(order.get("account_type") or "0"),
             None, None, None, None,
             None, None, None, None, None,
@@ -381,7 +382,7 @@ class OrderRelay:
         for k, (lot, qty) in enumerate(picked):
             sub_id = CLOSE_ID_BASE + int(order["id"]) * CLOSE_ID_SLOTS + k
             values = [
-                sub_id, 0, str(order["symbol_code"]), side_code, 0, 0, lot["margin_type"],
+                sub_id, 0, str(order["symbol_code"]), side_code, 0, self.sor, lot["margin_type"],
                 qty, 0, None, 1, None, str(order.get("account_type") or "0"),
                 lot["date"], lot["price"], lot["market"],
                 None, None, None, None,
@@ -524,7 +525,7 @@ def main() -> None:
 
     order_relay = None
     if args.orders_workbook and not args.simulate:
-        order_relay = OrderRelay(args.orders_workbook)
+        order_relay = OrderRelay(args.orders_workbook, sor=cfg.sor)
         print(f"order relay: {args.orders_workbook} <-> {args.orders_url}")
 
     if args.simulate:

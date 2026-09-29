@@ -34,6 +34,8 @@ orders_workbook_path = ""
 poll_interval_sec = 2.0
 # RssStockOrder のセルが確定するまで待つ秒数
 order_resolve_timeout_sec = 15.0
+# 注文の SOR区分（0=通常 / 1=SOR）。楽天の「手数料ゼロコース」は 1 が必須
+sor = 1
 
 [trading]
 # false のままなら mode=live のシグナルは一切発注されない。true にしても

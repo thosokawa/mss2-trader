@@ -52,6 +52,9 @@ class BridgeCfg:
     poll_interval_sec: float = 2.0
     # RssStockOrder のセルが「発注済み/エラー/キャンセル」等に確定するまで待つ秒数
     order_resolve_timeout_sec: float = 15.0
+    # RssStockOrder / RssMargin*Order の SOR区分（0=通常 / 1=SOR）。楽天の「手数料ゼロコース」は
+    # SOR 必須（0 だと「手数料ゼロコースでは、SORを有効にして、再度注文してください。」で拒否される）
+    sor: int = 1
 
 
 @dataclass
