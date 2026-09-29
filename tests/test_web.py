@@ -656,3 +656,26 @@ def test_performance_shows_live_round_trips(client):
 def test_signals_filter_by_strategy(client):
     r = client.get("/signals", params={"strategy_id": 999999})
     assert r.status_code == 200 and "すべての戦略" in r.text
+
+
+def test_trade_type_and_direction_show_japanese_labels(client):
+    """取引区分・売買方向の選択肢は、値は cash/margin・long/short/both のまま表示名が日本語。"""
+    import json
+
+    from app.strategy.registry import UNIVERSAL_META
+
+    assert UNIVERSAL_META["trade_type"]["choice_labels"] == {"cash": "現物", "margin": "信用"}
+    assert UNIVERSAL_META["direction"]["choice_labels"]["long"] == "買いのみ"
+    r = client.get("/strategies/new")
+    assert json.dumps("信用")[1:-1] in r.text and "choice_labels" in r.text
+    js = client.get("/static/param_form.js").text
+    assert "m.choice_labels" in js
+
+
+def test_static_assets_are_cache_busted(client):
+    import re
+
+    html = client.get("/strategies/new").text
+    assert re.search(r'/static/app\.css\?v=\d+', html)
+    assert re.search(r'/static/param_form\.js\?v=\d+', html)
+    assert client.get(re.search(r'(/static/param_form\.js\?v=\d+)', html).group(1)).status_code == 200

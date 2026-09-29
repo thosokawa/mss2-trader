@@ -41,6 +41,20 @@ from app.web.glossary import GLOSSARY, gloss
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+_STATIC_DIR = Path(__file__).parent / "static"
+
+
+def _static(name: str) -> str:
+    """/static のファイルの URL に更新時刻を付ける（?v=…）。ファイルを変えたらブラウザが
+    キャッシュの古い CSS/JS を使い続けないように（2026-09-29 に param_form.js で発生）。"""
+    try:
+        v = int((_STATIC_DIR / name).stat().st_mtime)
+    except OSError:
+        v = 0
+    return f"/static/{name}?v={v}"
+
+
+templates.env.globals["static"] = _static
 
 _TZ = ZoneInfo(get_config().app.timezone)
 

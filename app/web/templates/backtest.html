@@ -38,7 +38,7 @@
   </form>
 </article>
 
-<script src="/static/param_form.js"></script>
+<script src="{{ static('param_form.js') }}"></script>
 <script>
   const STRAT_PARAMS = {{ builtin_params | tojson }};
   const STRAT_META = {{ builtin_param_meta | tojson }};

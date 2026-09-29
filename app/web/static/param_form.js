@@ -80,7 +80,8 @@ const ParamForm = (() => {
           for (const c of m.choices) {
             const opt = document.createElement("option");
             opt.value = c;
-            opt.textContent = c;
+            // choice_labels があれば表示名を使う（値はそのまま。例: cash → 現物）
+            opt.textContent = (m.choice_labels && m.choice_labels[c]) || c;
             if (String(val) === String(c)) opt.selected = true;
             input.appendChild(opt);
           }

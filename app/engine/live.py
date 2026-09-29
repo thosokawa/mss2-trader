@@ -205,7 +205,7 @@ def _run_strategy_symbol(
             elif side in CLOSE_SIDES and pos.is_flat:
                 blocked_reason = "建玉なし（手仕舞うものがない）"
             elif side == "SHORT" and trade_type != "margin":
-                blocked_reason = "空売りは取引区分=margin（信用）のときだけ"
+                blocked_reason = "空売りは取引区分=信用のときだけ"
             elif side in OPEN_SIDES and trade_type == "margin" and not MARGIN_ORDERS_SUPPORTED:
                 blocked_reason = "信用の実発注はまだ未対応（bridge の信用返済が実装待ち）"
             elif orders.has_in_flight_order(session, strat_row.id, symbol_code):
