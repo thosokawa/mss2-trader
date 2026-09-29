@@ -390,11 +390,11 @@ def test_risk_page_and_arm_disarm(client):
     assert "発注許可" in r.text
 
     r = client.post("/risk/arm", follow_redirects=True)
-    assert "ON（発注する）" in r.text
+    assert "ON — 発注する" in r.text
 
     r = client.post("/risk/disarm", data={"reason": "テスト停止"}, follow_redirects=True)
     assert "テスト停止" in r.text
-    assert "OFF（発注しない）" in r.text
+    assert "OFF — 発注しない" in r.text
 
 
 def test_status_bar_and_dashboard(client):
@@ -649,7 +649,7 @@ def test_performance_shows_live_round_trips(client):
         assert m["realized_pnl"] == 750 and m["win_rate_pct"] == 50.0 and m["profit_factor"] == 2.5
 
     r = client.get("/performance")
-    assert "実発注" in r.text and "成績テスト戦略" in r.text and "+750円" in r.text
+    assert "実発注" in r.text and "成績テスト戦略" in r.text and "▲ +750 円" in r.text
     assert "1,000.0 → 1,012.5" in r.text
 
 

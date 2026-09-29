@@ -4,9 +4,7 @@
 {% block content %}
 {{ trading_tabs() }}
 <h2>発注履歴</h2>
-<p><small>bot が出した注文（実発注の戦略のみ）。<code>sent</code>=受理（成行なのでシグナル価格で約定とみなす）、
-<code>rejected</code>=拒否（未発注）、<code>error</code>/<code>timeout</code>=結果不明（自動で発注許可 OFF）、
-<code>manual</code>=手動決済の記録（発注していない）。</small></p>
+<p><small>bot が出した注文（実発注の戦略のみ）。受理＝成行なのでシグナル価格で約定とみなす / 拒否＝未発注 / エラー・不明＝結果が分からない（自動で発注許可 OFF）/ 手動記録＝手動決済の記録（発注していない）。</small></p>
 <div {{ autorefresh("orders-list", 5) }}>
 {% if rows %}
 <table>
@@ -21,7 +19,7 @@
       <td>{{ o.qty }}</td>
       <td>{{ '信用' if o.trade_type == 'margin' else '現物' }}</td>
       <td>{{ '{:,.1f}'.format(o.ref_price) if o.ref_price else '—' }}</td>
-      <td class="{{ 'pos' if o.status in ('sent', 'filled') else 'neg' if o.status in ('rejected', 'error', 'timeout') else '' }}">{{ o.status }}</td>
+      <td class="{{ 'st-ok' if o.status in ('sent', 'filled') else 'st-ng' if o.status in ('rejected', 'error', 'timeout') else 'muted' }}">{{ {'sent': '受理', 'filled': '約定', 'rejected': '拒否', 'error': 'エラー', 'timeout': '不明', 'manual': '手動記録', 'new': '発注待ち', 'sending': '発注中'}.get(o.status, o.status) }}</td>
       <td><small class="{{ 'neg' if o.error }}">{{ o.error or o.broker_order_id }}</small></td>
     </tr>
   {% endfor %}

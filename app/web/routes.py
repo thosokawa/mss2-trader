@@ -69,6 +69,28 @@ MODE_LABELS = {"notify": "通知のみ", "paper": "ペーパー", "live": "実�
 templates.env.filters["mode_label"] = lambda m: MODE_LABELS.get(m, m)
 
 
+def _pnl(v, unit: str = "") -> str:
+    """損益の表示: 色だけに頼らず ▲▼ と符号でも分かるように（▲ +1,250 / ▼ −500 / ±0）。"""
+    if v is None:
+        return "—"
+    v = round(float(v))
+    if v > 0:
+        return f"▲ +{v:,}{unit}"
+    if v < 0:
+        return f"▼ −{abs(v):,}{unit}"
+    return f"±0{unit}"
+
+
+def _pnl_cls(v) -> str:
+    if v is None:
+        return "muted"
+    return "pos" if v > 0 else "neg" if v < 0 else "muted"
+
+
+templates.env.filters["pnl"] = _pnl
+templates.env.filters["pnl_cls"] = _pnl_cls
+
+
 def _now_utc() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
@@ -112,13 +134,18 @@ def dashboard(request: Request, s: Session = Depends(get_session)):
             select(func.count()).select_from(Strategy).where(Strategy.mode == "paper")
         ).one(),
     }
+    overview = status_mod.strategy_overview(s)
+    today_trips = [t for t in orders_engine.round_trips(s) if t["exit_ts"] >= day0]
+    unrealized = [r["unrealized"] for o in overview for r in o["rows"] if r["unrealized"] is not None]
     return templates.TemplateResponse(
         request,
         "dashboard.html",
         _ctx(
             request,
             sys=sys,
-            overview=status_mod.strategy_overview(s),
+            overview=overview,
+            today_summary=orders_engine.summarize_trips(today_trips),
+            unrealized_total=sum(unrealized) if unrealized else None,
             quotes=_latest_ticks(s),
             quote_codes=symbols.quote_codes(s),
             today_signals=today_signals,
@@ -837,6 +864,7 @@ def delete_strategy(strategy_id: int, s: Session = Depends(get_session)):
 @router.get("/risk", response_class=HTMLResponse)
 def risk_page(request: Request, s: Session = Depends(get_session)):
     eng = get_risk_engine()
+    positions = orders_engine.open_positions(s)
     return templates.TemplateResponse(
         request,
         "risk.html",
@@ -845,7 +873,9 @@ def risk_page(request: Request, s: Session = Depends(get_session)):
             trading_cfg=eng.cfg,
             state=eng.state,
             sys=status_mod.system_status(s),
-            positions=orders_engine.open_positions(s),
+            positions=positions,
+            prices={code: paper.latest_price(s, code) for code in {p["symbol_code"] for p in positions}},
+            names={sym.code: sym.name for sym in s.exec(select(Symbol)).all()},
         ),
     )
 

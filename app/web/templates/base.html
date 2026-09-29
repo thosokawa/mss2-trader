@@ -1,9 +1,13 @@
 <!doctype html>
-<html lang="ja">
+<html lang="ja" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
   <title>{% block title %}mss2-trader{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   <link rel="stylesheet" href="/static/app.css">
@@ -26,9 +30,9 @@
   {%- for p in prefixes -%}{%- if path.startswith(p) -%}{%- set ns.on = true -%}{%- endif -%}{%- endfor -%}
   <li><a href="{{ href }}"{% if ns.on %} aria-current="page"{% endif %}>{{ label }}</a></li>
 {%- endmacro %}
-<header class="container">
-  <nav>
-    <ul><li><a href="/" class="brand"><strong>mss2-trader</strong></a></li></ul>
+<header class="site">
+  <nav class="container">
+    <ul><li><a href="/" class="brand"><span class="mark"></span>mss2-trader</a></li></ul>
     <ul>
       {{ nav("/", "ダッシュボード") }}
       {{ nav("/risk", "自動売買", ("/risk", "/strategies", "/signals", "/orders", "/performance")) }}

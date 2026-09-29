@@ -3,84 +3,100 @@
 {% from "_tabs.html" import trading_tabs with context %}
 {% block content %}
 {{ trading_tabs() }}
-<h2>自動売買 — 概要</h2>
 
 <div {{ autorefresh("risk-live", 5) }}>
-<article class="panel panel-{{ sys.level }}">
-  <header><strong>状態</strong> <span class="sb-main sb-{{ sys.level }}"><span class="dot"></span>{{ sys.label }}</span></header>
-  <div class="metrics">
-    <div><div class="k gloss" title="{{ '発注許可'|gloss }}">発注許可</div>
-      <div class="v {{ 'pos' if state.armed else 'neg' }}">{{ 'ON（発注する）' if state.armed else 'OFF（発注しない）' }}</div></div>
-    <div><div class="k gloss" title="config/config.toml の [trading] enabled。変更は編集して再起動">config の発注設定</div>
-      <div class="v {{ 'pos' if trading_cfg.enabled else 'neg' }}">{{ '有効' if trading_cfg.enabled else '無効' }}</div></div>
-    <div><div class="k">実発注の戦略（稼働中）</div><div class="v">{{ sys.live_enabled | length }}</div></div>
-    <div><div class="k">市場</div><div class="v">{{ sys.phase }}</div></div>
-    <div><div class="k gloss" title="bot の手仕舞いが受理されたときの概算損益の合計（backend 再起動で 0 に戻る）">本日の損益（概算）</div>
-      <div class="v {{ 'pos' if state.day_realized_pnl > 0 else 'neg' if state.day_realized_pnl < 0 else '' }}">{{ '{:+,.0f}'.format(state.day_realized_pnl) }}円</div></div>
-    <div><div class="k">停止理由</div><div class="v">{{ state.halted_reason or '—' }}</div></div>
+{# ---- 発注許可: この画面で一番目立つ操作 ---- #}
+<section class="panel panel-{{ 'on' if state.armed and trading_cfg.enabled else 'bad' if state.halted_reason else 'warn' if sys.live_enabled else 'off' }} arm-panel">
+  <div class="grow">
+    <div style="font-size: .85rem; font-weight: 600; color: var(--c-sub)">発注許可 <span class="gloss" title="{{ '発注許可'|gloss }}">?</span></div>
+    {% if state.armed %}
+      <div class="state-line sb-on"><span class="dot"></span>ON — 発注する</div>
+    {% else %}
+      <div class="state-line {{ 'sb-bad' if state.halted_reason else 'sb-warn' }}"><span class="dot"></span>OFF — 発注しない</div>
+    {% endif %}
+    {% if state.halted_reason %}<div class="err" style="margin: .6rem 0">停止理由: {{ state.halted_reason }}</div>{% endif %}
+    <p style="margin: .5rem 0 0; font-size: .88rem; color: var(--c-sub); line-height: 1.7">
+      {% if state.armed and sys.live_enabled %}「実発注」モードの戦略 {{ sys.live_enabled | length }} 本がシグナルに合わせて発注します。{% endif %}
+      発注するのは、発注許可 ON・config の発注設定が有効・戦略が実発注モードのときだけ。backend を再起動すると自動で OFF に戻ります。
+      {% if not trading_cfg.enabled %}<br><strong class="neg">config の発注設定が無効なので、ON にしても発注しません（config/config.toml の [trading] enabled）。</strong>{% endif %}
+    </p>
   </div>
-
-  <div style="margin-top:1rem">
   {% if state.armed %}
-    <form method="post" action="/risk/disarm" class="grid addform">
-      <input name="reason" placeholder="止める理由（任意）">
-      <button type="submit" class="secondary">発注を止める（OFF）</button>
-    </form>
+  <form method="post" action="/risk/disarm">
+    <label for="reason" style="font-size: .78rem; color: var(--c-muted); margin: 0">止める理由（任意）</label>
+    <input id="reason" name="reason" placeholder="例: 様子見">
+    <button type="submit" class="btn-big btn-off">発注を止める（OFF）</button>
+  </form>
   {% else %}
-    <form method="post" action="/risk/arm"
-          onsubmit="return confirm('発注許可を ON にすると、実発注モードの戦略のシグナルが実際に発注されます。よろしいですか？')">
-      <button type="submit">発注を許可する（ON）</button>
-    </form>
+  <form method="post" action="/risk/arm"
+        onsubmit="return confirm('発注許可を ON にすると、実発注モードの戦略のシグナルが実際に発注されます。よろしいですか？')">
+    <button type="submit" class="btn-big btn-on">発注を許可する（ON）</button>
+  </form>
   {% endif %}
-  </div>
-  <p style="margin:.6rem 0 0"><small>発注するのは「発注許可 ON」かつ「config の発注設定が有効」かつ戦略のモードが「実発注」のときだけ。
-  発注許可はいつでも OFF にでき、backend を再起動すると自動で OFF に戻ります（config の発注設定は
-  <code>config/config.toml</code> を編集して再起動しないと変わりません）。
-  {% if not sys.margin_supported %}信用の新規建ては停止中（現物のみ発注）。{% endif %}</small></p>
-</article>
+</section>
 
-<h3>bot が認識している建玉</h3>
-{% if positions %}
-<p><small>bot の発注履歴から計算した建玉（受理＝約定とみなした概算）。MarketSpeed II で手動で決済したときは
-「手動決済を記録」を押して bot 側も決済済みにしてください（押しても発注はしません）。記録しないと、
-bot がその建玉の手仕舞い注文を出して「建玉が足りない」エラーになります。</small></p>
-<table>
-  <thead><tr><th>戦略</th><th>銘柄</th><th>売買</th><th>株数</th><th>建値（概算）</th><th>建てた日時</th><th></th></tr></thead>
-  <tbody>
-  {% for p in positions %}
-    <tr>
-      <td>{{ p.strategy_name }}{% if not p.strategy_exists %} <small class="neg">（戦略は削除済み）</small>{% endif %}</td>
-      <td>{{ p.symbol_code }}</td>
-      <td>{{ '売建' if p.position.is_short else '買建' }}{% if p.opened and p.opened.trade_type == 'margin' %}（信用）{% endif %}</td>
-      <td>{{ p.position.qty | abs }}</td>
-      <td>{{ '%.1f'|format(p.position.avg_price) if p.position.avg_price else '—' }}</td>
-      <td>{{ p.opened.ts | jst('%Y-%m-%d %H:%M') if p.opened else '—' }}</td>
-      <td>
-        <form method="post" action="/risk/manual-close"
-              onsubmit="return confirm('MarketSpeed II で決済済みの建玉として記録します（発注はしません）。よろしいですか？')">
-          <input type="hidden" name="strategy_id" value="{{ p.strategy_id }}">
-          <input type="hidden" name="symbol_code" value="{{ p.symbol_code }}">
-          <button class="secondary outline" type="submit">手動決済を記録</button>
-        </form>
-      </td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% else %}<p>bot が認識している建玉はありません。</p>{% endif %}
-
+<div class="metrics" style="margin-top: 1rem">
+  <div><div class="k gloss" title="config/config.toml の [trading] enabled。変更は編集して再起動">config の発注設定</div>
+    <div class="v text {{ 'pos' if trading_cfg.enabled else 'neg' }}">{{ '有効' if trading_cfg.enabled else '無効' }}</div></div>
+  <div><div class="k">実発注の戦略（稼働中）</div><div class="v">{{ sys.live_enabled | length }}</div></div>
+  <div><div class="k">市場</div><div class="v text {{ 'pos' if sys.in_session }}">{{ sys.phase }}</div></div>
+  <div><div class="k gloss" title="本日（JST）に手仕舞った実発注の往復の損益（概算）の合計">本日の損益（概算）</div>
+    <div class="v {{ sys.day_pnl | pnl_cls }}">{{ sys.day_pnl | pnl }} 円</div></div>
+  <div class="{{ 'alertbox' if sys.today_failed }}"><div class="k">本日の発注（受理 / 失敗）</div>
+    <div class="v">{{ sys.today_sent }} / <span class="{{ 'neg' if sys.today_failed }}">{{ sys.today_failed }}</span></div></div>
 </div>
 
-<h3>制限 <small>（config/config.toml の [trading]。変更は編集して再起動）</small></h3>
-<table>
-  <tbody>
-    <tr><td>1回の注文の数量上限</td><td>{{ trading_cfg.max_qty_per_order }} 株</td></tr>
-    <tr><td>1回の注文の金額上限</td><td>{{ '{:,.0f}'.format(trading_cfg.max_notional_per_order) }} 円</td></tr>
-    <tr><td>日次損失リミット</td><td>{{ '{:,.0f}'.format(trading_cfg.daily_loss_limit) }} 円</td></tr>
-    <tr><td>取引時間帯</td><td>{{ trading_cfg.session_windows | join(', ') }}</td></tr>
-    <tr><td>シグナルの鮮度上限</td><td>足の確定から {{ trading_cfg.max_signal_age_sec }} 秒以内</td></tr>
-    <tr><td>既定の口座区分</td><td>{{ trading_cfg.default_account_type }}（0:特定 1:一般 2:NISA 3:旧NISA）</td></tr>
-  </tbody>
-</table>
-<p><small>日次損失リミットに達すると自動で発注許可 OFF。発注の結果が不明（timeout / error）のときも自動で OFF になります。</small></p>
+<section class="card block">
+  <div class="card-head">
+    <h2 style="font-size: 1.1rem">bot が認識している建玉</h2>
+    <span class="mono" style="color: var(--c-accent)">{{ positions | length }}</span>
+  </div>
+  {% if positions %}
+  <p style="margin: 0 0 .7rem"><small>bot の発注履歴から計算した建玉（受理＝シグナル価格で約定とみなした概算）。MarketSpeed II で手動で決済したときは
+  「手動決済を記録」を押して bot 側も決済済みにしてください（押しても発注はしません）。記録しないと、bot がその建玉の手仕舞い注文を出して
+  「建玉が足りない」エラーになります。</small></p>
+  <table>
+    <thead><tr><th>戦略</th><th>銘柄</th><th>売買</th><th class="num">株数</th><th class="num">建値（概算）</th><th class="num">現在値</th><th class="num">含み損益</th><th>建てた日時</th><th></th></tr></thead>
+    <tbody>
+    {% for p in positions %}
+      {% set last = prices.get(p.symbol_code) %}
+      {% set u = ((last - p.position.avg_price) * (p.position.qty | abs) * p.position.direction) if last and p.position.avg_price else none %}
+      <tr>
+        <td><strong>{{ p.strategy_name }}</strong>{% if not p.strategy_exists %} <small class="neg">（戦略は削除済み）</small>{% endif %}</td>
+        <td><span class="mono">{{ p.symbol_code }}</span> {{ names.get(p.symbol_code, '') }}</td>
+        <td>{{ '売建' if p.position.is_short else '買建' }}{% if p.opened and p.opened.trade_type == 'margin' %}（信用）{% else %}（現物）{% endif %}</td>
+        <td class="num mono">{{ p.position.qty | abs }}</td>
+        <td class="num mono">{{ '{:,.1f}'.format(p.position.avg_price) if p.position.avg_price else '—' }}</td>
+        <td class="num mono">{{ '{:,.1f}'.format(last) if last else '—' }}</td>
+        <td class="num mono {{ u | pnl_cls }}" style="font-weight: 600">{{ u | pnl }}</td>
+        <td class="mono">{{ p.opened.ts | jst('%m/%d %H:%M') if p.opened else '—' }}</td>
+        <td style="text-align: right">
+          <form method="post" action="/risk/manual-close" class="inline"
+                onsubmit="return confirm('MarketSpeed II で決済済みの建玉として記録します（発注はしません）。よろしいですか？')">
+            <input type="hidden" name="strategy_id" value="{{ p.strategy_id }}">
+            <input type="hidden" name="symbol_code" value="{{ p.symbol_code }}">
+            <button class="btn-ghost small" type="submit">手動決済を記録</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted" style="margin: 0">bot が認識している建玉はありません。</p>{% endif %}
+</section>
+</div>
+
+<section class="card-quiet block">
+  <div class="card-head"><h2>制限</h2><small>config/config.toml の [trading]。変更は編集して再起動</small></div>
+  <div class="limits">
+    <div><span>1回の注文の数量上限</span><span class="mono">{{ trading_cfg.max_qty_per_order }} 株</span></div>
+    <div><span>1回の注文の金額上限</span><span class="mono">{{ '{:,.0f}'.format(trading_cfg.max_notional_per_order) }} 円</span></div>
+    <div><span>日次損失リミット</span><span class="mono">{{ '{:,.0f}'.format(trading_cfg.daily_loss_limit) }} 円</span></div>
+    <div><span>取引時間帯</span><span class="mono">{{ trading_cfg.session_windows | join(', ') }}</span></div>
+    <div><span>シグナルの鮮度上限</span><span class="mono">{{ trading_cfg.max_signal_age_sec }} 秒</span></div>
+    <div><span>既定の口座区分</span><span>{{ {'0': '特定', '1': '一般', '2': 'NISA', '3': '旧NISA'}.get(trading_cfg.default_account_type, trading_cfg.default_account_type) }}</span></div>
+    <div><span>信用の新規建て</span><span class="{{ '' if sys.margin_supported else 'sb-warn' }}">{{ '有効' if sys.margin_supported else '停止中（現物のみ）' }}</span></div>
+  </div>
+  <p style="margin: .7rem 0 0"><small>日次損失リミットに達すると自動で発注許可 OFF。発注の結果が不明（timeout / error）のときも自動で OFF になります。</small></p>
+</section>
 {% endblock %}

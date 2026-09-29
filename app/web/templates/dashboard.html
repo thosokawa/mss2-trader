@@ -2,137 +2,178 @@
 {% from "_macros.html" import autorefresh with context %}
 {% block content %}
 <div {{ autorefresh("dash", 5) }}>
-<h2 style="margin-bottom:.5rem">ダッシュボード</h2>
+<h2 style="margin: .4rem 0 1rem">ダッシュボード</h2>
 
-{# ---- 自動売買 ---- #}
-<article class="panel panel-{{ sys.level }}">
-  <header><strong>自動売買</strong> <span class="sb-main sb-{{ sys.level }}"><span class="dot"></span>{{ sys.label }}</span>
-    <a href="/risk" style="float:right">自動売買 →</a></header>
-  <div class="metrics">
-    <div><div class="k gloss" title="{{ '発注許可'|gloss }}">発注許可</div><div class="v {{ 'pos' if sys.armed else 'neg' }}">{{ 'ON' if sys.armed else 'OFF' }}</div></div>
-    <div><div class="k">config の発注設定</div><div class="v {{ 'pos' if sys.config_enabled else 'neg' }}">{{ '有効' if sys.config_enabled else '無効' }}</div></div>
-    <div><div class="k">市場</div><div class="v">{{ sys.phase }}</div></div>
-    <div><div class="k">bot の建玉</div><div class="v">{{ sys.positions | length }}</div></div>
-    <div><div class="k">本日の発注（受理 / 失敗）</div><div class="v">{{ sys.today_sent }} / <span class="{{ 'neg' if sys.today_failed }}">{{ sys.today_failed }}</span></div></div>
-    <div><div class="k gloss" title="bot の手仕舞いが受理されたときの概算損益の合計（backend 再起動で 0 に戻る）">本日の損益（概算）</div>
-      <div class="v {{ 'pos' if sys.day_pnl > 0 else 'neg' if sys.day_pnl < 0 else '' }}">{{ '{:+,.0f}'.format(sys.day_pnl) }}円</div></div>
-  </div>
-  {% if sys.halted_reason %}<p class="neg" style="margin:.6rem 0 0">停止理由: {{ sys.halted_reason }}</p>{% endif %}
-  {% if not sys.margin_supported %}<p style="margin:.6rem 0 0"><small>信用の新規建ては停止中（建玉一覧が自動で最新にならないため）。現物のみ発注します。</small></p>{% endif %}
-  {% if sys.positions %}
-  <table style="margin-top:.8rem">
-    <thead><tr><th>建玉</th><th>銘柄</th><th>売買</th><th>株数</th><th>建値（概算）</th><th>建てた時刻</th></tr></thead>
-    <tbody>
-    {% for p in sys.positions %}
-      <tr><td>{{ p.strategy_name }}</td><td>{{ p.symbol_code }}</td>
-          <td>{{ '売建' if p.position.is_short else '買建' }}{% if p.opened and p.opened.trade_type == 'margin' %}（信用）{% endif %}</td>
-          <td>{{ p.position.qty | abs }}</td>
-          <td>{{ '{:,.1f}'.format(p.position.avg_price) if p.position.avg_price else '—' }}</td>
-          <td>{{ p.opened.ts | jst('%m/%d %H:%M') if p.opened else '—' }}</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  {% endif %}
-</article>
-
-{# ---- 戦略ごとの状況 ---- #}
-<h3>稼働中の戦略 <small><a href="/strategies">戦略の設定 →</a></small></h3>
-{% if overview %}
-<div class="stratgrid">
-{% for o in overview %}
-  <article class="strat">
+{# ---- 1段目: 自動売買（一番目立つ）と本日の損益 ---- #}
+<div class="dash-top">
+  <section class="panel panel-{{ sys.level }}">
     <header>
-      <strong>{{ o.st.name }}</strong>
-      <span class="tag tag-{{ o.st.mode }}">{{ o.st.mode | mode_label }}</span>
-      <small>{{ o.st.timeframe }} / {{ {'long': '買いのみ', 'short': '売りのみ', 'both': '買い・売り'}.get(o.direction, o.direction) }}
-        / {{ '信用' if o.trade_type == 'margin' else '現物' }}{% if not o.hold_overnight %} / デイトレ{% endif %}</small>
+      <strong style="color: var(--c-sub); font-size: .95rem">自動売買</strong>
+      <a href="/risk" class="more" style="margin-left: auto; font-size: .85rem; font-weight: 600">自動売買を開く →</a>
     </header>
-    <table>
-      <thead><tr><th>銘柄</th><th>現在値</th><th>建玉</th><th>含み損益</th></tr></thead>
-      <tbody>
-      {% for r in o.rows %}
-        <tr>
-          <td>{{ r.code }} <small>{{ r.name }}</small></td>
-          <td>{% if r.price %}{{ '{:,.1f}'.format(r.price) }}{% else %}<span class="neg">未受信</span>{% endif %}</td>
-          <td>{% if r.pos.is_flat %}—{% else %}{{ '売建' if r.pos.is_short else '買建' }} {{ r.pos.qty | abs }}<br><small>@{{ '{:,.1f}'.format(r.pos.avg_price) }}</small>{% endif %}</td>
-          <td class="{{ 'pos' if (r.unrealized or 0) > 0 else 'neg' if (r.unrealized or 0) < 0 else '' }}">
-            {{ '{:+,.0f}'.format(r.unrealized) if r.unrealized is not none else '—' }}</td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    <footer><small>
-      最後のシグナル:
-      {% if o.last_signal %}{{ o.last_signal.ts | jst('%m/%d %H:%M') }} {{ o.last_signal.side }} {{ o.last_signal.symbol_code }}
-        — {{ o.last_signal.reason }}{% else %}まだありません{% endif %}
-    </small></footer>
-  </article>
-{% endfor %}
-</div>
-{% else %}<p>有効な戦略はありません。<a href="/strategies">戦略</a>で登録・有効化してください。</p>{% endif %}
+    <div class="state-row">
+      <div class="grow">
+        <div class="big-state sb-{{ sys.level }}" style="border: none; background: none; padding: 0">
+          {% if sys.level == 'on' %}稼働中 — 発注許可 ON
+          {% elif sys.armed %}発注許可 ON（稼働中の実発注の戦略なし）
+          {% elif not sys.config_enabled %}無効（config の発注設定が無効）
+          {% elif sys.live_enabled %}発注許可 OFF — 発注しない
+          {% else %}停止中（発注許可 OFF）{% endif %}
+        </div>
+        <div style="font-size: .9rem; color: var(--c-sub); margin-top: .3rem">
+          {% if sys.level == 'on' %}実発注の戦略 {{ sys.live_enabled | length }} 本がシグナルに合わせて発注します。{{ sys.phase }}。
+          {% elif sys.live_enabled %}実発注の戦略 {{ sys.live_enabled | length }} 本はシグナルを記録・通知しますが、発注はしません。
+          {% else %}稼働中の実発注の戦略はありません。{% endif %}
+          {% if not sys.margin_supported %}<br><small>信用の新規建ては停止中（現物のみ発注）。</small>{% endif %}
+        </div>
+        {% if sys.halted_reason %}<div class="err" style="margin-top: .7rem">停止理由: {{ sys.halted_reason }}</div>{% endif %}
+      </div>
+      {% if sys.config_enabled %}
+        {% if sys.armed %}
+        <form method="post" action="/risk/disarm" style="margin: 0">
+          <button type="submit" class="btn-big btn-off">発注を止める（OFF）</button>
+        </form>
+        {% else %}
+        <form method="post" action="/risk/arm" style="margin: 0"
+              onsubmit="return confirm('発注許可を ON にすると、実発注モードの戦略のシグナルが実際に発注されます。よろしいですか？')">
+          <button type="submit" class="btn-big btn-on">発注を許可する（ON）</button>
+        </form>
+        {% endif %}
+      {% endif %}
+    </div>
+    <div class="metrics" style="margin-top: 1.1rem">
+      <div><div class="k">bot の建玉</div><div class="v">{{ sys.positions | length }}</div></div>
+      <div><div class="k">本日の発注（受理）</div><div class="v">{{ sys.today_sent }}</div></div>
+      <div class="{{ 'alertbox' if sys.today_failed }}"><div class="k">本日の失敗</div><div class="v {{ 'neg' if sys.today_failed }}">{{ sys.today_failed }}</div></div>
+      <div><div class="k">市場</div><div class="v text {{ 'pos' if sys.in_session }}">{{ sys.phase }}</div></div>
+    </div>
+  </section>
 
-{# ---- 今日の発注・シグナル ---- #}
-<div class="grid">
-  <section>
-    <h3>本日の発注 <small><a href="/orders">すべて →</a></small></h3>
+  <section class="card">
+    <h2 style="color: var(--c-sub); font-size: .95rem; font-weight: 600">本日の損益（実発注・概算）</h2>
+    <div class="bignum {{ sys.day_pnl | pnl_cls }}">{{ sys.day_pnl | pnl }}<span class="unit"> 円</span></div>
+    <div style="display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; font-size: .85rem; color: var(--c-sub); margin-top: .5rem">
+      <span>往復 <span class="mono" style="color: var(--c-text)">{{ today_summary.trades }}</span></span>
+      {% if today_summary.known %}<span>勝率 <span class="mono" style="color: var(--c-text)">{{ today_summary.win_rate_pct }}%</span></span>{% endif %}
+      <span>含み損益 <span class="mono {{ unrealized_total | pnl_cls }}">{{ unrealized_total | pnl }}</span></span>
+    </div>
+    <hr style="border-color: var(--c-line); margin: 1rem 0 .7rem">
+    <div style="font-size: .75rem; color: var(--c-muted)">ペーパー実現損益 <small>（paper 戦略 {{ paper.strategies }}{% if paper.open_n %} / 建玉 {{ paper.open_n }}{% endif %}）</small></div>
+    <a href="/performance" class="mono {{ paper.realized | pnl_cls }}" style="font-size: 1.15rem; font-weight: 600">{{ paper.realized | pnl }} 円</a>
+  </section>
+</div>
+
+{# ---- 2段目: 稼働中の戦略 ---- #}
+<section class="block">
+  <div class="card-head">
+    <h2 style="font-size: 1.15rem">稼働中の戦略</h2>
+    <small>{{ overview | length }} 本</small>
+    <a href="/strategies" class="more">戦略の設定 →</a>
+  </div>
+  {% if overview %}
+  <div class="stratgrid">
+  {% for o in overview %}
+    {% set has_pos = o.rows | selectattr('pos.is_flat', 'false') | list %}
+    <a href="/strategies/{{ o.st.id }}" class="strat {{ 'has-pos' if has_pos }}">
+      <header>
+        <span class="dot"></span>
+        <span class="name">{{ o.st.name }}</span>
+        <span class="tag tag-{{ o.st.mode }}">{{ o.st.mode | mode_label }}</span>
+        <span class="desc">{{ o.st.timeframe }} · {{ {'long': '買いのみ', 'short': '売りのみ', 'both': '買い・売り'}.get(o.direction, o.direction) }}
+          · {{ '信用' if o.trade_type == 'margin' else '現物' }}{% if not o.hold_overnight %} · デイトレ{% endif %}</span>
+      </header>
+      <table>
+        <thead><tr><th>銘柄</th><th class="num">現在値</th><th>建玉</th><th class="num">含み損益</th></tr></thead>
+        <tbody>
+        {% for r in o.rows %}
+          <tr>
+            <td><span class="mono">{{ r.code }}</span> <small>{{ r.name }}</small></td>
+            <td class="num mono">{% if r.price %}{{ '{:,.1f}'.format(r.price) }}{% else %}<span class="neg">未受信</span>{% endif %}</td>
+            <td>{% if r.pos.is_flat %}<span class="muted">なし</span>{% else %}<strong>{{ '売建' if r.pos.is_short else '買建' }} <span class="mono">{{ r.pos.qty | abs }}</span></strong>
+              <small class="mono">@{{ '{:,.1f}'.format(r.pos.avg_price) }}</small>{% endif %}</td>
+            <td class="num mono {{ r.unrealized | pnl_cls }}" style="font-weight: 600">{{ r.unrealized | pnl }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <footer>最後のシグナル:
+        {% if o.last_signal %}{{ o.last_signal.ts | jst('%m/%d %H:%M') }} {{ o.last_signal.side }} {{ o.last_signal.symbol_code }} — {{ o.last_signal.reason }}
+        {% else %}まだありません{% endif %}</footer>
+    </a>
+  {% endfor %}
+  </div>
+  {% else %}<p>有効な戦略はありません。<a href="/strategies">戦略</a>で登録・有効化してください。</p>{% endif %}
+</section>
+
+{# ---- 3段目: 本日の発注 / シグナル ---- #}
+<div class="twocol block">
+  <section class="card">
+    <div class="card-head"><h2>本日の発注</h2><a href="/orders" class="more">すべて →</a></div>
     {% if today_orders %}
     <table>
       <thead><tr><th>時刻</th><th>戦略</th><th>銘柄</th><th>売買</th><th>状態</th></tr></thead>
       <tbody>
       {% for o in today_orders %}
-        <tr><td>{{ o.ts | jst('%H:%M:%S') }}</td><td>{{ o.strategy_name }}</td><td>{{ o.symbol_code }}</td>
-            <td>{{ o.side }} {{ o.qty }}</td>
-            <td class="{{ 'pos' if o.status in ('sent', 'filled') else 'neg' if o.status in ('rejected', 'error', 'timeout') else '' }}"
-                title="{{ o.error }}">{{ o.status }}</td></tr>
+        <tr title="{{ o.error }}">
+          <td class="mono">{{ o.ts | jst('%H:%M:%S') }}</td><td>{{ o.strategy_name }}</td><td class="mono">{{ o.symbol_code }}</td>
+          <td>{{ {'BUY': '買い', 'SHORT': '売建', 'EXIT': '手仕舞い', 'SELL': '手仕舞い', 'COVER': '買戻し'}.get(o.side, o.side) }} <span class="mono">{{ o.qty }}</span></td>
+          <td class="{{ 'st-ok' if o.status in ('sent', 'filled') else 'st-ng' if o.status in ('rejected', 'error', 'timeout') else 'muted' }}">
+            {{ {'sent': '受理', 'filled': '約定', 'rejected': '拒否', 'error': 'エラー', 'timeout': '不明', 'manual': '手動記録', 'new': '発注待ち', 'sending': '発注中'}.get(o.status, o.status) }}</td>
+        </tr>
       {% endfor %}
       </tbody>
     </table>
-    {% else %}<p>本日の発注はまだありません。</p>{% endif %}
+    {% else %}<p class="muted">本日の発注はまだありません。</p>{% endif %}
   </section>
-  <section>
-    <h3>本日のシグナル <small><a href="/signals">すべて →</a></small></h3>
+  <section class="card">
+    <div class="card-head"><h2>本日のシグナル</h2><a href="/signals" class="more">すべて →</a></div>
     {% if today_signals %}
     <table>
-      <thead><tr><th>時刻</th><th>戦略</th><th>銘柄</th><th>方向</th><th>価格</th></tr></thead>
+      <thead><tr><th>時刻</th><th>戦略</th><th>銘柄</th><th>方向</th><th class="num">価格</th></tr></thead>
       <tbody>
       {% for s in today_signals %}
-        <tr title="{{ s.reason }}"><td>{{ s.ts | jst('%H:%M') }}</td><td>{{ s.strategy_name }}</td><td>{{ s.symbol_code }}</td>
-            <td>{{ s.side }}{% if '発注見送り' in s.reason %} <small class="neg">見送り</small>{% endif %}</td>
-            <td>{{ '{:,.1f}'.format(s.price) }}</td></tr>
+        <tr title="{{ s.reason }}"><td class="mono">{{ s.ts | jst('%H:%M') }}</td><td>{{ s.strategy_name }}</td><td class="mono">{{ s.symbol_code }}</td>
+            <td>{{ s.side }}{% if '発注見送り' in s.reason %} <span class="tag tag-skip">見送り</span>{% endif %}</td>
+            <td class="num mono">{{ '{:,.1f}'.format(s.price) }}</td></tr>
       {% endfor %}
       </tbody>
     </table>
-    {% else %}<p>本日のシグナルはまだありません。</p>{% endif %}
+    {% else %}<p class="muted">本日のシグナルはまだありません。</p>{% endif %}
   </section>
 </div>
 
-{# ---- 株価の取り込み ---- #}
-<h3>株価の取り込み <small><a href="/symbols">銘柄・データ →</a></small></h3>
-<p>
-  <span class="sb-item sb-{{ sys.bridge.level }}">{{ sys.bridge.label }}</span>
-  取り込み対象: {% for c in quote_codes %}<code>{{ c }}</code> {% else %}なし{% endfor %}
-</p>
-{% if quotes %}
-<table>
-  <thead><tr><th>銘柄</th><th>現在値</th><th>買気配</th><th>売気配</th><th>受信</th></tr></thead>
-  <tbody>
-  {% for r in quotes %}
-    <tr><td>{{ r.code }} <small>{{ r.name }}</small></td><td>{{ '{:,.1f}'.format(r.price) }}</td>
-        <td>{{ '{:,.1f}'.format(r.bid) if r.bid else '-' }}</td><td>{{ '{:,.1f}'.format(r.ask) if r.ask else '-' }}</td>
-        <td class="{{ 'neg' if r.stale }}">{{ r.received_at | since }}</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% endif %}
+{# ---- 4段目: データ収集 ---- #}
+<section class="card block">
+  <div class="card-head">
+    <h2>データ収集中の銘柄</h2>
+    <span class="sb-item sb-{{ sys.bridge.level }}">{{ sys.bridge.label }}</span>
+    <a href="/symbols" class="more">銘柄・データ →</a>
+  </div>
+  {% if quotes %}
+  <table>
+    <thead><tr><th>銘柄</th><th class="num">現在値</th><th class="num">買気配</th><th class="num">売気配</th><th class="num">出来高</th><th>受信</th></tr></thead>
+    <tbody>
+    {% for r in quotes if r.code in quote_codes %}
+      <tr><td><span class="mono">{{ r.code }}</span> {{ r.name }}</td><td class="num mono">{{ '{:,.1f}'.format(r.price) }}</td>
+          <td class="num mono">{{ '{:,.1f}'.format(r.bid) if r.bid else '-' }}</td><td class="num mono">{{ '{:,.1f}'.format(r.ask) if r.ask else '-' }}</td>
+          <td class="num mono">{{ '{:,.0f}'.format(r.volume) if r.volume else '-' }}</td>
+          <td class="{{ 'neg' if r.stale else 'pos' }}">{{ r.received_at | since }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">まだ株価を受信していません。</p>{% endif %}
+</section>
 
-{# ---- 検証系 ---- #}
-<div class="cardgrid" style="margin-top:1.5rem">
-  <a href="/performance"><div class="n {{ 'pos' if paper.realized > 0 else 'neg' if paper.realized < 0 else '' }}">{{ '{:+,.0f}'.format(paper.realized) }}</div>
-    ペーパー実現損益{% if paper.open_n %} / 建玉 {{ paper.open_n }}{% endif %}<br><small>paper 戦略 {{ paper.strategies }}</small></a>
+{% if recent_bt %}
+<section class="block">
+  <div class="card-head"><h2 style="font-size: 1rem; color: var(--c-sub)">最近のバックテスト</h2><a href="/backtests" class="more">履歴 →</a></div>
+  <div class="cardgrid">
   {% for r in recent_bt %}
-  <a href="/backtests/{{ r.id }}"><div><strong>{{ r.strategy_name }}</strong></div>
-    <small>{{ r.symbol_code }} / {{ r.timeframe }}<br>{{ r.created_at | jst('%m/%d %H:%M') }} のバックテスト</small></a>
+    <a href="/backtests/{{ r.id }}"><strong>{{ r.strategy_name }}</strong><br>
+      <small><span class="mono">{{ r.symbol_code }}</span> / {{ r.timeframe }} · {{ r.created_at | jst('%m/%d %H:%M') }}</small></a>
   {% endfor %}
-</div>
+  </div>
+</section>
+{% endif %}
 </div>
 {% endblock %}

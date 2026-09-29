@@ -1,28 +1,29 @@
 {#
-  メニューの下のサブタブ。ページ先頭で {% from "_tabs.html" import trading_tabs with context %} して
-  {{ trading_tabs() }} のように呼ぶ。今いるタブは request.url.path で判定する。
+  メニューの下のサブタブ（選択中はアンバーの塗り）。ページ先頭で
+  {% from "_tabs.html" import trading_tabs with context %} して {{ trading_tabs() }} のように呼ぶ。
+  今いるタブは request.url.path で判定する。
 #}
-{% macro _tabs(items) -%}
-<nav class="tabs">
-  {% for href, label in items %}
-    <a href="{{ href }}" {% if request.url.path == href or request.url.path.startswith(href ~ '/') %}aria-current="page"{% endif %}>{{ label }}</a>
+{% macro _tabs(items, label) -%}
+<nav class="tabs" aria-label="{{ label }}">
+  {% for href, text in items %}
+    <a href="{{ href }}" {% if request.url.path == href or request.url.path.startswith(href ~ '/') %}aria-current="page"{% endif %}>{{ text }}</a>
   {% endfor %}
 </nav>
 {%- endmacro %}
 
 {% macro trading_tabs() -%}
 {{ _tabs([("/risk", "概要"), ("/strategies", "戦略"), ("/signals", "シグナル"),
-          ("/orders", "発注履歴"), ("/performance", "成績")]) }}
+          ("/orders", "発注履歴"), ("/performance", "成績")], "自動売買") }}
 {%- endmacro %}
 
 {% macro data_tabs() -%}
-{{ _tabs([("/symbols", "データ収集中の銘柄"), ("/data", "過去データ・銘柄一覧")]) }}
+{{ _tabs([("/symbols", "データ収集中の銘柄"), ("/data", "過去データ・銘柄一覧")], "銘柄・データ") }}
 {%- endmacro %}
 
 {% macro backtest_tabs() -%}
-{{ _tabs([("/backtest", "バックテスト"), ("/backtests", "履歴")]) }}
+{{ _tabs([("/backtest", "バックテスト"), ("/backtests", "履歴")], "バックテスト") }}
 {%- endmacro %}
 
 {% macro optimize_tabs() -%}
-{{ _tabs([("/optimize", "最適化"), ("/optimizations", "履歴")]) }}
+{{ _tabs([("/optimize", "最適化"), ("/optimizations", "履歴")], "最適化") }}
 {%- endmacro %}

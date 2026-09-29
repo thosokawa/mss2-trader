@@ -4,150 +4,151 @@
 {% block content %}
 {% set st = state.st %}
 {{ trading_tabs() }}
-<p><a href="/strategies">← 戦略一覧</a></p>
+<a href="/strategies" class="backlink">← 戦略一覧</a>
 <div class="titlebar">
-  <h2>{{ st.name }}</h2>
+  <div style="display: flex; flex-wrap: wrap; align-items: center; gap: .7rem">
+    <h1 style="font-size: 1.7rem; margin: 0">{{ st.name }}</h1>
+    <span class="state {{ 'on' if st.enabled else 'off' }}">{{ '稼働中' if st.enabled else '停止' }}</span>
+    <span class="tag tag-{{ st.mode }}" style="font-size: .8rem">{{ d.mode_label }}</span>
+  </div>
   <div class="actions">
     <form method="post" action="/strategies/{{ st.id }}/toggle" class="inline">
       <input type="hidden" name="next" value="/strategies/{{ st.id }}">
-      <button class="outline" type="submit"
+      <button type="submit" class="{{ 'outline' if st.enabled else 'btn-on' }}"
         {% if not st.enabled and st.mode == 'live' %}onclick="return confirm('実発注モードの戦略を有効にします。発注許可が ON なら実際に発注されます。よろしいですか？')"{% endif %}>
         {{ '停止する' if st.enabled else '有効にする' }}</button>
     </form>
-    <a href="/strategies/{{ st.id }}/edit" role="button" class="outline">編集</a>
+    <a href="/strategies/{{ st.id }}/edit" role="button">編集</a>
     <form method="post" action="/strategies/{{ st.id }}/delete" class="inline"
           onsubmit="return confirm('この戦略を削除しますか？（シグナル・発注の記録は残ります）')">
-      <button class="secondary outline" type="submit">削除</button>
+      <button type="submit" class="btn-quiet">削除</button>
     </form>
   </div>
 </div>
-{% if error_msg %}<p class="neg">{{ error_msg }}</p>{% endif %}
-<p>
-  {% if st.enabled %}<span class="pos">● 稼働中</span>{% else %}<span class="neg">● 停止</span>{% endif %}
-  <span class="tag tag-{{ st.mode }}">{{ d.mode_label }}</span>
-  <small>{{ d.summary }}</small>
-</p>
-
-<div class="grid">
-  <article>
-    <header><strong>設定</strong></header>
-    <table>
-      <tbody>
-        <tr><th>ロジック</th><td>{{ d.logic }}</td></tr>
-        <tr><th>対象銘柄</th><td>{% for r in state.rows %}{{ r.code }} {{ r.name }}{% if not loop.last %}、{% endif %}{% endfor %}</td></tr>
-        <tr><th>足</th><td>{{ st.timeframe }}</td></tr>
-        <tr><th>モード</th><td>{{ d.mode_label }}</td></tr>
-        {% for label, value, help in d.common %}
-          <tr><th{% if help %} class="gloss" title="{{ help }}"{% endif %}>{{ label }}</th><td>{{ value }}</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </article>
-  <article>
-    <header><strong>ロジックのパラメータ</strong></header>
-    <table>
-      <tbody>
-        {% for label, value, help in d.logic_params %}
-          <tr><th{% if help %} class="gloss" title="{{ help }}"{% endif %}>{{ label }}</th><td>{{ value }}</td></tr>
-        {% else %}<tr><td>なし</td></tr>{% endfor %}
-      </tbody>
-    </table>
-    <small>作成: {{ st.created_at | jst('%Y-%m-%d %H:%M') }}</small>
-  </article>
-</div>
+<p style="color: var(--c-sub); margin: .2rem 0 1rem">{{ d.summary }}</p>
+{% if error_msg %}<p class="err">{{ error_msg }}</p>{% endif %}
 
 <div {{ autorefresh("strat-detail-live", 5) }}>
-<h3>今の状況</h3>
-<table>
-  <thead><tr><th>銘柄</th><th>現在値</th><th>建玉</th><th>含み損益</th></tr></thead>
-  <tbody>
-  {% for r in state.rows %}
-    <tr>
-      <td>{{ r.code }} <small>{{ r.name }}</small></td>
-      <td>{% if r.price %}{{ '{:,.1f}'.format(r.price) }}{% else %}<span class="neg">未受信</span>{% endif %}</td>
-      <td>{% if r.pos.is_flat %}—{% else %}{{ '売建' if r.pos.is_short else '買建' }} {{ r.pos.qty | abs }} @{{ '{:,.1f}'.format(r.pos.avg_price) }}{% endif %}</td>
-      <td class="{{ 'pos' if (r.unrealized or 0) > 0 else 'neg' if (r.unrealized or 0) < 0 else '' }}">
-        {{ '{:+,.0f}'.format(r.unrealized) if r.unrealized is not none else '—' }}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-
-{% if trips or st.mode == 'live' %}
-<h3>成績 — 実発注 <small>（シグナル価格による概算）</small></h3>
-{% set m = live_summary %}
-<div class="metrics">
-  <div><div class="k">往復</div><div class="v">{{ m.trades }}</div></div>
-  {% if m.known %}
-  <div><div class="k">実現損益</div><div class="v {{ 'pos' if m.realized_pnl > 0 else 'neg' if m.realized_pnl < 0 else '' }}">{{ '{:+,.0f}'.format(m.realized_pnl) }}円</div></div>
-  <div><div class="k gloss" title="{{ '勝率'|gloss }}">勝率</div><div class="v">{{ m.win_rate_pct }}%</div></div>
-  <div><div class="k gloss" title="{{ 'PF'|gloss }}">PF</div><div class="v">{{ m.profit_factor if m.profit_factor is not none else '—' }}</div></div>
-  <div><div class="k">最良 / 最悪</div><div class="v">{{ '{:+,.0f}'.format(m.best) }} / {{ '{:+,.0f}'.format(m.worst) }}</div></div>
+{# ---- 今の状況: 銘柄ごとの現在値・建玉・含み損益（建玉があればアンバー枠） ---- #}
+{% for r in state.rows %}
+<div class="metrics" style="margin-bottom: .8rem">
+  <div><div class="k">{{ r.code }} {{ r.name }}</div>
+    <div class="v">{% if r.price %}{{ '{:,.1f}'.format(r.price) }}{% else %}<span class="neg">未受信</span>{% endif %}</div></div>
+  <div class="{{ 'hl' if not r.pos.is_flat }}" style="border-style: solid; border-width: 1px"><div class="k">建玉</div>
+    <div class="v text">{% if r.pos.is_flat %}<span class="muted">なし</span>{% else %}{{ '売建' if r.pos.is_short else '買建' }}
+      <span class="mono">{{ r.pos.qty | abs }}</span> <small class="mono">@{{ '{:,.1f}'.format(r.pos.avg_price) }}</small>{% endif %}</div></div>
+  <div><div class="k">含み損益</div><div class="v {{ r.unrealized | pnl_cls }}">{{ r.unrealized | pnl }}</div></div>
+  {% if loop.first %}
+  <div><div class="k">実現損益（通算・概算）</div>
+    <div class="v {{ live_summary.get('realized_pnl') | pnl_cls }}">{{ live_summary.get('realized_pnl') | pnl }}</div></div>
   {% endif %}
-  {% if m.manual %}<div><div class="k">手動決済（損益不明）</div><div class="v">{{ m.manual }}</div></div>{% endif %}
 </div>
-{% if trips %}
-<table>
-  <thead><tr><th>建て</th><th>手仕舞い</th><th>銘柄</th><th>売買</th><th>株数</th><th>建値 → 手仕舞い値</th><th>損益</th><th>%</th><th>理由（建て / 手仕舞い）</th></tr></thead>
-  <tbody>
-  {% for t in trips %}
-    <tr>
-      <td>{{ t.entry_ts | jst('%m/%d %H:%M') }}</td><td>{{ t.exit_ts | jst('%m/%d %H:%M') }}</td>
-      <td>{{ t.symbol_code }}</td><td>{{ '売建' if t.side == 'SHORT' else '買建' }}</td><td>{{ t.qty }}</td>
-      <td>{{ '{:,.1f}'.format(t.entry_price) }} → {{ '{:,.1f}'.format(t.exit_price) if t.exit_price else '手動決済' }}</td>
-      <td class="{{ 'pos' if (t.pnl or 0) > 0 else 'neg' if (t.pnl or 0) < 0 else '' }}">{{ '{:+,.0f}'.format(t.pnl) if t.pnl is not none else '—' }}</td>
-      <td>{{ '{:+.2f}'.format(t.return_pct) if t.return_pct is not none else '—' }}</td>
-      <td><small>{{ t.entry_reason }} / {{ t.exit_reason }}</small></td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% endif %}
-{% endif %}
+{% endfor %}
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; align-items: start; margin-top: .4rem" class="twocol">
+  <section class="card">
+    <h2>設定</h2>
+    <table class="kv"><tbody>
+      <tr><th>ロジック</th><td>{{ d.logic }}</td></tr>
+      <tr><th>対象銘柄</th><td>{% for r in state.rows %}<span class="mono">{{ r.code }}</span> {{ r.name }}{% if not loop.last %}、{% endif %}{% endfor %}</td></tr>
+      <tr><th>足</th><td class="mono">{{ st.timeframe }}</td></tr>
+      <tr><th>モード</th><td>{{ d.mode_label }}</td></tr>
+      {% for label, value, help in d.common %}
+        <tr><th{% if help %} class="gloss" title="{{ help }}"{% endif %}>{{ label }}</th><td>{{ value }}</td></tr>
+      {% endfor %}
+    </tbody></table>
+  </section>
+  <section class="card">
+    <h2>ロジックのパラメータ</h2>
+    <table class="kv"><tbody>
+      {% for label, value, help in d.logic_params %}
+        <tr><th{% if help %} class="gloss" title="{{ help }}"{% endif %}>{{ label }}</th><td class="mono">{{ value }}</td></tr>
+      {% else %}<tr><td class="muted">なし</td></tr>{% endfor %}
+    </tbody></table>
+    <small>作成 {{ st.created_at | jst('%Y-%m-%d %H:%M') }}</small>
+  </section>
+
+  {% if trips or st.mode == 'live' %}
+  <section class="card" style="grid-column: 1 / -1">
+    <div class="card-head"><h2>成績 — 実発注</h2><small>シグナル価格による概算</small><a href="/performance" class="more">成績 →</a></div>
+    {% set m = live_summary %}
+    <div style="display: flex; flex-wrap: wrap; gap: .5rem 1.6rem; margin-bottom: .6rem">
+      <div><div class="sub" style="font-size: .75rem">往復</div><div class="mono" style="font-size: 1.3rem; font-weight: 700">{{ m.trades }}</div></div>
+      {% if m.known %}
+      <div><div class="sub" style="font-size: .75rem">実現損益</div><div class="mono {{ m.realized_pnl | pnl_cls }}" style="font-size: 1.3rem; font-weight: 700">{{ m.realized_pnl | pnl }}</div></div>
+      <div><div class="sub" style="font-size: .75rem">勝率</div><div class="mono" style="font-size: 1.3rem; font-weight: 700">{{ m.win_rate_pct }}%</div></div>
+      <div><div class="sub gloss" style="font-size: .75rem" title="{{ 'PF'|gloss }}">PF</div><div class="mono" style="font-size: 1.3rem; font-weight: 700">{{ m.profit_factor if m.profit_factor is not none else '—' }}</div></div>
+      {% endif %}
+      {% if m.manual %}<div><div class="sub" style="font-size: .75rem">手動決済（損益不明）</div><div class="mono muted" style="font-size: 1.3rem; font-weight: 700">{{ m.manual }}</div></div>{% endif %}
+    </div>
+    {% if trips %}
+    <table>
+      <thead><tr><th>建て → 手仕舞い</th><th>銘柄</th><th>売買</th><th class="num">建値 → 手仕舞い値</th><th class="num">損益</th><th class="num">%</th></tr></thead>
+      <tbody>
+      {% for t in trips %}
+        <tr title="{{ t.entry_reason }} / {{ t.exit_reason }}">
+          <td class="mono">{{ t.entry_ts | jst('%m/%d %H:%M') }} → {{ t.exit_ts | jst('%H:%M') }}</td>
+          <td class="mono">{{ t.symbol_code }}</td>
+          <td>{{ '売建' if t.side == 'SHORT' else '買建' }} <span class="mono">{{ t.qty }}</span></td>
+          <td class="num mono">{{ '{:,.1f}'.format(t.entry_price) }} → {{ '{:,.1f}'.format(t.exit_price) if t.exit_price else '手動決済' }}</td>
+          <td class="num mono {{ t.pnl | pnl_cls }}" style="font-weight: 600">{{ t.pnl | pnl }}</td>
+          <td class="num mono {{ t.return_pct | pnl_cls }}">{{ '{:+.2f}'.format(t.return_pct) if t.return_pct is not none else '—' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </section>
+  {% endif %}
+</div>
 
 {% if paper_trades %}
-<h3>成績 — ペーパー</h3>
-{% set m = paper_summary %}
-<div class="metrics">
-  <div><div class="k">往復</div><div class="v">{{ m.trades }}</div></div>
-  {% if m.trades %}
-  <div><div class="k">実現損益</div><div class="v {{ 'pos' if m.realized_pnl > 0 else 'neg' if m.realized_pnl < 0 else '' }}">{{ '{:+,.0f}'.format(m.realized_pnl) }}円</div></div>
-  <div><div class="k">勝率</div><div class="v">{{ m.win_rate_pct }}%</div></div>
-  {% endif %}
-</div>
-<p><small>詳細は <a href="/performance">成績</a> タブ。</small></p>
+<section class="card block">
+  <div class="card-head"><h2>成績 — ペーパー</h2><a href="/performance" class="more">成績 →</a></div>
+  {% set m = paper_summary %}
+  <div class="metrics">
+    <div><div class="k">往復</div><div class="v">{{ m.trades }}</div></div>
+    {% if m.trades %}
+    <div><div class="k">実現損益</div><div class="v {{ m.realized_pnl | pnl_cls }}">{{ m.realized_pnl | pnl }}</div></div>
+    <div><div class="k">勝率</div><div class="v">{{ m.win_rate_pct }}%</div></div>
+    {% endif %}
+  </div>
+</section>
 {% endif %}
 
-<div class="grid">
-  <section>
-    <h3>シグナル <small><a href="/signals?strategy_id={{ st.id }}">すべて →</a></small></h3>
+<div class="twocol block">
+  <section class="card-quiet">
+    <div class="card-head"><h2>シグナル</h2><a href="/signals?strategy_id={{ st.id }}" class="more">すべて →</a></div>
     {% if signals %}
     <table>
-      <thead><tr><th>時刻</th><th>銘柄</th><th>方向</th><th>価格</th></tr></thead>
+      <thead><tr><th>時刻</th><th>銘柄</th><th>方向</th><th class="num">価格</th><th>根拠</th></tr></thead>
       <tbody>
       {% for s in signals %}
-        <tr title="{{ s.reason }}"><td>{{ s.ts | jst('%m/%d %H:%M') }}</td><td>{{ s.symbol_code }}</td>
-          <td>{{ s.side }}{% if '発注見送り' in s.reason %} <small class="neg">見送り</small>{% endif %}</td>
-          <td>{{ '{:,.1f}'.format(s.price) }}</td></tr>
+        <tr><td class="mono">{{ s.ts | jst('%m/%d %H:%M') }}</td><td class="mono">{{ s.symbol_code }}</td>
+          <td>{{ s.side }}{% if '発注見送り' in s.reason %} <span class="tag tag-skip">見送り</span>{% endif %}</td>
+          <td class="num mono">{{ '{:,.1f}'.format(s.price) }}</td>
+          <td><small>{{ s.reason }}</small></td></tr>
       {% endfor %}
       </tbody>
     </table>
-    {% else %}<p>まだありません。</p>{% endif %}
+    {% else %}<p class="muted" style="margin: 0">まだありません。</p>{% endif %}
   </section>
-  <section>
-    <h3>発注 <small><a href="/orders">すべて →</a></small></h3>
+  <section class="card-quiet">
+    <div class="card-head"><h2>発注</h2><a href="/orders" class="more">すべて →</a></div>
     {% if orders %}
     <table>
-      <thead><tr><th>時刻</th><th>銘柄</th><th>売買</th><th>状態</th></tr></thead>
+      <thead><tr><th>時刻</th><th>銘柄</th><th>売買</th><th>状態</th><th>メッセージ</th></tr></thead>
       <tbody>
       {% for o in orders %}
-        <tr title="{{ o.error or o.reason }}"><td>{{ o.ts | jst('%m/%d %H:%M') }}</td><td>{{ o.symbol_code }}</td>
-          <td>{{ o.side }} {{ o.qty }}</td>
-          <td class="{{ 'pos' if o.status in ('sent', 'filled') else 'neg' if o.status in ('rejected', 'error', 'timeout') else '' }}">{{ o.status }}</td></tr>
+        <tr><td class="mono">{{ o.ts | jst('%m/%d %H:%M') }}</td><td class="mono">{{ o.symbol_code }}</td>
+          <td>{{ {'BUY': '買い', 'SHORT': '売建', 'EXIT': '手仕舞い', 'SELL': '手仕舞い', 'COVER': '買戻し'}.get(o.side, o.side) }} <span class="mono">{{ o.qty }}</span></td>
+          <td class="{{ 'st-ok' if o.status in ('sent', 'filled') else 'st-ng' if o.status in ('rejected', 'error', 'timeout') else 'muted' }}">
+            {{ {'sent': '受理', 'filled': '約定', 'rejected': '拒否', 'error': 'エラー', 'timeout': '不明', 'manual': '手動記録', 'new': '発注待ち', 'sending': '発注中'}.get(o.status, o.status) }}</td>
+          <td><small class="{{ 'neg' if o.error }}">{{ o.error or o.broker_order_id }}</small></td></tr>
       {% endfor %}
       </tbody>
     </table>
-    {% else %}<p>まだありません。</p>{% endif %}
+    {% else %}<p class="muted" style="margin: 0">まだありません。</p>{% endif %}
   </section>
 </div>
 </div>

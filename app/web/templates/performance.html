@@ -12,7 +12,7 @@
 <div class="metrics">
   <div><div class="k">往復（全戦略）</div><div class="v">{{ m.trades }}</div></div>
   {% if m.known %}
-  <div><div class="k">実現損益（合計）</div><div class="v {{ 'pos' if m.realized_pnl > 0 else 'neg' if m.realized_pnl < 0 else '' }}">{{ '{:+,.0f}'.format(m.realized_pnl) }}円</div></div>
+  <div><div class="k">実現損益（合計）</div><div class="v {{ m.realized_pnl | pnl_cls }}">{{ m.realized_pnl | pnl }} 円</div></div>
   <div><div class="k gloss" title="{{ '勝率'|gloss }}">勝率</div><div class="v">{{ m.win_rate_pct }}%</div></div>
   <div><div class="k gloss" title="{{ 'PF'|gloss }}">PF</div><div class="v">{{ m.profit_factor if m.profit_factor is not none else '—' }}</div></div>
   {% endif %}
@@ -23,9 +23,9 @@
   <summary>
     <strong>{% if c.alive %}<a href="/strategies/{{ c.strategy_id }}">{{ c.name }}</a>{% else %}{{ c.name }} <small class="neg">（削除済み）</small>{% endif %}</strong>
     — 往復 {{ c.metrics.trades }}
-    {% if c.metrics.known %} / 実現損益 <span class="{{ 'pos' if c.metrics.realized_pnl > 0 else 'neg' if c.metrics.realized_pnl < 0 else '' }}">{{ '{:+,.0f}'.format(c.metrics.realized_pnl) }}円</span>
+    {% if c.metrics.known %} / 実現損益 <span class="mono {{ c.metrics.realized_pnl | pnl_cls }}">{{ c.metrics.realized_pnl | pnl }} 円</span>
       / 勝率 {{ c.metrics.win_rate_pct }}%{% endif %}
-    / 本日 <span class="{{ 'pos' if c.today > 0 else 'neg' if c.today < 0 else '' }}">{{ '{:+,.0f}'.format(c.today) }}円</span>
+    / 本日 <span class="mono {{ c.today | pnl_cls }}">{{ c.today | pnl }} 円</span>
   </summary>
   <table>
     <thead><tr><th>建て</th><th>手仕舞い</th><th>銘柄</th><th>売買</th><th>株数</th><th>建値 → 手仕舞い値</th><th>損益</th><th>%</th></tr></thead>
@@ -36,7 +36,7 @@
         <td>{{ t.symbol_code }} <small>{{ names.get(t.symbol_code, '') }}</small></td>
         <td>{{ '売建' if t.side == 'SHORT' else '買建' }}{% if t.trade_type == 'margin' %}（信用）{% endif %}</td><td>{{ t.qty }}</td>
         <td>{{ '{:,.1f}'.format(t.entry_price) }} → {{ '{:,.1f}'.format(t.exit_price) if t.exit_price else '手動決済' }}</td>
-        <td class="{{ 'pos' if (t.pnl or 0) > 0 else 'neg' if (t.pnl or 0) < 0 else '' }}">{{ '{:+,.0f}'.format(t.pnl) if t.pnl is not none else '—' }}</td>
+        <td class="num mono {{ t.pnl | pnl_cls }}" style="font-weight: 600">{{ t.pnl | pnl }}</td>
         <td>{{ '{:+.2f}'.format(t.return_pct) if t.return_pct is not none else '—' }}</td>
       </tr>
     {% endfor %}
@@ -65,9 +65,9 @@
   <p><small>{{ c.st.timeframe }} / slippage 概算込み</small></p>
 
   <div class="metrics">
-    <div><div class="k gloss" title="{{ '実現損益'|gloss }}">実現損益</div><div class="v {{ 'pos' if c.realized>=0 else 'neg' }}">{{ '{:,.0f}'.format(c.realized) }}</div></div>
-    <div><div class="k gloss" title="{{ '含み損益'|gloss }}">含み損益</div><div class="v {{ 'pos' if c.unrealized>=0 else 'neg' }}">{{ '{:,.0f}'.format(c.unrealized) }}</div></div>
-    <div><div class="k">合計</div><div class="v {{ 'pos' if c.total>=0 else 'neg' }}">{{ '{:,.0f}'.format(c.total) }}</div></div>
+    <div><div class="k gloss" title="{{ '実現損益'|gloss }}">実現損益</div><div class="v {{ c.realized | pnl_cls }}">{{ c.realized | pnl }}</div></div>
+    <div><div class="k gloss" title="{{ '含み損益'|gloss }}">含み損益</div><div class="v {{ c.unrealized | pnl_cls }}">{{ c.unrealized | pnl }}</div></div>
+    <div><div class="k">合計</div><div class="v {{ c.total | pnl_cls }}">{{ c.total | pnl }}</div></div>
     <div><div class="k gloss" title="{{ '往復数'|gloss }}">往復数</div><div class="v">{{ c.metrics.trades }}</div></div>
     {% if c.metrics.trades %}
     <div><div class="k gloss" title="{{ '勝率'|gloss }}">勝率</div><div class="v">{{ c.metrics.win_rate_pct }}%</div></div>
@@ -113,7 +113,7 @@
         <td>{{ t.exit_ts | jst if t.exit_ts else '—' }}</td>
         <td>{{ '%.1f'|format(t.exit_price) if t.exit_price else '—' }}</td>
         <td>{{ '売' if t.side == 'SHORT' else '買' }} {{ t.qty }}</td>
-        <td class="{{ 'pos' if (t.pnl or 0)>=0 else 'neg' }}">{{ '{:,.0f}'.format(t.pnl) if t.pnl is not none else '—' }}</td>
+        <td class="mono {{ t.pnl | pnl_cls }}">{{ t.pnl | pnl }}</td>
         <td class="{{ 'pos' if (t.return_pct or 0)>=0 else 'neg' }}">{{ '%.2f'|format(t.return_pct) if t.return_pct is not none else '—' }}</td>
       </tr>
     {% endfor %}
