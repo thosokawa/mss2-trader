@@ -39,6 +39,18 @@ const ParamForm = (() => {
     return coerce(trimmed, type);
   }
 
+  // select の選択値に応じて classes[値] のクラスを付け替える（色は app.css の .pf-choice-*）
+  function paintChoices(sel, classes) {
+    const paint = () => {
+      for (const cls of Object.values(classes)) sel.classList.remove(cls);
+      const cls = classes[sel.value];
+      if (cls) sel.classList.add(cls);
+    };
+    sel.classList.add("pf-choice");
+    sel.addEventListener("change", paint);
+    paint();
+  }
+
   function mount({ containerEl, hiddenEl, jsonAreaEl, detailsEl, allowRanges }) {
     let defaults = {};
     let meta = {};
@@ -85,6 +97,9 @@ const ParamForm = (() => {
             if (String(val) === String(c)) opt.selected = true;
             input.appendChild(opt);
           }
+          // choice_classes があれば、選ばれている値に応じて select の色を変える
+          // （例: 取引区分 cash=青 / margin=アンバー。どちらを選んでいるか一目で分かるように）
+          if (m.choice_classes) paintChoices(input, m.choice_classes);
         } else if (type === "bool" && !allowRanges) {
           input = document.createElement("input");
           input.type = "checkbox";
@@ -92,7 +107,9 @@ const ParamForm = (() => {
         } else {
           input = document.createElement("input");
           input.type = type === "number" && !allowRanges ? "number" : "text";
-          if (type === "number") input.step = "any";
+          // step / min があればそれを使う（例: 株数は上下の矢印で 100 ずつ）。無ければ任意の小数
+          if (type === "number") input.step = m.step != null ? String(m.step) : "any";
+          if (type === "number" && m.min != null && !allowRanges) input.min = String(m.min);
           input.value = val == null ? "" : Array.isArray(val) ? val.join(",") : val;
         }
         input.dataset.key = key;
@@ -128,5 +145,5 @@ const ParamForm = (() => {
     return { rebuild, sync };
   }
 
-  return { mount };
+  return { mount, paintChoices };
 })();

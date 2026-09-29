@@ -22,8 +22,8 @@
 <table>
   <tbody>
     <tr><td><a href="/">ダッシュボード</a></td><td>システム全体の今の状態（自動売買・戦略ごとの状況・本日の発注/シグナル・株価の取り込み）</td></tr>
-    <tr><td><a href="/risk">自動売買</a></td><td>タブ: <a href="/risk">概要</a>（発注許可 ON/OFF・建玉・制限）/
-      <a href="/strategies">戦略</a>（登録・有効化・対象銘柄）/ <a href="/signals">シグナル</a> /
+    <tr><td><a href="/risk">自動売買</a></td><td>タブ: <a href="/risk">概要</a>（発注許可 ON/OFF・状態・<a href="/risk#strategies">戦略の一覧と追加</a>・建玉・制限）/
+      <a href="/signals">シグナル</a> /
       <a href="/orders">発注履歴</a> / <a href="/performance">成績</a>（ペーパー）</td></tr>
     <tr><td><a href="/symbols">銘柄・データ</a></td><td>タブ: <a href="/symbols">データ収集中の銘柄</a>（最新気配・監視銘柄の追加/外す）/
       <a href="/data">過去データ・銘柄一覧</a>（yfinance 取得・取得済みデータ・JPX 銘柄一覧の更新）</td></tr>
@@ -116,11 +116,11 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
 <p><strong>結果の見方が重要</strong>: ランキングは <strong>検証期間（探索に使っていない後半のデータ）の成績</strong>
 で決まる。同じ期間の成績だけで選ぶと過学習（その期間にだけ都合よく合わせた設定）になりやすいため。
 検証期間の取引が少ない行には ⚠ が付く — 信用しないこと。良さそうな行の「戦略登録」ボタンから
-そのパラメータのまま <a href="/strategies">戦略</a> に登録できる。過去の探索結果は
+そのパラメータのまま <a href="/risk#strategies">戦略</a> に登録できる。過去の探索結果は
 <a href="/optimizations">履歴</a> から見返せる。</p>
 
 <h3 id="strategy">戦略</h3>
-<p>作れるロジックはトレンドフォロー・逆張り・ブレイクアウトなど7種類（<code>on_bar()</code> を実装するだけで
+<p>作れるロジックはトレンドフォロー・逆張り・ブレイクアウトなど8種類（<code>on_bar()</code> を実装するだけで
 自作も可能。詳しくはリポジトリの <code>app/strategy/README.md</code>）。</p>
 <table>
   <thead><tr><th>戦略</th><th>系統</th><th>概要</th></tr></thead>
@@ -129,12 +129,13 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
     <tr><td>移動平均+RSI</td><td>トレンドフォロー</td><td>終値とMAの関係 + 傾き + RSI帯でエントリー</td></tr>
     <tr><td>トレンド×RSI出戻り</td><td>アラート専用</td><td>短期MA/中期MAの上下 × RSIの40/60出戻りで通知（<code>notify</code>向け）</td></tr>
     <tr><td>MACDクロス</td><td>モメンタム</td><td>MACD線がシグナル線を上抜け/下抜け</td></tr>
+    <tr><td>MACDクロス＋上位足トレンド</td><td>フィルタ付きトレンド</td><td>上位足（15分足など）の EMA トレンドと同じ向きのときだけ MACD クロスで建てる</td></tr>
     <tr><td>ボリンジャー逆張り</td><td>逆張り</td><td>下限バンド反発で買い、中心線/上限で手仕舞い</td></tr>
     <tr><td>ドンチャンブレイクアウト</td><td>ブレイクアウト</td><td>N本高値ブレイクで買い、M本安値割れで手仕舞い</td></tr>
     <tr><td>ADXフィルタ+MAクロス</td><td>フィルタ付きトレンド</td><td>ADXでトレンドの強さを確認してからSMAクロスに従う</td></tr>
   </tbody>
 </table>
-<p>登録は <a href="/strategies">/strategies</a> から。モードは <code>notify</code>（通知のみ）/
+<p>登録は <a href="/risk#strategies">自動売買 › 概要の「＋ 戦略を追加」</a>から。モードは <code>notify</code>（通知のみ）/
 <code>paper</code>（擬似約定して<a href="/performance">成績</a>に反映）/
 <code>live</code>（実発注。<a href="#risk">自動売買</a>で発注許可を ON にしない限り発注されない）。</p>
 

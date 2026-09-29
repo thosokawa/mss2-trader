@@ -3,16 +3,21 @@
   {% from "_tabs.html" import trading_tabs with context %} して {{ trading_tabs() }} のように呼ぶ。
   今いるタブは request.url.path で判定する。
 #}
+{# items: (href, 表示名) か (href, 表示名, [このタブを選択中にする追加のパス接頭辞]) #}
 {% macro _tabs(items, label) -%}
 <nav class="tabs" aria-label="{{ label }}">
-  {% for href, text in items %}
-    <a href="{{ href }}" {% if request.url.path == href or request.url.path.startswith(href ~ '/') %}aria-current="page"{% endif %}>{{ text }}</a>
+  {% for item in items %}
+    {% set href, text = item[0], item[1] %}
+    {% set ns = namespace(on=(request.url.path == href or request.url.path.startswith(href ~ '/'))) %}
+    {% for p in (item[2] if item | length > 2 else []) %}{% if request.url.path.startswith(p) %}{% set ns.on = true %}{% endif %}{% endfor %}
+    <a href="{{ href }}" {% if ns.on %}aria-current="page"{% endif %}>{{ text }}</a>
   {% endfor %}
 </nav>
 {%- endmacro %}
 
+{# 戦略の一覧は「概要」に統合（旧「戦略」タブ）。戦略の詳細・登録・編集の画面では「概要」を選択中に #}
 {% macro trading_tabs() -%}
-{{ _tabs([("/risk", "概要"), ("/strategies", "戦略"), ("/signals", "シグナル"),
+{{ _tabs([("/risk", "概要", ["/strategies"]), ("/signals", "シグナル"),
           ("/orders", "発注履歴"), ("/performance", "成績")], "自動売買") }}
 {%- endmacro %}
 

@@ -106,11 +106,11 @@
       </td>
       <td>{{ r.train.get('trades', 0) }}</td>
       <td>{{ r.train.get('win_rate_pct', '—') }}</td>
-      <td class="{{ 'pos' if (r.train.get('total_pnl') or 0)>=0 else 'neg' }}">{{ '{:,.0f}'.format(r.train.get('total_pnl')) if r.train.get('total_pnl') is not none else '—' }}</td>
+      <td class="{{ 'up' if (r.train.get('total_pnl') or 0)>=0 else 'dn' }}">{{ '{:,.0f}'.format(r.train.get('total_pnl')) if r.train.get('total_pnl') is not none else '—' }}</td>
       <td>{{ r.train.get('profit_factor', '—') }}</td>
       <td>{{ r.test.get('trades', 0) }}</td>
       <td>{{ r.test.get('win_rate_pct', '—') }}</td>
-      <td class="{{ 'pos' if (r.test.get('total_pnl') or 0)>=0 else 'neg' }}">{{ '{:,.0f}'.format(r.test.get('total_pnl')) if r.test.get('total_pnl') is not none else '—' }}</td>
+      <td class="{{ 'up' if (r.test.get('total_pnl') or 0)>=0 else 'dn' }}">{{ '{:,.0f}'.format(r.test.get('total_pnl')) if r.test.get('total_pnl') is not none else '—' }}</td>
       <td>{{ r.test.get('profit_factor', '—') }}</td>
       <td>
         <form method="get" action="/strategies" style="display:inline">

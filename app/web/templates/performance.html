@@ -48,12 +48,12 @@
 </div>
 
 <h3>ペーパートレード</h3>
-<p><small>mode=<code>paper</code> の<a href="/strategies">戦略</a>が live エンジンでシグナルを出すと PaperBroker で擬似約定します。
+<p><small>mode=<code>paper</code> の<a href="/risk#strategies">戦略</a>が live エンジンでシグナルを出すと PaperBroker で擬似約定します。
 実発注はしません。含み損益は最新ティック価格で評価。</small></p>
 
 <div {{ autorefresh("perf", 10) }}>
 {% if not cards %}
-<p>ペーパートレードの戦略がありません。<a href="/strategies">戦略</a>を <code>paper</code> モードで登録して有効化してください。</p>
+<p>ペーパートレードの戦略がありません。<a href="/risk#strategies">戦略</a>を <code>paper</code> モードで登録して有効化してください。</p>
 {% endif %}
 
 {% for c in cards %}
@@ -87,7 +87,7 @@
         <td>{{ '売' if o.t.side == 'SHORT' else '買' }} {{ o.t.qty }}</td>
         <td>{{ '%.1f'|format(o.t.entry_price) }}</td>
         <td>{{ '%.1f'|format(o.last) if o.last else '—' }}</td>
-        <td class="{{ 'pos' if o.unrealized>=0 else 'neg' }}">{{ '{:,.0f}'.format(o.unrealized) }}</td>
+        <td class="{{ 'up' if o.unrealized>=0 else 'dn' }}">{{ '{:,.0f}'.format(o.unrealized) }}</td>
         <td><small>{{ o.t.entry_reason }}</small></td>
       </tr>
     {% endfor %}
@@ -114,7 +114,7 @@
         <td>{{ '%.1f'|format(t.exit_price) if t.exit_price else '—' }}</td>
         <td>{{ '売' if t.side == 'SHORT' else '買' }} {{ t.qty }}</td>
         <td class="mono {{ t.pnl | pnl_cls }}">{{ t.pnl | pnl }}</td>
-        <td class="{{ 'pos' if (t.return_pct or 0)>=0 else 'neg' }}">{{ '%.2f'|format(t.return_pct) if t.return_pct is not none else '—' }}</td>
+        <td class="{{ 'up' if (t.return_pct or 0)>=0 else 'dn' }}">{{ '%.2f'|format(t.return_pct) if t.return_pct is not none else '—' }}</td>
       </tr>
     {% endfor %}
     </tbody>

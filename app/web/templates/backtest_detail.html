@@ -10,7 +10,7 @@
 <div class="metrics">
   <div><div class="k gloss" title="{{ '取引数'|gloss }}">取引数</div><div class="v">{{ metrics.trades }}</div></div>
   <div><div class="k gloss" title="{{ '勝率'|gloss }}">勝率</div><div class="v">{{ metrics.win_rate_pct }}%</div></div>
-  <div><div class="k gloss" title="{{ '合計損益'|gloss }}">合計損益</div><div class="v {{ 'pos' if metrics.total_pnl>=0 else 'neg' }}">{{ '{:,.0f}'.format(metrics.total_pnl) }}</div></div>
+  <div><div class="k gloss" title="{{ '合計損益'|gloss }}">合計損益</div><div class="v {{ 'up' if metrics.total_pnl>=0 else 'dn' }}">{{ '{:,.0f}'.format(metrics.total_pnl) }}</div></div>
   <div><div class="k gloss" title="{{ 'PF'|gloss }}">PF</div><div class="v">{{ metrics.profit_factor }}</div></div>
   <div><div class="k gloss" title="{{ '最大DD'|gloss }}">最大DD</div><div class="v neg">{{ '{:,.0f}'.format(metrics.max_drawdown) }}</div></div>
   <div><div class="k gloss" title="{{ '最良/最悪'|gloss }}">最良 / 最悪</div><div class="v">{{ '{:,.0f}'.format(metrics.best) }} / {{ '{:,.0f}'.format(metrics.worst) }}</div></div>
@@ -30,8 +30,8 @@
       <td>{{ t.entry_ts | jst }}</td><td>{{ '%.1f'|format(t.entry_price) }}</td>
       <td>{{ t.exit_ts | jst }}</td><td>{{ '%.1f'|format(t.exit_price) }}</td>
       <td>{{ '売' if t.side == 'SHORT' else '買' }} {{ t.qty }}</td>
-      <td class="{{ 'pos' if t.pnl>=0 else 'neg' }}">{{ '{:,.0f}'.format(t.pnl) }}</td>
-      <td class="{{ 'pos' if t.return_pct>=0 else 'neg' }}">{{ '%.2f'|format(t.return_pct) }}</td>
+      <td class="{{ 'up' if t.pnl>=0 else 'dn' }}">{{ '{:,.0f}'.format(t.pnl) }}</td>
+      <td class="{{ 'up' if t.return_pct>=0 else 'dn' }}">{{ '%.2f'|format(t.return_pct) }}</td>
     </tr>
   {% endfor %}
   </tbody>

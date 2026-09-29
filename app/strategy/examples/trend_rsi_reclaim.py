@@ -25,7 +25,7 @@ class TrendRsiReclaim(Strategy):
     default_params = {
         "ma_type": "sma",       # "sma" | "ema"
         "fast_period": 10,
-        "mid_period": 40,
+        "mid_period": 30,
         "rsi_period": 14,
         "rsi_buy_level": 40.0,
         "rsi_sell_level": 60.0,

@@ -45,15 +45,22 @@ UNIVERSAL_META = {
     "direction": {
         "label": "売買方向", "choices": ["long", "short", "both"],
         "choice_labels": {"long": "買いのみ", "short": "売りのみ", "both": "買い・売り両方"},
+        # 買い=赤 / 売り=青 / 両方=半々（app.css の .pf-choice-*）
+        "choice_classes": {"long": "pf-choice-long", "short": "pf-choice-short", "both": "pf-choice-both"},
         "help": "買いのみ / 売りのみ（買いと対称な条件で売建）/ 両方。売建の実発注には取引区分=信用が必要",
     },
     "trade_type": {
         "label": "取引区分", "choices": ["cash", "margin"],
         "choice_labels": {"cash": "現物", "margin": "信用"},
+        # 選ばれている方で入力欄の色を変える（app.css の .pf-choice-*）。信用はリスクが大きいので目立つ色
+        "choice_classes": {"cash": "pf-choice-cash", "margin": "pf-choice-margin"},
         "help": "実発注（モード=実発注）の注文種別。信用は、大引けをまたがないならいちにち信用、"
                 "またぐなら一般信用・無期限。バックテスト・ペーパーの結果には影響しない",
     },
 }
+
+# 株数の入力欄: 上下の矢印で 100 株（国内株の売買単位）ずつ増減、最小 100
+QTY_META = {"step": 100, "min": 100}
 
 
 def load_strategy_class(class_path: str) -> type[Strategy]:
@@ -83,7 +90,11 @@ def builtin_param_meta() -> dict[str, dict]:
     out: dict[str, dict] = {}
     for cp in BUILTIN.values():
         try:
-            out[cp] = {**dict(load_strategy_class(cp).param_meta), **UNIVERSAL_META}
+            cls = load_strategy_class(cp)
+            meta = {**dict(cls.param_meta), **UNIVERSAL_META}
+            if "qty" in cls.default_params:
+                meta["qty"] = {**meta.get("qty", {}), **QTY_META}
+            out[cp] = meta
         except Exception:  # noqa: BLE001
             out[cp] = dict(UNIVERSAL_META)
     return out

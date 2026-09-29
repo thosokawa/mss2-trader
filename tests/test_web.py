@@ -420,7 +420,7 @@ def test_status_bar_and_dashboard(client):
 
 
 def test_autorefresh_regions_on_pages(client):
-    for path, region in (("/risk", "risk-live"), ("/strategies", "strat-list"),
+    for path, region in (("/risk", "risk-live"),
                          ("/signals", "signals-list"), ("/performance", "perf"),
                          ("/symbols", "symbols-list"), ("/orders", "orders-list"),
                          ("/data", "data-coverage")):
@@ -679,3 +679,65 @@ def test_static_assets_are_cache_busted(client):
     assert re.search(r'/static/app\.css\?v=\d+', html)
     assert re.search(r'/static/param_form\.js\?v=\d+', html)
     assert client.get(re.search(r'(/static/param_form\.js\?v=\d+)', html).group(1)).status_code == 200
+
+
+def test_qty_steps_by_100_and_trade_type_is_colored(client):
+    """株数は上下の矢印で 100 ずつ（最小 100）、取引区分は選択中の値で select の色が変わる。"""
+    from app.strategy.registry import BUILTIN, builtin_param_meta
+
+    metas = builtin_param_meta()
+    for cp in BUILTIN.values():
+        assert metas[cp]["qty"]["step"] == 100 and metas[cp]["qty"]["min"] == 100, cp
+        assert metas[cp]["qty"]["label"] == "株数"  # 戦略側のラベルは残る
+        classes = metas[cp]["trade_type"]["choice_classes"]
+        assert classes == {"cash": "pf-choice-cash", "margin": "pf-choice-margin"}
+    js = client.get("/static/param_form.js").text
+    assert "m.choice_classes" in js and "m.step" in js and "m.min" in js
+    css = client.get("/static/app.css").text
+    assert ".pf-choice-margin" in css and ".pf-choice-cash" in css
+
+
+def test_direction_and_mode_are_colored(client):
+    """売買方向（買い=赤/売り=青/両方=半々）とモードも、選択中の値で select の色が変わる。"""
+    from app.strategy.registry import BUILTIN, builtin_param_meta
+
+    metas = builtin_param_meta()
+    for cp in BUILTIN.values():
+        assert metas[cp]["direction"]["choice_classes"] == {
+            "long": "pf-choice-long", "short": "pf-choice-short", "both": "pf-choice-both"}
+    html = client.get("/strategies/new").text
+    assert "ParamForm.paintChoices(document.getElementById('mode')" in html
+    css = client.get("/static/app.css").text
+    for cls in ("long", "short", "both", "notify", "paper", "live"):
+        assert f".pf-choice-{cls}" in css
+
+
+def test_pnl_colors_follow_marketspeed(client):
+    """金額はプラス=赤(up)・マイナス=緑(dn)。OK/エラー表示の pos/neg とは別のクラス。"""
+    from app.web.routes import _pnl_cls
+
+    assert (_pnl_cls(1250), _pnl_cls(-500), _pnl_cls(0), _pnl_cls(None)) == ("up", "dn", "muted", "muted")
+    css = client.get("/static/app.css").text
+    assert "--c-up: #FF5A5A" in css and ".up { color: var(--c-up); }" in css
+
+
+def test_strategies_are_listed_in_trading_overview(client):
+    """旧「戦略」タブは 自動売買 › 概要 に統合。/strategies は概要の戦略の一覧へ転送する。"""
+    import re
+
+    client.post("/strategies", data={"name": "概要統合テスト戦略", "symbols": "7203", "params_json": "{}",
+                                     "class_path": "app.strategy.examples.sma_cross:SmaCross"})
+    r = client.get("/strategies", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/risk#strategies"
+    loc = client.get("/strategies?error=dup_name", follow_redirects=False).headers["location"]
+    assert loc == "/risk?error=dup_name#strategies"
+
+    html = client.get("/risk").text
+    assert 'id="strategies"' in html and "＋ 戦略を追加" in html and "概要統合テスト戦略" in html
+    assert 'href="/strategies">戦略</a>' not in html  # タブに「戦略」は無い
+    assert 'name="next" value="/risk#strategies"' in html  # 概要の有効化ボタンは概要に戻る
+
+    sid = max(int(x) for x in re.findall(r"/strategies/(\d+)/toggle", html))
+    detail = client.get(f"/strategies/{sid}").text
+    assert 'href="/risk" aria-current="page">概要</a>' in detail  # 詳細画面では「概要」タブが選択中
+    assert 'href="/risk#strategies" class="backlink"' in detail

@@ -12,7 +12,7 @@
   <input name="codes" placeholder="監視銘柄を追加（証券コード、複数はカンマ区切り）" required>
   <button type="submit">追加</button>
 </form>
-<p><small>監視銘柄 = 戦略で使っていなくても株価を集めたい銘柄。戦略の対象銘柄は戦略側で設定します（<a href="/strategies">戦略</a>）。</small></p>
+<p><small>監視銘柄 = 戦略で使っていなくても株価を集めたい銘柄。戦略の対象銘柄は戦略側で設定します（<a href="/risk#strategies">自動売買 › 概要の戦略</a>）。</small></p>
 
 <div {{ autorefresh("symbols-list", 5) }}>
 {% if rows %}
@@ -44,7 +44,7 @@
   </tbody>
 </table>
 {% else %}
-<p>データ収集中の銘柄はありません。<a href="/strategies">戦略</a>を有効にするか、上のフォームで監視銘柄を追加してください。</p>
+<p>データ収集中の銘柄はありません。<a href="/risk#strategies">戦略</a>を有効にするか、上のフォームで監視銘柄を追加してください。</p>
 {% endif %}
 </div>
 {% endblock %}

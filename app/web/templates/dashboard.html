@@ -68,7 +68,7 @@
   <div class="card-head">
     <h2 style="font-size: 1.15rem">稼働中の戦略</h2>
     <small>{{ overview | length }} 本</small>
-    <a href="/strategies" class="more">戦略の設定 →</a>
+    <a href="/risk#strategies" class="more">戦略の設定 →</a>
   </div>
   {% if overview %}
   <div class="stratgrid">
@@ -102,7 +102,7 @@
     </a>
   {% endfor %}
   </div>
-  {% else %}<p>有効な戦略はありません。<a href="/strategies">戦略</a>で登録・有効化してください。</p>{% endif %}
+  {% else %}<p>有効な戦略はありません。<a href="/risk#strategies">自動売買 › 概要の戦略</a>で登録・有効化してください。</p>{% endif %}
 </section>
 
 {# ---- 3段目: 本日の発注 / シグナル ---- #}

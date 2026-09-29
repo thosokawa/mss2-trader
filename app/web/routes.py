@@ -98,7 +98,8 @@ def _pnl(v, unit: str = "") -> str:
 def _pnl_cls(v) -> str:
     if v is None:
         return "muted"
-    return "pos" if v > 0 else "neg" if v < 0 else "muted"
+    # 金額の色は MarketSpeed II に合わせてプラス=赤(up)・マイナス=緑(dn)。OK/エラーの pos/neg とは別
+    return "up" if v > 0 else "dn" if v < 0 else "muted"
 
 
 templates.env.filters["pnl"] = _pnl
@@ -612,22 +613,14 @@ def _active_strategies(s: Session) -> list[Strategy]:
     ).all()
 
 
-@router.get("/strategies", response_class=HTMLResponse)
-def strategies(request: Request, s: Session = Depends(get_session)):
-    """自動売買 › 戦略: 一覧（設定は要約文で表示）。"""
+@router.get("/strategies")
+def strategies(request: Request):
+    """戦略の一覧は 自動売買 › 概要 に統合した（旧「戦略」タブ）。ここは転送だけ。"""
     if request.query_params.get("class_path"):
         # /optimizations の「この設定で戦略登録」→ 追加画面へ（パラメータを引き継ぐ）
         return RedirectResponse(f"/strategies/new?{request.url.query}", status_code=303)
-    names = {sym.code: sym.name for sym in s.exec(select(Symbol)).all()}
-    received = set(s.exec(select(Tick.symbol_code).distinct()).all())
-    no_ticks = [c for c in symbols.quote_codes(s) if c not in received]
-    rows = [status_mod.strategy_state(s, st, names) for st in _active_strategies(s)]
-    return templates.TemplateResponse(
-        request,
-        "strategies.html",
-        _ctx(request, rows=rows, names=names, no_ticks=no_ticks,
-             error_msg=STRATEGY_ERRORS.get(request.query_params.get("error", ""), "")),
-    )
+    q = f"?error={request.query_params['error']}" if request.query_params.get("error") else ""
+    return RedirectResponse(f"/risk{q}#strategies", status_code=303)
 
 
 def _strategy_form(request: Request, *, st: Strategy | None, values: dict, error_code: str = "",
@@ -877,8 +870,11 @@ def delete_strategy(strategy_id: int, s: Session = Depends(get_session)):
 
 @router.get("/risk", response_class=HTMLResponse)
 def risk_page(request: Request, s: Session = Depends(get_session)):
+    """自動売買 › 概要: 発注許可・状態・戦略の一覧・建玉・制限。"""
     eng = get_risk_engine()
     positions = orders_engine.open_positions(s)
+    names = {sym.code: sym.name for sym in s.exec(select(Symbol)).all()}
+    received = set(s.exec(select(Tick.symbol_code).distinct()).all())
     return templates.TemplateResponse(
         request,
         "risk.html",
@@ -889,7 +885,11 @@ def risk_page(request: Request, s: Session = Depends(get_session)):
             sys=status_mod.system_status(s),
             positions=positions,
             prices={code: paper.latest_price(s, code) for code in {p["symbol_code"] for p in positions}},
-            names={sym.code: sym.name for sym in s.exec(select(Symbol)).all()},
+            names=names,
+            # 戦略の一覧（旧「戦略」タブ）
+            rows=[status_mod.strategy_state(s, st, names) for st in _active_strategies(s)],
+            no_ticks=[c for c in symbols.quote_codes(s) if c not in received],
+            error_msg=STRATEGY_ERRORS.get(request.query_params.get("error", ""), ""),
         ),
     )
 

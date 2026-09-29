@@ -6,7 +6,7 @@
 <p><a href="/strategies/{{ st.id }}">← {{ st.name }}</a></p>
 <h2>戦略を編集</h2>
 {% else %}
-<p><a href="/strategies">← 戦略一覧</a></p>
+<p><a href="/risk#strategies">← 戦略一覧（概要）</a></p>
 <h2>戦略を追加</h2>
 {% endif %}
 
@@ -83,6 +83,10 @@
   _sel.addEventListener('change', () => {
     pf.rebuild(STRAT_PARAMS[_sel.value] || {}, STRAT_META[_sel.value] || {}, null);
   });
+
+  // モードも選んでいる値で色を変える（通知=灰 / ペーパー=青 / 実発注=赤系）
+  ParamForm.paintChoices(document.getElementById('mode'),
+    { notify: 'pf-choice-notify', paper: 'pf-choice-paper', live: 'pf-choice-live' });
 
   // 実発注モードに切り替えて保存するときは確認する
   document.getElementById('strategy_form').addEventListener('submit', (e) => {
