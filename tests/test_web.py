@@ -388,11 +388,80 @@ def test_risk_page_and_arm_disarm(client):
     assert "ARMED" in r.text
 
     r = client.post("/risk/arm", follow_redirects=True)
-    assert "稼働中" in r.text
+    assert "ARM 中（発注する）" in r.text
 
     r = client.post("/risk/disarm", data={"reason": "テスト停止"}, follow_redirects=True)
     assert "テスト停止" in r.text
-    assert "停止中" in r.text
+    assert "DISARM（発注しない）" in r.text
+
+
+def test_status_bar_and_dashboard(client):
+    """全ページ共通のステータスバーと、自動更新（autorefresh）の付いたダッシュボード。"""
+    r = client.get("/partials/status")
+    assert r.status_code == 200
+    assert "自動売買" in r.text and "本日の発注" in r.text and "本日の損益" in r.text
+
+    client.post("/risk/arm")
+    assert "ARM 中" in client.get("/partials/status").text or "稼働中" in client.get("/partials/status").text
+    client.post("/risk/disarm", data={"reason": "テスト"})
+    assert "停止理由: テスト" in client.get("/partials/status").text
+
+    r = client.get("/")
+    assert r.status_code == 200
+    assert 'hx-get="/partials/status"' in r.text  # ステータスバーは全ページ
+    assert 'id="dash"' in r.text and 'hx-select="#dash"' in r.text  # ダッシュボードは自動更新
+    assert "稼働中の戦略" in r.text and "本日の発注" in r.text
+    # メニューは「自動売買」（旧リスク管理）
+    assert '>自動売買</a>' in r.text and "リスク管理" not in r.text
+
+
+def test_autorefresh_regions_on_pages(client):
+    for path, region in (("/risk", "risk-live"), ("/strategies", "strat-list"),
+                         ("/signals", "signals-list"), ("/performance", "perf"),
+                         ("/live", "live-codes"), ("/data", "data-coverage")):
+        r = client.get(path)
+        assert r.status_code == 200, path
+        assert f'id="{region}"' in r.text and f'hx-select="#{region}"' in r.text, path
+
+
+def test_market_phase():
+    from datetime import datetime
+
+    from app.web.status import market_phase
+
+    w = ["09:00-11:30", "12:30-15:30"]
+    # 2026-09-29(火) JST → UTC は -9h
+    assert market_phase(datetime(2026, 9, 29, 0, 30), w) == ("取引時間中", True)  # 09:30
+    assert market_phase(datetime(2026, 9, 29, 3, 0), w) == ("昼休み", False)  # 12:00
+    assert market_phase(datetime(2026, 9, 28, 23, 30), w) == ("寄り前", False)  # 08:30
+    assert market_phase(datetime(2026, 9, 29, 7, 0), w) == ("取引時間外", False)  # 16:00
+    assert market_phase(datetime(2026, 10, 3, 1, 0), w) == ("休日", False)  # 土曜
+
+
+def test_deleted_strategy_id_is_not_reused(client):
+    """削除は論理削除。新しい戦略に旧戦略の id（＝注文・シグナル）が引き継がれない。"""
+    import re
+
+    from sqlmodel import Session, select
+
+    from app.db import engine
+    from app.models import Strategy
+
+    data = {"class_path": "app.strategy.examples.sma_cross:SmaCross", "symbols": "7203",
+            "timeframe": "5m", "params_json": "{}", "mode": "notify"}
+    client.post("/strategies", data={**data, "name": "消す戦略"})
+    r = client.get("/strategies")
+    old_id = max(int(x) for x in re.findall(r"/strategies/(\d+)/delete", r.text))
+    client.post(f"/strategies/{old_id}/delete")
+    r = client.post("/strategies", data={**data, "name": "消す戦略"}, follow_redirects=True)
+    assert "同じ名前" not in r.text  # 同じ名前で作り直せる
+    new_id = max(int(x) for x in re.findall(r"/strategies/(\d+)/delete", r.text))
+    assert new_id != old_id
+    with Session(engine) as s:
+        old = s.get(Strategy, old_id)
+        assert old.deleted and not old.enabled and "削除済み" in old.name
+        assert f"/strategies/{old_id}/" not in r.text  # 一覧には出ない
+        assert s.exec(select(Strategy).where(Strategy.name == "消す戦略")).one().id == new_id
 
 
 def test_orders_pending_and_report_flow(client):

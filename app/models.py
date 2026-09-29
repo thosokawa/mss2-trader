@@ -90,6 +90,9 @@ class Strategy(SQLModel, table=True):
     timeframe: str = "5m"
     mode: str = Field(default="notify", description="notify / paper / live")
     enabled: bool = False
+    # 削除は論理削除（行を残す）。SQLite は最大 id の行を消すと同じ id を使い回すため、物理削除すると
+    # 新しい戦略に旧戦略の注文・シグナル（strategy_id で紐づく）が混ざる（2026-09-29 実機で発生）
+    deleted: bool = False
     created_at: datetime = Field(default_factory=utcnow)
 
 

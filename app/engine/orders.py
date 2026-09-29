@@ -123,6 +123,10 @@ def _exec_price(o: Order) -> float:
     return o.avg_price or o.ref_price or 0.0
 
 
+def _alive(st: Strategy | None) -> bool:
+    return st is not None and not getattr(st, "deleted", False)
+
+
 def open_positions(session: Session) -> list[dict]:
     """bot の注文履歴から見て建玉が残っている (戦略, 銘柄) の一覧。/risk の「建玉」表示用。
     戦略を削除済みでも注文が残っていれば出す（戦略名は注文に記録された名前）。"""
@@ -136,7 +140,7 @@ def open_positions(session: Session) -> list[dict]:
         out.append({
             "strategy_id": strategy_id,
             "strategy_name": opened.strategy_name if opened else "",
-            "strategy_exists": session.get(Strategy, strategy_id) is not None,
+            "strategy_exists": _alive(session.get(Strategy, strategy_id)),
             "symbol_code": code,
             "position": pos,
             "opened": opened,

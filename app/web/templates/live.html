@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import autorefresh with context %}
 {% block content %}
 <h2>ライブ気配</h2>
 <p><small>bridge から届いた各銘柄の最新気配。5秒ごとに自動更新。「遅延」= 受信から30秒以上経過。</small></p>
@@ -6,11 +7,13 @@
   {% include "_live_table.html" %}
 </div>
 
+<div {{ autorefresh("live-codes", 10) }}>
 <h3>株価を取り込む銘柄</h3>
 <p><small>RSS で株価を取り込むのは「有効な戦略の対象銘柄」と「監視銘柄」を合わせたもの。bridge が30秒ほどごとに
 この一覧を取りに来て、<code>rss_bridge.xlsx</code> の銘柄を自動で合わせます（再起動不要）。</small></p>
 <p>現在: {% for c in quote_codes %}<code>{{ c }}</code> {% else %}なし{% endfor %}</p>
 
+</div>
 <h4>監視銘柄（戦略で使っていなくても株価を見たい銘柄）</h4>
 <form method="post" action="/live/watch" class="grid">
   <input name="codes" placeholder="証券コード（複数はカンマ区切り）" required>

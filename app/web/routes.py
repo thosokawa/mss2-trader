@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -36,6 +36,7 @@ from app.models import (
     Tick,
 )
 from app.strategy.registry import BUILTIN, builtin_param_meta, builtin_params, load_strategy_class
+from app.web import status as status_mod
 from app.web.glossary import GLOSSARY, gloss
 
 router = APIRouter()
@@ -63,6 +64,7 @@ def _jst(dt: datetime | str | None, fmt: str = "%m/%d %H:%M") -> str:
 
 templates.env.filters["jst"] = _jst
 templates.env.filters["gloss"] = gloss
+templates.env.filters["since"] = status_mod.since_text
 
 
 def _now_utc() -> datetime:
@@ -79,44 +81,47 @@ def _ctx(request: Request, **kw):
     }
 
 
+@router.get("/partials/status", response_class=HTMLResponse)
+def partial_status(request: Request, s: Session = Depends(get_session)):
+    """全ページ上部のステータスバー（base.html が数秒ごとに取りに来る）。"""
+    return templates.TemplateResponse(
+        request, "_status_bar.html", _ctx(request, sys=status_mod.system_status(s))
+    )
+
+
 @router.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, s: Session = Depends(get_session)):
-    counts = {
-        "symbols": s.exec(select(func.count()).select_from(Symbol)).one(),
-        "quote_codes": len(symbols.quote_codes(s)),
-        "bars": s.exec(select(func.count()).select_from(Bar)).one(),
-        "backtests": s.exec(select(func.count()).select_from(BacktestRun)).one(),
-        "strategies_enabled": s.exec(
-            select(func.count()).select_from(Strategy).where(Strategy.enabled == True)  # noqa: E712
-        ).one(),
-    }
-    recent_signals = s.exec(select(Signal).order_by(Signal.ts.desc()).limit(20)).all()
-    recent_bt = s.exec(select(BacktestRun).order_by(BacktestRun.created_at.desc()).limit(10)).all()
+    """システム全体の今の状態。表示部分は数秒ごとに自動で差し替わる（base.html の autorefresh）。"""
+    sys = status_mod.system_status(s)
+    day0 = status_mod.jst_day_start_utc(sys["now"])
+    today_signals = s.exec(
+        select(Signal).where(Signal.ts >= day0).order_by(Signal.ts.desc(), Signal.id.desc()).limit(15)
+    ).all()
+    today_orders = sorted(sys["today_orders"], key=lambda o: o.id, reverse=True)[:15]
+    recent_bt = s.exec(select(BacktestRun).order_by(BacktestRun.created_at.desc()).limit(5)).all()
 
     paper_closed = s.exec(select(PaperTrade).where(PaperTrade.status == "closed")).all()
-    paper_realized = round(sum(t.pnl or 0 for t in paper_closed), 0)
-    paper_open_n = s.exec(
-        select(func.count()).select_from(PaperTrade).where(PaperTrade.status == "open")
-    ).one()
-
-    last_tick = s.exec(select(func.max(Tick.received_at))).one()
-    bridge = {
-        "last_tick": last_tick,
-        "age_sec": (_now_utc() - last_tick).total_seconds() if last_tick else None,
-        "ticks_1h": s.exec(
-            select(func.count()).select_from(Tick).where(Tick.received_at >= _now_utc() - timedelta(hours=1))
+    paper = {
+        "realized": round(sum(t.pnl or 0 for t in paper_closed), 0),
+        "open_n": s.exec(
+            select(func.count()).select_from(PaperTrade).where(PaperTrade.status == "open")
+        ).one(),
+        "strategies": s.exec(
+            select(func.count()).select_from(Strategy).where(Strategy.mode == "paper")
         ).one(),
     }
-    paper = {"realized": paper_realized, "open_n": paper_open_n}
     return templates.TemplateResponse(
         request,
         "dashboard.html",
         _ctx(
             request,
-            counts=counts,
-            recent_signals=recent_signals,
+            sys=sys,
+            overview=status_mod.strategy_overview(s),
+            quotes=_latest_ticks(s),
+            quote_codes=symbols.quote_codes(s),
+            today_signals=today_signals,
+            today_orders=today_orders,
             recent_bt=recent_bt,
-            bridge=bridge,
             paper=paper,
         ),
     )
@@ -193,7 +198,7 @@ def _data_coverage_ctx(s: Session) -> dict:
     all_codes = symbols.quote_codes(s)
     if all_codes:
         presets["取り込み中の全銘柄"] = ",".join(all_codes)
-    for st in s.exec(select(Strategy).order_by(Strategy.name)).all():
+    for st in s.exec(select(Strategy).where(Strategy.deleted == False).order_by(Strategy.name)).all():  # noqa: E712
         codes = symbols.parse_codes(st.symbols)
         if codes:
             presets[f"戦略: {st.name}"] = ",".join(codes)
@@ -520,7 +525,9 @@ def signals(request: Request, s: Session = Depends(get_session)):
 
 @router.get("/strategies", response_class=HTMLResponse)
 def strategies(request: Request, s: Session = Depends(get_session)):
-    rows = s.exec(select(Strategy).order_by(Strategy.created_at.desc())).all()
+    rows = s.exec(
+        select(Strategy).where(Strategy.deleted == False).order_by(Strategy.created_at.desc())  # noqa: E712
+    ).all()
     names = {sym.code: sym.name for sym in s.exec(select(Symbol)).all()}
     # 取り込み中の銘柄（有効な戦略の銘柄 ∪ 監視銘柄）のうち、まだ株価が1件も届いていないもの
     received = set(s.exec(select(Tick.symbol_code).distinct()).all())
@@ -540,7 +547,7 @@ def strategies(request: Request, s: Session = Depends(get_session)):
             parse_codes=symbols.parse_codes,
             no_ticks=no_ticks,
             prefill=prefill,
-            error=request.query_params.get("error", ""),
+            error_code=request.query_params.get("error", ""),
         ),
     )
 
@@ -635,8 +642,12 @@ def delete_strategy(strategy_id: int, s: Session = Depends(get_session)):
     for c in s.exec(select(LiveCursor).where(LiveCursor.strategy_id == strategy_id)).all():
         s.delete(c)
     st = s.get(Strategy, strategy_id)
-    if st:
-        s.delete(st)
+    if st and not st.deleted:
+        # 論理削除: id を使い回させないため行は残す。名前は空けて同じ名前で作り直せるようにする
+        st.deleted = True
+        st.enabled = False
+        st.name = f"{st.name} (削除済み #{st.id})"
+        s.add(st)
     s.commit()
     return RedirectResponse("/strategies", status_code=303)
 
@@ -648,7 +659,9 @@ def delete_strategy(strategy_id: int, s: Session = Depends(get_session)):
 def risk_page(request: Request, s: Session = Depends(get_session)):
     eng = get_risk_engine()
     live_strategies = s.exec(
-        select(Strategy).where(Strategy.mode == "live").order_by(Strategy.created_at.desc())
+        select(Strategy)
+        .where(Strategy.mode == "live", Strategy.deleted == False)  # noqa: E712
+        .order_by(Strategy.created_at.desc())
     ).all()
     recent_orders = s.exec(select(Order).order_by(Order.ts.desc()).limit(50)).all()
     positions = orders_engine.open_positions(s)
@@ -724,7 +737,9 @@ async def orders_report(order_id: int, request: Request, s: Session = Depends(ge
 @router.get("/performance", response_class=HTMLResponse)
 def performance(request: Request, s: Session = Depends(get_session)):
     strategies = s.exec(
-        select(Strategy).where(Strategy.mode == "paper").order_by(Strategy.created_at.desc())
+        select(Strategy)
+        .where(Strategy.mode == "paper", Strategy.deleted == False)  # noqa: E712
+        .order_by(Strategy.created_at.desc())
     ).all()
     names = {sym.code: sym.name for sym in s.exec(select(Symbol)).all()}
 

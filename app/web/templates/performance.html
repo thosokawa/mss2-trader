@@ -1,9 +1,11 @@
 {% extends "base.html" %}
+{% from "_macros.html" import autorefresh with context %}
 {% block content %}
 <h2>成績（ペーパートレード）</h2>
 <p><small>mode=<code>paper</code> の<a href="/strategies">戦略</a>が live エンジンでシグナルを出すと PaperBroker で擬似約定します。
 実発注はしません。含み損益は最新ティック価格で評価。</small></p>
 
+<div {{ autorefresh("perf", 10) }}>
 {% if not cards %}
 <p>ペーパートレードの戦略がありません。<a href="/strategies">戦略</a>を <code>paper</code> モードで登録して有効化してください。</p>
 {% endif %}
@@ -74,4 +76,5 @@
   {% endif %}
 </article>
 {% endfor %}
+</div>
 {% endblock %}

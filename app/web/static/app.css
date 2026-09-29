@@ -1,6 +1,6 @@
 .err { background: #5c1a1a; color: #fff; padding: .6rem 1rem; border-radius: 6px; }
 .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; }
-.metrics div { background: var(--pico-card-background-color); border: 1px solid var(--pico-muted-border-color); border-radius: 8px; padding: .6rem .8rem; }
+.metrics > div { background: var(--pico-card-background-color); border: 1px solid var(--pico-muted-border-color); border-radius: 8px; padding: .6rem .8rem; }
 .metrics .k { font-size: .75rem; color: var(--pico-muted-color); }
 .metrics .v { font-size: 1.15rem; font-weight: 600; }
 .pos { color: #2e9e57; } .neg { color: #d94a4a; }
@@ -17,3 +17,32 @@ table { font-size: .9rem; }
 .pf-field { font-size: .85rem; }
 .pf-field input, .pf-field select { margin-top: .2rem; }
 .pf-hint { color: var(--pico-muted-color); }
+
+/* ---- ナビ ---- */
+nav a[aria-current="page"], nav summary[aria-current="page"] { font-weight: 700; text-decoration: underline; text-underline-offset: .3em; }
+nav .brand { text-decoration: none; }
+
+/* ---- 全ページ上部のステータスバー（_status_bar.html） ---- */
+.statusbar-wrap { background: var(--pico-card-sectioning-background-color); border-bottom: 1px solid var(--pico-muted-border-color);
+  position: sticky; top: 0; z-index: 10; }
+.statusbar { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .6rem; padding: .4rem 0; font-size: .82rem; }
+.statusbar a { text-decoration: none; }
+.sb-main { display: inline-flex; align-items: center; gap: .4rem; font-weight: 700; padding: .15rem .6rem; border-radius: 999px;
+  border: 1px solid currentColor; }
+.sb-main .dot { width: .6rem; height: .6rem; border-radius: 50%; background: currentColor; }
+.sb-on .dot { animation: pulse 1.6s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .3 } }
+.sb-item { padding: .1rem .5rem; border-radius: 6px; background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color); color: inherit; }
+.sb-on { color: #2e9e57; } .sb-warn { color: #c98a00; } .sb-bad { color: #d94a4a; } .sb-off { color: var(--pico-muted-color); }
+.sb-time { margin-left: auto; color: var(--pico-muted-color); font-size: .75rem; }
+
+/* ---- ダッシュボード ---- */
+.panel { border-left: 4px solid var(--pico-muted-border-color); }
+.panel-on { border-left-color: #2e9e57; } .panel-warn { border-left-color: #c98a00; } .panel-off { border-left-color: var(--pico-muted-color); }
+.panel header .sb-main { font-size: .82rem; margin-left: .5rem; }
+.stratgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1rem; }
+.strat header { display: flex; flex-wrap: wrap; gap: .4rem; align-items: baseline; }
+.strat table { margin-bottom: 0; }
+.tag { font-size: .72rem; padding: .05rem .45rem; border-radius: 6px; border: 1px solid currentColor; }
+.tag-live { color: #d94a4a; } .tag-paper { color: #2f7fd1; } .tag-notify { color: var(--pico-muted-color); }

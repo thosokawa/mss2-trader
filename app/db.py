@@ -44,6 +44,7 @@ _ADD_COLUMNS: list[tuple[str, str, str]] = [
     ("order", "open_date", "INTEGER DEFAULT 0"),
     ("strategy", "symbols", "TEXT DEFAULT ''"),
     ("symbol", "watch", "BOOLEAN DEFAULT 0"),
+    ("strategy", "deleted", "BOOLEAN DEFAULT 0"),
 ]
 
 

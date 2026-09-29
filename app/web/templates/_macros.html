@@ -1,0 +1,10 @@
+{#
+  autorefresh(id, sec): この要素を数秒ごとに自動で最新にする htmx 属性。
+  同じ URL を GET して、応答の中の同じ id の要素だけを差し替える（ページごとの部分テンプレート不要）。
+  入力中・編集欄（<details> を開いている）・タブが裏にあるときは更新しない（canRefresh は base.html）。
+  使い方: {% from "_macros.html" import autorefresh with context %}
+          <div {{ autorefresh("risk-live") }}> ... </div>
+#}
+{% macro autorefresh(id, sec=5) -%}
+id="{{ id }}" hx-get="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}" hx-select="#{{ id }}" hx-target="this" hx-swap="outerHTML" hx-trigger="every {{ sec }}s [canRefresh(this)]"
+{%- endmacro %}

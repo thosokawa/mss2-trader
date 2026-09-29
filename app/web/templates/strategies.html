@@ -1,26 +1,29 @@
 {% extends "base.html" %}
+{% from "_macros.html" import autorefresh with context %}
 {% block content %}
 <h2>戦略</h2>
 <p><small>有効にすると live エンジンが {{ '設定間隔ごと' }}に対象銘柄の確定足へ <code>on_bar()</code> を流し、
-シグナルを <a href="/signals">シグナル</a> 履歴に記録して Slack へ通知します（発注はしません）。
+シグナルを <a href="/signals">シグナル</a> 履歴に記録して通知（メール / Slack）します（発注はしません）。
 有効化した時点より後の足だけが対象です。<code>paper</code> モードなら擬似約定して<a href="/performance">成績</a>に反映します。
-<code>live</code> モードは実際に発注します — <a href="/risk">リスク管理</a>で ARM しない限り発注されません。
+<code>live</code> モードは実際に発注します — <a href="/risk">自動売買</a>で ARM しない限り発注されません。
 有効な戦略の対象銘柄は自動で RSS の株価取り込み対象になります（bridge が30秒ほどで反映）。</small></p>
 
+<div {{ autorefresh("strat-warn", 10) }}>
 {% if no_ticks %}
 <p class="neg">株価がまだ一度も届いていない銘柄: {% for c in no_ticks %}{{ c }} {{ names.get(c, '') }}{% if not loop.last %}、{% endif %}{% endfor %}
 <br><small>bridge が起動していない、または反映待ち（30秒ほど）の可能性があります。株価が届かない銘柄は足ができずシグナルも出ません。</small></p>
 {% endif %}
 
-{% if error == "dup_name" %}
+</div>
+{% if error_code == "dup_name" %}
 <p class="neg">同じ名前の戦略が既にあります。別の名前を付けてください。</p>
-{% elif error == "params" %}
+{% elif error_code == "params" %}
 <p class="neg">パラメータ（JSON）の形式が正しくありません。</p>
-{% elif error == "no_symbols" %}
+{% elif error_code == "no_symbols" %}
 <p class="neg">対象銘柄（証券コード）を1つ以上入れてください。</p>
-{% elif error == "open_position" %}
+{% elif error_code == "open_position" %}
 <p class="neg">この戦略は実発注の建玉を持っています。建玉のある銘柄を外したり戦略を削除したりすると、bot がその建玉を
-管理しなくなります（損切り・手仕舞いが出ない）。先に手仕舞うか、手動で決済して <a href="/risk">リスク管理</a> で
+管理しなくなります（損切り・手仕舞いが出ない）。先に手仕舞うか、手動で決済して <a href="/risk">自動売買</a> で
 「手動決済を記録」してください。</p>
 {% endif %}
 <article>
@@ -100,6 +103,7 @@
   })();
 </script>
 
+<div {{ autorefresh("strat-list", 5) }}>
 {% if rows %}
 <table>
   <thead><tr><th>名前</th><th>ロジック</th><th>対象銘柄</th><th>足</th><th>モード</th><th>状態</th><th></th></tr></thead>
@@ -133,4 +137,5 @@
   </tbody>
 </table>
 {% else %}<p>まだ戦略がありません。</p>{% endif %}
+</div>
 {% endblock %}

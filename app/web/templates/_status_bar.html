@@ -1,0 +1,17 @@
+{# 全ページ上部のステータスバー。base.html が /partials/status から5秒ごとに取り直す。 #}
+<a href="/risk" class="sb-main sb-{{ sys.level }}" title="自動売買の画面へ">
+  <span class="dot"></span>{{ sys.label }}
+</a>
+{% if sys.halted_reason %}
+  <span class="sb-item sb-bad" title="最後に止まった理由">停止理由: {{ sys.halted_reason }}</span>
+{% endif %}
+<span class="sb-item sb-{{ 'on' if sys.in_session else 'off' }}">{{ sys.phase }}</span>
+<a href="/live" class="sb-item sb-{{ sys.bridge.level }}">{{ sys.bridge.label }}</a>
+<a href="/risk" class="sb-item">建玉 {{ sys.positions | length }}</a>
+<a href="/risk" class="sb-item">本日の発注 {{ sys.today_sent }}
+  {%- if sys.today_failed %} <span class="neg">/ 失敗 {{ sys.today_failed }}</span>{% endif -%}
+  {%- if sys.today_pending %} / 処理中 {{ sys.today_pending }}{% endif %}</a>
+<span class="sb-item {{ 'pos' if sys.day_pnl > 0 else 'neg' if sys.day_pnl < 0 else '' }}"
+      title="bot の手仕舞いが受理されたときの概算損益の合計（backend 再起動で 0 に戻る）">
+  本日の損益 {{ '{:+,.0f}'.format(sys.day_pnl) }}円</span>
+<span class="sb-time">{{ sys.now | jst('%H:%M:%S') }} 更新</span>

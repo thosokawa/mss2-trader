@@ -12,7 +12,7 @@
     <li><a href="#backtest">バックテスト</a></li>
     <li><a href="#optimize">最適化（パラメータ探索）</a></li>
     <li><a href="#strategy">戦略</a></li>
-    <li><a href="#risk">リスク管理 / 実発注</a></li>
+    <li><a href="#risk">自動売買 / 実発注</a></li>
     <li><a href="#notify">通知の設定（Slack / メール）</a></li>
     <li><a href="#glossary">用語集</a></li>
   </ul>
@@ -29,7 +29,7 @@
     <tr><td><a href="/strategies">戦略</a></td><td>liveエンジンで回すロジックの登録・有効化</td></tr>
     <tr><td><a href="/signals">シグナル</a></td><td>liveエンジンが記録したシグナル履歴</td></tr>
     <tr><td><a href="/performance">成績</a></td><td>paperモード戦略の擬似約定・損益</td></tr>
-    <tr><td><a href="/risk">リスク管理</a></td><td>実発注のARMEDトグルと発注履歴（<code>mode=live</code>用）</td></tr>
+    <tr><td><a href="/risk">自動売買</a></td><td>実発注のARMEDトグルと発注履歴（<code>mode=live</code>用）</td></tr>
   </tbody>
 </table>
 
@@ -137,7 +137,7 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
 </table>
 <p>登録は <a href="/strategies">/strategies</a> から。モードは <code>notify</code>（通知のみ）/
 <code>paper</code>（擬似約定して<a href="/performance">成績</a>に反映）/
-<code>live</code>（実発注。<a href="#risk">リスク管理</a>で ARM しない限り発注されない）。</p>
+<code>live</code>（実発注。<a href="#risk">自動売買</a>で ARM しない限り発注されない）。</p>
 
 <h4>損切り / 利確</h4>
 <p>パラメータ欄の一番下に <strong>損切り(%)</strong> ・ <strong>利確(%)</strong> が全戦略共通で出る
@@ -170,7 +170,7 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
 （大引け時に backend が止まっていた等）を翌日最初の足で手仕舞いする。<code>/optimize</code> では
 <code>true,false</code> と入れれば両方を比較できる。</p>
 
-<h3 id="risk">リスク管理 / 実発注（mode=live）</h3>
+<h3 id="risk">自動売買 / 実発注（mode=live）</h3>
 <p><strong>⚠ 実弾（MarketSpeed II の発注機能 ON）では未検証の機能</strong>（発注機能 OFF で
 「発注ロック中」→ rejected になるところまでは実機確認済み）。試す前に
 <code>bridge/README.md</code>の「実発注（P4）」の安全な確認手順を必ず読むこと。</p>

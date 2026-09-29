@@ -1,6 +1,7 @@
 {% extends "base.html" %}
+{% from "_macros.html" import autorefresh with context %}
 {% block content %}
-<h2>リスク管理 / 実発注（P4）</h2>
+<h2>自動売買</h2>
 <article class="err">
   ⚠ ここを ARMED にすると、<code>mode=live</code> の戦略のシグナルが実際に発注されます
   （config の <code>trading.enabled</code> も true の場合のみ）。<code>config.trading.enabled</code>
@@ -8,11 +9,12 @@
   ボタンでいつでも解除でき、backend を再起動すると自動的に解除されます。
 </article>
 
+<div {{ autorefresh("risk-live", 5) }}>
 <div class="metrics">
   <div><div class="k">config.trading.enabled</div>
     <div class="v {{ 'pos' if trading_cfg.enabled else 'neg' }}">{{ trading_cfg.enabled }}</div></div>
-  <div><div class="k">ARMED</div>
-    <div class="v {{ 'neg' if state.armed else 'pos' }}">{{ '稼働中' if state.armed else '停止中' }}</div></div>
+  <div><div class="k">ARM</div>
+    <div class="v {{ 'pos' if state.armed else 'neg' }}">{{ 'ARM 中（発注する）' if state.armed else 'DISARM（発注しない）' }}</div></div>
   <div><div class="k">本日の実現損益</div>
     <div class="v {{ 'pos' if state.day_realized_pnl>=0 else 'neg' }}">{{ '{:,.0f}'.format(state.day_realized_pnl) }}</div></div>
   <div><div class="k">停止理由</div><div class="v">{{ state.halted_reason or '—' }}</div></div>
@@ -109,4 +111,5 @@ bot がその建玉の手仕舞い注文を出して「建玉が足りない」�
   </tbody>
 </table>
 {% else %}<p>まだありません。</p>{% endif %}
+</div>
 {% endblock %}

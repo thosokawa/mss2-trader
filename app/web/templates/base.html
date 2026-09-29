@@ -7,30 +7,60 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   <link rel="stylesheet" href="/static/app.css">
+  <script>
+    // autorefresh（_macros.html）の更新条件: タブが表で、その領域で入力中でなく、編集欄（<details>）も閉じている
+    function canRefresh(el) {
+      if (document.visibilityState !== 'visible') return false;
+      const a = document.activeElement;
+      if (a && el.contains(a) && ['INPUT', 'TEXTAREA', 'SELECT'].includes(a.tagName)) return false;
+      if (el.querySelector('details[open]')) return false;
+      return true;
+    }
+  </script>
 </head>
 <body>
+{% set path = request.url.path %}
+{% macro nav(href, label, prefix=None) -%}
+  <li><a href="{{ href }}" {% if path == href or (prefix and path.startswith(prefix)) %}aria-current="page"{% endif %}>{{ label }}</a></li>
+{%- endmacro %}
 <header class="container">
   <nav>
-    <ul><li><strong>mss2-trader</strong></li></ul>
+    <ul><li><a href="/" class="brand"><strong>mss2-trader</strong></a></li></ul>
     <ul>
-      <li><a href="/">ダッシュボード</a></li>
-      <li><a href="/live">ライブ</a></li>
-      <li><a href="/data">データ</a></li>
-      <li><a href="/backtest">バックテスト</a></li>
-      <li><a href="/backtests">履歴</a></li>
-      <li><a href="/optimize">最適化</a></li>
-      <li><a href="/strategies">戦略</a></li>
-      <li><a href="/signals">シグナル</a></li>
-      <li><a href="/performance">成績</a></li>
-      <li><a href="/risk">リスク管理</a></li>
-      <li><a href="/help">ヘルプ</a></li>
+      {{ nav("/", "ダッシュボード") }}
+      {{ nav("/risk", "自動売買", "/risk") }}
+      {{ nav("/strategies", "戦略", "/strategies") }}
+      {{ nav("/signals", "シグナル") }}
+      {{ nav("/performance", "成績") }}
+      {{ nav("/live", "ライブ", "/live") }}
+      <li>
+        <details class="dropdown">
+          <summary {% if path.startswith('/backtest') or path.startswith('/optimiz') or path.startswith('/data') %}aria-current="page"{% endif %}>分析</summary>
+          <ul dir="rtl">
+            <li><a href="/backtest">バックテスト</a></li>
+            <li><a href="/backtests">バックテスト履歴</a></li>
+            <li><a href="/optimize">最適化</a></li>
+            <li><a href="/optimizations">最適化履歴</a></li>
+            <li><a href="/data">データ</a></li>
+          </ul>
+        </details>
+      </li>
+      {{ nav("/help", "ヘルプ") }}
     </ul>
   </nav>
 </header>
+<div class="statusbar-wrap">
+  <div class="container statusbar" id="statusbar"
+       hx-get="/partials/status" hx-trigger="load, every 5s [document.visibilityState === 'visible']"
+       hx-swap="innerHTML">
+    <span class="sb-item">状態を取得中…</span>
+  </div>
+</div>
 <main class="container">
   {% if error %}<article class="err">⚠ {{ error }}</article>{% endif %}
   {% block content %}{% endblock %}
 </main>
-<footer class="container"><small>P4 — 実発注の土台を実装中。既定は発注しない（<a href="/risk">リスク管理</a>参照）。</small></footer>
+<footer class="container"><small>画面の表示は数秒ごとに自動で最新になります（入力中は止まります）。
+発注するのは「自動売買」で ARM し、config の <code>trading.enabled</code> が true のときだけです。</small></footer>
 </body>
 </html>
