@@ -26,6 +26,7 @@ UNIVERSAL_DEFAULTS = {
     "direction": "long",
     "trade_type": "cash",
     "hold_overnight": True,
+    "entry_windows": "",
     "exit_rule": "signal",
     "exit_sma_fast": 10,
     "exit_sma_slow": 30,
@@ -63,6 +64,13 @@ UNIVERSAL_META = {
     },
 }
 
+UNIVERSAL_META["entry_windows"] = {
+    "label": "エントリー時間帯", "type": "text", "wide": True,
+    "placeholder": "空欄=終日　例 9:00-10:00 13:30-14:30",
+    "help": "この時間帯（JST、足が確定して発注する時刻）だけ新規に建てる。複数は空白区切り。"
+            "空欄なら終日。手仕舞い・損切り・大引け手仕舞いは時間帯に関係なく出る。"
+            "最適化ではカンマで候補を区切る（例 9:00-11:30, 9:00-10:00 13:30-14:30）",
+}
 UNIVERSAL_META["exit_rule"] = {
     "label": "決済条件", "choices": ["signal", "sma_cross"], "wide": True,
     "choice_labels": {"signal": "エントリー条件の反転シグナル", "sma_cross": "SMAクロス"},

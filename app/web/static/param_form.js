@@ -113,6 +113,7 @@ const ParamForm = (() => {
           if (type === "number") input.step = m.step != null ? String(m.step) : "any";
           if (type === "number" && m.min != null && !allowRanges) input.min = String(m.min);
           input.value = val == null ? "" : Array.isArray(val) ? val.join(",") : val;
+          if (m.placeholder) input.placeholder = m.placeholder;
         }
         input.dataset.key = key;
         input.dataset.type = type;

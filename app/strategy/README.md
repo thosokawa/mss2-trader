@@ -84,6 +84,12 @@ Signal(side, qty=None, reason="", order_type="MKT", limit_price=None)
 （両方併用も可。バックテストは `run_backtest` 内でストップ判定が先に走り、当たれば `on_bar` はその
 足で呼ばれない）。
 
+## エントリー時間帯（entry_windows）
+
+全戦略共通パラメータ。`"9:00-10:00 13:30-14:30"` のように JST の時間帯を空白区切りで書くと、足が確定した時刻
+（＝発注する時刻）がその中のときだけ BUY/SHORT を通す（`Strategy.decide` / `parse_entry_windows`）。
+空欄（既定）なら終日。手仕舞いは制限しない。最適化ではカンマが候補の区切りになる。
+
 ## 決済条件（exit_rule）
 
 全戦略共通パラメータ。`"signal"`（既定・エントリー条件の反転シグナル）なら `on_bar()` が出す手仕舞い

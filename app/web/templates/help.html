@@ -139,6 +139,10 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
 <code>paper</code>（擬似約定して<a href="/performance">成績</a>に反映）/
 <code>live</code>（実発注。<a href="#risk">自動売買</a>で発注許可を ON にしない限り発注されない）。</p>
 
+<h4>エントリー時間帯</h4>
+<p>パラメータ欄の <strong>エントリー時間帯</strong> に <code>9:00-10:00 13:30-14:30</code> のように書くと、その時間帯
+（JST。足が確定して発注する時刻）だけ新規に建てる。複数は空白区切り、空欄なら終日。手仕舞い・損切り・大引け手仕舞いは
+時間帯に関係なく出る。<code>/optimize</code> ではカンマで候補を区切ると比べられる（例 <code>9:00-11:30, 9:00-10:00 13:30-14:30</code>）。</p>
 <h4>決済条件</h4>
 <p>パラメータ欄の <strong>決済条件</strong> で手仕舞いの仕方を全戦略共通で選べる。
 <strong>エントリー条件の反転シグナル</strong>（既定）は各戦略の手仕舞いシグナルで決済。

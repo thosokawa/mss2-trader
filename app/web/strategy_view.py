@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 
 from app.models import BacktestRun, Strategy
-from app.strategy.base import exit_rule_of
+from app.strategy.base import exit_rule_of, parse_entry_windows
 from app.strategy.registry import BUILTIN, UNIVERSAL_DEFAULTS, builtin_param_meta, builtin_params
 
 LOGIC_LABELS = {cp: label for label, cp in BUILTIN.items()}
@@ -73,6 +73,8 @@ def describe(st: Strategy | BacktestRun) -> dict:
     stop, take = _pct(merged.get("stop_loss_pct")), _pct(merged.get("take_profit_pct"))
     qty = merged.get("qty", 100)
     exit_rule = exit_rule_of(merged)
+    windows = parse_entry_windows(merged.get("entry_windows"))
+    windows_text = " ".join(f"{a:%H:%M}-{b:%H:%M}" for a, b in windows)
     exit_fast, exit_slow = _fmt(merged.get("exit_sma_fast") or 10), _fmt(merged.get("exit_sma_slow") or 30)
     exit_text = (f"SMAクロス（{exit_fast}/{exit_slow}）" if exit_rule == "sma_cross"
                  else "エントリー条件の反転シグナル")
@@ -82,6 +84,8 @@ def describe(st: Strategy | BacktestRun) -> dict:
         ("売買方向", DIRECTION_LABELS.get(direction, direction), ""),
         ("取引区分", "信用" if trade_type == "margin" else "現物", ""),
         ("大引けをまたぐ", "またぐ（持ち越す）" if hold else "またがない（大引け前に手仕舞い）", ""),
+        ("エントリー時間帯", windows_text or "終日",
+         "この時間帯だけ新規に建てる（手仕舞いは時間帯に関係なく出る）"),
         ("決済条件", exit_text, "損切り・利確・大引け手仕舞いはこれとは別に効く"),
         ("損切り", stop or "なし", "建値からこの%逆行したら成行で手仕舞い"),
         ("利確", take or "なし", "建値からこの%進んだら成行で手仕舞い"),
@@ -95,6 +99,8 @@ def describe(st: Strategy | BacktestRun) -> dict:
              DIRECTION_LABELS.get(direction, direction), "信用" if trade_type == "margin" else "現物"]
     if not hold:
         parts.append("デイトレ")
+    if windows_text:
+        parts.append(f"時間帯 {windows_text}")
     if exit_rule == "sma_cross":
         parts.append(f"決済SMA{exit_fast}/{exit_slow}")
     if stop:

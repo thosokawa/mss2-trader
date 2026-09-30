@@ -8,10 +8,13 @@ live.py（本番）と backtest.py（検証）は同じ Strategy.decide()（= on
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, time, timedelta
 
 import pandas as pd
+
+from app.strategy.indicators import TIMEFRAME_MINUTES
 
 EXIT_RULES = ("signal", "sma_cross")
 CLOSE_SIDES = ("EXIT", "SELL", "COVER")
@@ -23,6 +26,23 @@ def exit_rule_of(params: dict) -> str:
     """
     v = str(params.get("exit_rule") or "").strip().lower()
     return v if v in EXIT_RULES else "signal"
+
+
+_WINDOW_RE = re.compile(r"(\d{1,2}):?(\d{2})\s*[-~〜～]\s*(\d{1,2}):?(\d{2})")
+
+
+def parse_entry_windows(text) -> list[tuple[time, time]]:
+    """全戦略共通パラメータ entry_windows（エントリー時間帯、JST）を [(開始, 終了)] に。
+
+    "9:00-10:00 13:30-14:30" のように空白（または ; 、 / ・ ,）で複数。空欄なら [] ＝ 終日。
+    書式が読めない部分は無視する。
+    """
+    out = []
+    for m in _WINDOW_RE.finditer(str(text or "")):
+        h1, m1, h2, m2 = (int(x) for x in m.groups())
+        if h1 < 24 and h2 < 24 and m1 < 60 and m2 < 60:
+            out.append((time(h1, m1), time(h2, m2)))
+    return out
 
 
 @dataclass
@@ -156,7 +176,19 @@ class Strategy:
             return None
         if sig.side == "SHORT" and not self.allow_short:
             return None
+        if sig.side in ("BUY", "SHORT") and not self.in_entry_window(ctx):
+            return None
         return sig
+
+    def in_entry_window(self, ctx: Context) -> bool:
+        """エントリー時間帯（entry_windows）の中か。判定は足が確定した時刻（＝発注する時刻）の JST。
+        時間帯が空欄なら終日 True。日足は時刻が無いので常に True。手仕舞いはこれに関係なく出す。"""
+        windows = parse_entry_windows(self.params.get("entry_windows"))
+        minutes = TIMEFRAME_MINUTES.get(self.timeframe, 5)
+        if not windows or minutes >= 1440 or ctx.bars.empty:
+            return True
+        t = (pd.Timestamp(ctx.bars.index[-1]) + timedelta(hours=9, minutes=minutes)).time()
+        return any(a <= t <= b for a, b in windows)
 
     def on_bar(self, ctx: Context) -> Signal | None:  # pragma: no cover - 抽象
         raise NotImplementedError
