@@ -12,7 +12,7 @@ from sqlmodel import Session
 from app.aggregator import build_bars
 from app.config import get_config
 from app.db import engine, init_db
-from app.engine import live
+from app.engine import live, watchdog
 from app.web.routes import router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -28,7 +28,13 @@ async def _aggregator_loop() -> None:
         try:
             def _run() -> int:
                 with Session(engine) as s:
-                    return build_bars(s, timeframes=tfs)
+                    n = build_bars(s, timeframes=tfs)
+                    try:
+                        # 取引時間中に株価が止まった・凍結したら通知（app/engine/watchdog.py）
+                        watchdog.check(s)
+                    except Exception:  # noqa: BLE001
+                        log.exception("watchdog error")
+                    return n
 
             n = await loop.run_in_executor(None, _run)
             if n:

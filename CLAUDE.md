@@ -84,6 +84,10 @@ bridge は `RssMarginOpenOrder`（信用区分 4=いちにち / 2=一般無期�
 - live の発注は足の確定から `trading.max_signal_age_sec`（既定120秒）を超えたシグナルでは
   行わない（backend 停止後の追いつき評価対策）。live のテストで足をまとめて入れると途中の
   シグナルが「古い」扱いになるので、`run_once(now=...)` を渡し足を1本ずつ評価する。
+- **RSS は取引時間外や Excel⇔MarketSpeed II の接続断の間も最後の値を返し続ける**（bridge は送り続けるので
+  「受信中」に見える）。足は累計出来高が増えた tick からだけ作る（`app/aggregator.py`。2026-09-30 に凍結値の
+  横ばい足で MACD が潰れ、復旧時の値飛びで誤シグナルが出た）。取引時間中に株価の停止・凍結が3分続くと
+  `app/engine/watchdog.py` が Slack/メールで通知する。旧集計の残骸は `scripts/clean_frozen_bars.py` で消せる。
 - Windows 機の git 作者は `thosokawa <t.hosokawa.pc@gmail.com>`（リポジトリローカル設定）。
 - コミット前に必ず: `.venv/bin/pytest -q` と
   `.venv/bin/ruff check app/ tests/ bridge/ scripts/` の両方を通す。

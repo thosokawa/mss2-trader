@@ -28,6 +28,7 @@ def _naive_utc(dt: datetime) -> datetime:
 
 
 def _recent_ticks(session: Session, symbol_code: str, since: datetime) -> pd.DataFrame:
+    """since 以降の tick。累計出来高の階差を取るため、since 直前の1件も prev=True で付ける。"""
     rows = session.exec(
         select(Tick)
         .where(Tick.symbol_code == symbol_code, Tick.ts >= since)
@@ -35,9 +36,16 @@ def _recent_ticks(session: Session, symbol_code: str, since: datetime) -> pd.Dat
     ).all()
     if not rows:
         return pd.DataFrame()
-    df = pd.DataFrame(
-        [{"ts": r.ts, "price": r.price, "volume": r.volume} for r in rows if r.price]
-    )
+    prev = session.exec(
+        select(Tick)
+        .where(Tick.symbol_code == symbol_code, Tick.ts < since, Tick.price > 0)
+        .order_by(Tick.ts.desc())
+        .limit(1)
+    ).first()
+    recs = [{"ts": r.ts, "price": r.price, "volume": r.volume, "prev": False} for r in rows if r.price]
+    if prev is not None:
+        recs.insert(0, {"ts": prev.ts, "price": prev.price, "volume": prev.volume, "prev": True})
+    df = pd.DataFrame(recs)
     if df.empty:
         return df
     df = df.set_index("ts")
@@ -65,7 +73,20 @@ def build_bars(
         ticks = _recent_ticks(session, code, since)
         if ticks.empty:
             continue
-        vol_delta = ticks["volume"].diff().fillna(0.0).clip(lower=0.0)
+        vol = ticks["volume"].fillna(0.0)
+        diff = vol.diff()
+        # 累計出来高が減った＝日付が変わってリセット。その tick までの出来高は新しい累計値そのもの
+        diff = diff.where(diff.isna() | (diff >= 0), vol)
+        if (vol > 0).any():
+            # 約定があった tick だけ。直前 tick が無い先頭（diff が NaN）は約定扱いで残す
+            traded = diff.isna() | (diff > 0)
+        else:
+            traded = pd.Series(True, index=ticks.index)  # 出来高の情報が無い: 全 tick で作る
+        keep = traded & ~ticks["prev"]
+        vol_delta = diff.fillna(0.0).clip(lower=0.0)[keep]
+        ticks = ticks[keep]
+        if ticks.empty:
+            continue
 
         for tf in timeframes:
             rule = TIMEFRAME_TO_PANDAS[tf]
