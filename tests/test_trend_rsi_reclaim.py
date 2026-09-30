@@ -58,3 +58,41 @@ def test_trend_filter_blocks_opposite():
 
 def test_warmup_guard():
     assert _sig([100.0] * 20) is None
+
+
+def _two_day_bars(closes, split, day2_open=None):
+    """前半 split 本を前日、残りを当日の5分足にする（ts は naive UTC、00:00=JST 9:00）。"""
+    d1 = pd.date_range("2026-09-28 00:00", periods=split, freq="5min")
+    d2 = pd.date_range("2026-09-29 00:00", periods=len(closes) - split, freq="5min")
+    c = pd.Series(closes, index=d1.append(d2), dtype=float)
+    df = pd.DataFrame({"open": c, "high": c + 1, "low": c - 1, "close": c, "volume": 1000.0})
+    if day2_open is not None:
+        df.iloc[split, df.columns.get_loc("open")] = day2_open
+    return df
+
+
+def _sig_bars(bars, params):
+    strat = TrendRsiReclaim(params)
+    ctx = Context(symbol="X", now=bars.index[-1].to_pydatetime(), bars=bars, position=Position())
+    return strat.on_bar(ctx)
+
+
+def test_gap_filter_blocks_buy_on_gap_down_day():
+    split = 60
+    up_day = _two_day_bars(BUY_CLOSES, split)  # 当日の始値 > 前日終値（上昇の途中で日付が変わる）
+    assert _sig_bars(up_day, {"gap_filter": True}).side == "BUY"
+    down_day = _two_day_bars(BUY_CLOSES, split, day2_open=BUY_CLOSES[split - 1] - 10)  # ギャップダウン
+    assert _sig_bars(down_day, {"gap_filter": True}) is None
+    assert _sig_bars(down_day, {"gap_filter": False}).side == "BUY"  # 既定は絞らない
+
+
+def test_min_pullback_requires_deeper_rsi_dip():
+    import app.strategy.indicators as ind
+
+    bars = _bars(BUY_CLOSES)
+    lowest = float(ind.rsi(bars["close"], 14).iloc[-12:].min())
+    enough = 40 - lowest - 0.5   # 実際の押しより浅い条件 → 建てる
+    too_deep = 40 - lowest + 0.5  # 実際の押しより深い条件 → 建てない
+    assert _sig(BUY_CLOSES, {"min_pullback": enough}).side == "BUY"
+    assert _sig(BUY_CLOSES, {"min_pullback": too_deep}) is None
+    assert _sig(BUY_CLOSES, {"min_pullback": 0}).side == "BUY"
