@@ -88,6 +88,9 @@ bridge は `RssMarginOpenOrder`（信用区分 4=いちにち / 2=一般無期�
   「受信中」に見える）。足は累計出来高が増えた tick からだけ作る（`app/aggregator.py`。2026-09-30 に凍結値の
   横ばい足で MACD が潰れ、復旧時の値飛びで誤シグナルが出た）。取引時間中に株価の停止・凍結が3分続くと
   `app/engine/watchdog.py` が Slack/メールで通知する。旧集計の残骸は `scripts/clean_frozen_bars.py` で消せる。
+- tick テーブルは毎日数万行増える。「銘柄ごとの最新」を取るクエリは必ず `.limit(1)` を付け、複合インデックス
+  （`app/db.py` の `_INDEXES`）に乗せる（付け忘れで /risk が 5.7 秒かかっていた）。古い tick は
+  `app/retention.py` が取引時間外に削除（`app.tick_retention_days`、既定30日。各銘柄の最新1件は残す）。
 - Windows 機の git 作者は `thosokawa <t.hosokawa.pc@gmail.com>`（リポジトリローカル設定）。
 - コミット前に必ず: `.venv/bin/pytest -q` と
   `.venv/bin/ruff check app/ tests/ bridge/ scripts/` の両方を通す。

@@ -21,6 +21,8 @@ class AppCfg:
     agg_timeframes: list[str] = field(default_factory=lambda: ["1m", "5m"])
     # live エンジン（確定足 -> on_bar -> シグナル通知）を回す間隔（秒）。0 で無効。
     live_interval_sec: float = 20.0
+    # 古い tick（生の気配）を消すまでの日数。足は作り終えているので画面・売買には使わない。0 で消さない。
+    tick_retention_days: int = 30
 
 
 @dataclass

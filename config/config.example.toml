@@ -6,6 +6,8 @@ agg_interval_sec = 15.0
 agg_timeframes = ["1m", "5m"]
 # live エンジン（確定足 -> on_bar -> シグナル通知）を回す間隔（秒）。0 で無効。
 live_interval_sec = 20.0
+# 古い tick（生の気配）を消すまでの日数（1日1回、取引時間外に削除）。0 で消さない。
+tick_retention_days = 30
 
 [notify]
 # Slack Incoming Webhook URL。P2 でシグナル通知に使用。

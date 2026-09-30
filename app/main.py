@@ -9,11 +9,15 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session
 
+from app import retention
 from app.aggregator import build_bars
 from app.config import get_config
 from app.db import engine, init_db
 from app.engine import live, watchdog
+from app.engine.risk import get_risk_engine
+from app.models import utcnow
 from app.web.routes import router
+from app.web.status import market_phase
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("main")
@@ -34,7 +38,13 @@ async def _aggregator_loop() -> None:
                         watchdog.check(s)
                     except Exception:  # noqa: BLE001
                         log.exception("watchdog error")
-                    return n
+                try:
+                    # 古い tick を取引時間外に削除（6時間に1回。app/retention.py）
+                    in_session = market_phase(utcnow(), get_risk_engine().cfg.session_windows)[1]
+                    retention.maybe_prune(engine, cfg.tick_retention_days, in_session)
+                except Exception:  # noqa: BLE001
+                    log.exception("tick retention error")
+                return n
 
             n = await loop.run_in_executor(None, _run)
             if n:
