@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% block content %}
 <p><a href="/backtests">← 履歴</a></p>
-<h2>バックテスト #{{ run.id }}</h2>
+<div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap">
+  <h2 style="margin: 0">バックテスト #{{ run.id }}</h2>
+  <a href="{{ register_url }}" role="button" class="small" style="margin-left: auto">この設定で自動売買の戦略に登録</a>
+</div>
 <p><strong>{{ d.logic }}</strong> — <span class="mono">{{ run.symbol_code }}</span>{% if symbol_name %} {{ symbol_name }}{% endif %} / <span class="mono">{{ run.timeframe }}</span><br>
 <small class="muted">実行 {{ run.created_at | jst('%Y-%m-%d %H:%M') }} ・ 期間 {{ run.start | jst('%Y-%m-%d %H:%M') }} 〜 {{ run.end | jst('%Y-%m-%d %H:%M') }}（JST）</small></p>
 

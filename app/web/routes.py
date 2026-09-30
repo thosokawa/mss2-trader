@@ -4,6 +4,7 @@ import json
 import re
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -432,6 +433,7 @@ def backtest_run(
     s.commit()
 
     symbols = s.exec(select(Symbol).order_by(Symbol.code)).all()
+    name = _symbol_names(s, [symbol_code])[symbol_code]
     return templates.TemplateResponse(
         request,
         "backtest.html",
@@ -440,7 +442,8 @@ def backtest_run(
             symbols=symbols,
             result=result,
             run_id=run.id,
-            symbol_name=_symbol_names(s, [symbol_code])[symbol_code],
+            symbol_name=name,
+            register_url=register_strategy_url(run, name),
             class_path=class_path,
             selected=symbol_code,
             selected_timeframe=timeframe,
@@ -458,12 +461,27 @@ def _symbol_names(s: Session, codes) -> dict[str, str]:
     return out
 
 
+LIVE_TIMEFRAMES = ("1m", "5m", "15m")
+
+
+def register_strategy_url(run: BacktestRun, symbol_name: str = "") -> str:
+    """バックテストの設定（ロジック・パラメータ・銘柄・足）を入れた状態の「戦略を追加」画面の URL。
+    足が日足など自動売買で使えないものなら、足は入れない（画面の既定 5m のまま）。"""
+    logic = strategy_view.LOGIC_LABELS.get(run.class_path, run.class_path.rsplit(":", 1)[-1])
+    q = {"class_path": run.class_path, "params_json": run.params_json or "{}", "symbols": run.symbol_code,
+         "name": f"{symbol_name or run.symbol_code} {logic}"}
+    if run.timeframe in LIVE_TIMEFRAMES:
+        q["timeframe"] = run.timeframe
+    return "/strategies/new?" + urlencode(q)
+
+
 @router.get("/backtests", response_class=HTMLResponse)
 def backtests(request: Request, s: Session = Depends(get_session)):
     runs = s.exec(select(BacktestRun).order_by(BacktestRun.created_at.desc()).limit(100)).all()
     # 条件（パラメータ）は生の JSON ではなく「トレンド×RSI出戻り（10/30/…）・5m・買い・売り…」の要約で出す
-    parsed = [(r, json.loads(r.metrics_json or "{}"), strategy_view.describe(r)) for r in runs]
     names = _symbol_names(s, [r.symbol_code for r in runs])
+    parsed = [(r, json.loads(r.metrics_json or "{}"), strategy_view.describe(r),
+               register_strategy_url(r, names.get(r.symbol_code, ""))) for r in runs]
     return templates.TemplateResponse(request, "backtests.html", _ctx(request, runs=parsed, names=names))
 
 
@@ -475,11 +493,12 @@ def backtest_detail(run_id: int, request: Request, s: Session = Depends(get_sess
     trades = s.exec(
         select(BacktestTrade).where(BacktestTrade.run_id == run_id).order_by(BacktestTrade.entry_ts)
     ).all()
+    name = _symbol_names(s, [run.symbol_code])[run.symbol_code]
     return templates.TemplateResponse(
         request,
         "backtest_detail.html",
         _ctx(request, run=run, metrics=json.loads(run.metrics_json or "{}"), trades=trades,
-             d=strategy_view.describe(run), symbol_name=_symbol_names(s, [run.symbol_code])[run.symbol_code]),
+             d=strategy_view.describe(run), symbol_name=name, register_url=register_strategy_url(run, name)),
     )
 
 
@@ -653,8 +672,10 @@ def _strategy_form(request: Request, *, st: Strategy | None, values: dict, error
 @router.get("/strategies/new", response_class=HTMLResponse)
 def strategy_new(request: Request):
     q = request.query_params
-    values = {"name": "", "class_path": q.get("class_path", ""), "symbols": q.get("symbols", ""),
-              "timeframe": q.get("timeframe", "5m"), "mode": "notify",
+    tf = q.get("timeframe", "5m")
+    values = {"name": q.get("name", ""), "class_path": q.get("class_path", ""),
+              "symbols": q.get("symbols", ""),
+              "timeframe": tf if tf in LIVE_TIMEFRAMES else "5m", "mode": "notify",
               "params_json": q.get("params_json", "")}
     return _strategy_form(request, st=None, values=values)
 

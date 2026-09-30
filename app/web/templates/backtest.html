@@ -63,6 +63,8 @@
 
 {% if result %}
   <h3>結果 — {{ result.symbol }}{% if symbol_name %} {{ symbol_name }}{% endif %} / {{ result.timeframe }} <a href="/backtests/{{ run_id }}"><small>保存済み #{{ run_id }}</small></a></h3>
+  <p><a href="{{ register_url }}" role="button" class="small">この設定で自動売買の戦略に登録</a>
+    <small class="muted">ロジック・パラメータ・銘柄・足を入れた状態で「戦略を追加」を開きます（モードは通知のみから）</small></p>
   {% if result.metrics.get('error') or result.metrics.get('note') %}
     <p>{{ result.metrics.get('error') or result.metrics.get('note') }}</p>
   {% else %}

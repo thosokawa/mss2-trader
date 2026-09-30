@@ -779,6 +779,44 @@ def test_backtest_history_is_readable(client):
     assert "トレンド×RSI出戻り（10/30/14" in html and "デイトレ" in html
     assert "▲ +29,600" in html and "70.6%" in html
     detail = client.get(f"/backtests/{rid}").text
-    assert "params_json" not in detail and '"mid_period"' not in detail
+    assert "params {" not in detail and '"mid_period"' not in detail  # 生の JSON は出さない
     assert "中期MA期間" in detail and "買い・売り" in detail and "またがない" in detail
     assert "実行 2026-09-29 15:30" in detail and "ＪＸ金属" in detail
+
+
+def test_backtest_can_be_registered_as_strategy(client):
+    """バックテストの設定（ロジック・パラメータ・銘柄・足・名前）を入れた状態で「戦略を追加」を開ける。"""
+    import html as htmllib
+    import json
+    import re
+    from datetime import datetime
+
+    from sqlmodel import Session
+
+    from app.db import engine
+    from app.models import BacktestRun
+
+    cp = "app.strategy.examples.trend_rsi_reclaim:TrendRsiReclaim"
+    params = {"rsi_period": 9, "rsi_buy_level": 45, "direction": "both", "exit_rule": "sma_cross"}
+    with Session(engine) as s:
+        run = BacktestRun(strategy_name="TrendRsiReclaim", class_path=cp, params_json=json.dumps(params),
+                          symbol_code="5016", timeframe="5m", metrics_json="{}",
+                          start=datetime(2026, 6, 29), end=datetime(2026, 9, 29))
+        daily = BacktestRun(strategy_name="TrendRsiReclaim", class_path=cp, params_json="{}",
+                            symbol_code="5016", timeframe="1d", metrics_json="{}")
+        s.add(run)
+        s.add(daily)
+        s.commit()
+        rid, did = run.id, daily.id
+    detail = client.get(f"/backtests/{rid}").text
+    url = htmllib.unescape(re.search(r'href="(/strategies/new[?][^"]+)"', detail).group(1))
+    assert "この設定で自動売買の戦略に登録" in detail
+    form = client.get(url).text
+    assert cp in form and 'value="5016"' in form and "トレンド×RSI出戻り" in form
+    assert '<option selected>5m</option>' in form or "selected>5m" in form
+    assert "&#34;rsi_period&#34;: 9" in form or '"rsi_period": 9' in form or "rsi_period&#34;: 9" in form
+    # 日足のバックテストは足を入れない（自動売買は 1m/5m/15m）
+    ddetail = client.get(f"/backtests/{did}").text
+    durl = htmllib.unescape(re.search(r'href="(/strategies/new[?][^"]+)"', ddetail).group(1))
+    assert "timeframe" not in durl
+    assert "/strategies/new?" in client.get("/backtests").text

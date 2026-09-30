@@ -11,7 +11,7 @@
     <th class="num gloss" title="{{ '合計損益'|gloss }}">合計損益</th><th></th>
   </tr></thead>
   <tbody>
-  {% for r, m, d in runs %}
+  {% for r, m, d, reg in runs %}
     <tr>
       <td class="mono">{{ r.id }}</td><td class="mono">{{ r.created_at | jst('%m/%d %H:%M') }}</td>
       <td><span class="mono">{{ r.symbol_code }}</span>{% if names.get(r.symbol_code) %}<br><small>{{ names[r.symbol_code] }}</small>{% endif %}</td>
@@ -25,7 +25,7 @@
       <td class="num mono">0</td><td class="num muted">—</td>
       <td class="num"><small class="muted">{{ m.get('error') or m.get('note') or '約定なし' }}</small></td>
       {% endif %}
-      <td><a href="/backtests/{{ r.id }}">詳細</a></td>
+      <td style="white-space: nowrap"><a href="/backtests/{{ r.id }}">詳細</a> ・ <a href="{{ reg }}" title="この設定で自動売買の戦略に登録">登録</a></td>
     </tr>
   {% endfor %}
   </tbody>
