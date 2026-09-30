@@ -116,6 +116,7 @@ def last_open_order(session: Session, strategy_id: int, symbol_code: str) -> Ord
             Order.status.not_in(tuple(TERMINAL_FAILURE)),
         )
         .order_by(Order.id.desc())
+        .limit(1)
     ).first()
 
 
@@ -314,6 +315,7 @@ def _realized_pnl(session: Session, exit_order: Order) -> float | None:
             Order.id < exit_order.id,
         )
         .order_by(Order.id.desc())
+        .limit(1)
     ).first()
     if entry is None or not _exec_price(entry) or not _exec_price(exit_order):
         return None

@@ -25,6 +25,23 @@ def init_db() -> None:
     SQLModel.metadata.create_all(engine)
     added = _migrate_columns()
     _migrate_symbol_sets(added)
+    _ensure_indexes()
+
+
+# 画面の表示が遅くならないための複合インデックス（tick は数十万行に増える）。
+# 「銘柄ごとの最新 tick」「銘柄・足ごとの最新の足」を並べ替えなしで1行で取れるようにする。
+_INDEXES: list[tuple[str, str, str]] = [
+    ("ix_tick_symbol_ts", "tick", "symbol_code, ts"),
+    ("ix_tick_received_at", "tick", "received_at"),
+    ("ix_bar_symbol_tf_ts", "bar", "symbol_code, timeframe, ts"),
+    ("ix_signal_strategy_ts", "signal", "strategy_id, ts"),
+]
+
+
+def _ensure_indexes() -> None:
+    with engine.begin() as conn:
+        for name, table, cols in _INDEXES:
+            conn.exec_driver_sql(f'CREATE INDEX IF NOT EXISTS {name} ON "{table}" ({cols})')
 
 
 # create_all() は新規テーブルは作るが、既存テーブルへの列追加はしない。

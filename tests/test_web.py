@@ -820,3 +820,18 @@ def test_backtest_can_be_registered_as_strategy(client):
     durl = htmllib.unescape(re.search(r'href="(/strategies/new[?][^"]+)"', ddetail).group(1))
     assert "timeframe" not in durl
     assert "/strategies/new?" in client.get("/backtests").text
+
+
+def test_indexes_for_latest_rows_exist(client):
+    """「銘柄ごとの最新 tick」等を並べ替えなしで取るための複合インデックス（画面の表示速度のため）。"""
+    from app.db import engine
+
+    with engine.connect() as conn:
+        names = {r[0] for r in conn.exec_driver_sql("SELECT name FROM sqlite_master WHERE type='index'")}
+        plan = conn.exec_driver_sql(
+            "EXPLAIN QUERY PLAN SELECT * FROM tick WHERE symbol_code='9984' AND price > 0 "
+            "ORDER BY ts DESC LIMIT 1"
+        ).fetchall()
+    want = {"ix_tick_symbol_ts", "ix_tick_received_at", "ix_bar_symbol_tf_ts", "ix_signal_strategy_ts"}
+    assert want <= names
+    assert "TEMP B-TREE" not in " ".join(str(r) for r in plan)  # 全件並べ替えをしない

@@ -47,11 +47,12 @@ def latest_price(session: Session, symbol_code: str) -> float | None:
         select(Tick)
         .where(Tick.symbol_code == symbol_code, Tick.price > 0)
         .order_by(Tick.ts.desc())
+        .limit(1)
     ).first()
     if t:
         return t.price
     b = session.exec(
-        select(Bar).where(Bar.symbol_code == symbol_code).order_by(Bar.ts.desc())
+        select(Bar).where(Bar.symbol_code == symbol_code).order_by(Bar.ts.desc()).limit(1)
     ).first()
     return b.close if b else None
 

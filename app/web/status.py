@@ -128,7 +128,7 @@ def strategy_state(s: Session, st: Strategy, names: dict | None = None) -> dict:
         else:
             pos = position_from_signals(s, st.id, code, qty_hint)
         tick = s.exec(
-            select(Tick).where(Tick.symbol_code == code, Tick.price > 0).order_by(Tick.ts.desc())
+            select(Tick).where(Tick.symbol_code == code, Tick.price > 0).order_by(Tick.ts.desc()).limit(1)
         ).first()
         last = tick.price if tick else None
         unrealized = (
@@ -143,6 +143,7 @@ def strategy_state(s: Session, st: Strategy, names: dict | None = None) -> dict:
         select(Signal)
         .where(Signal.strategy_id == st.id, Signal.symbol_code.in_(codes))
         .order_by(Signal.ts.desc(), Signal.id.desc())
+        .limit(1)
     ).first() if codes else None
     d = describe(st)
     return {
