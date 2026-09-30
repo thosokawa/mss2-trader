@@ -127,7 +127,7 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
   <tbody>
     <tr><td>SMAクロス</td><td>トレンドフォロー</td><td>短期/長期SMAのゴールデン/デッドクロス</td></tr>
     <tr><td>移動平均+RSI</td><td>トレンドフォロー</td><td>終値とMAの関係 + 傾き + RSI帯でエントリー</td></tr>
-    <tr><td>トレンド×RSI出戻り</td><td>アラート専用</td><td>短期MA/中期MAの上下 × RSIの40/60出戻りで通知（<code>notify</code>向け）</td></tr>
+    <tr><td>トレンド×RSI出戻り</td><td>押し目・戻り</td><td>短期MA/中期MAの上下 × RSIの40/60出戻りで建てる。決済は反対側のシグナル、または「トレンド反転で決済」ON ならMAの上下が逆になった時点</td></tr>
     <tr><td>MACDクロス</td><td>モメンタム</td><td>MACD線がシグナル線を上抜け/下抜け</td></tr>
     <tr><td>MACDクロス＋上位足トレンド</td><td>フィルタ付きトレンド</td><td>上位足（15分足など）の EMA トレンドと同じ向きのときだけ MACD クロスで建てる</td></tr>
     <tr><td>ボリンジャー逆張り</td><td>逆張り</td><td>下限バンド反発で買い、中心線/上限で手仕舞い</td></tr>
