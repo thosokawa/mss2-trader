@@ -42,6 +42,9 @@ from app.web.glossary import GLOSSARY, gloss
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+# tojson はキーを並べ替えるのが既定。戦略パラメータの入力欄が英字キーのアルファベット順に
+# 並んでしまうので、定義した順（戦略固有 → 株数 → 共通パラメータ）を保つ
+templates.env.policies["json.dumps_kwargs"] = {"sort_keys": False}
 _STATIC_DIR = Path(__file__).parent / "static"
 
 

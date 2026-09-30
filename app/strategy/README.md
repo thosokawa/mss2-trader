@@ -84,6 +84,13 @@ Signal(side, qty=None, reason="", order_type="MKT", limit_price=None)
 （両方併用も可。バックテストは `run_backtest` 内でストップ判定が先に走り、当たれば `on_bar` はその
 足で呼ばれない）。
 
+## 決済条件（exit_rule）
+
+全戦略共通パラメータ。`"signal"`（既定・エントリー条件の反転シグナル）なら `on_bar()` が出す手仕舞い
+（EXIT/SELL/COVER）で決済。`"sma_cross"`（SMAクロス）なら建玉があるとき `on_bar()` の手仕舞いは使わず、
+買建は短期SMA（`exit_sma_fast`、既定10）が長期SMA（`exit_sma_slow`、既定30）を下抜けた足、売建は
+上抜けた足で手仕舞う（`Strategy.decide`）。損切り/利確・大引け手仕舞いはどちらでも効く。
+
 ## 大引けをまたぐか（hold_overnight）
 
 `hold_overnight`（既定 `True`＝持ち越す）も全戦略共通パラメータ。`False` にすると日中足
@@ -116,7 +123,7 @@ Signal(side, qty=None, reason="", order_type="MKT", limit_price=None)
 |---|---|---|
 | `sma_cross.py` | トレンドフォロー | 短期/長期 SMA のゴールデン/デッドクロス |
 | `ma_rsi.py` | トレンドフォロー | 終値とMAの関係（上抜け/上方）+ 傾き + RSI帯でエントリー |
-| `trend_rsi_reclaim.py` | 押し目・戻り | 短期MA>中期MAでRSIが40回復→買い / 短期MA<中期MAでRSIが60割れ→売り。決済は反対側のシグナル（トレンド反転＋RSI）。`exit_on_trend_flip`（トレンド反転で決済）ON なら短期MAと中期MAが建玉と逆になった足で RSI を待たずに手仕舞い |
+| `trend_rsi_reclaim.py` | 押し目・戻り | 短期MA>中期MAでRSIが40回復→買い / 短期MA<中期MAでRSIが60割れ→売り。決済は反対側のシグナル（トレンド反転＋RSI） |
 | `macd_cross.py` | モメンタム | MACD線がシグナル線を上抜け/下抜け |
 | `macd_trend.py` | モメンタム＋上位足フィルタ | 上位足（例 15分足）の EMA トレンドと同じ向きのときだけ MACD クロスで建てる。上位足は売買する足を戦略内でまとめ直して作る（`indicators.resample_completed`。形成中の上位足は使わない） |
 | `bollinger_reversion.py` | **逆張り** | ボリンジャー下限を割れてから反発で買い、中心線/上限で手仕舞い |

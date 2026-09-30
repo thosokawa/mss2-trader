@@ -13,6 +13,17 @@ from datetime import datetime
 
 import pandas as pd
 
+EXIT_RULES = ("signal", "sma_cross")
+CLOSE_SIDES = ("EXIT", "SELL", "COVER")
+
+
+def exit_rule_of(params: dict) -> str:
+    """全戦略共通パラメータ exit_rule（決済条件）:
+    "signal"=エントリー条件の反転シグナル（on_bar の手仕舞い。既定）/ "sma_cross"=SMAクロス。
+    """
+    v = str(params.get("exit_rule") or "").strip().lower()
+    return v if v in EXIT_RULES else "signal"
+
 
 @dataclass
 class Position:
@@ -101,11 +112,45 @@ class Strategy:
         """BUY（新規買い）を出してよいか（direction が long / both）。"""
         return self.direction in ("long", "both")
 
+    @property
+    def exit_rule(self) -> str:
+        return exit_rule_of(self.params)
+
+    def _sma_cross_exit(self, ctx: Context) -> Signal | None:
+        """決済条件=SMAクロス: 買建は短期SMAが長期SMAを下抜けた足、売建は上抜けた足で手仕舞う。"""
+        fast_n = int(self.params.get("exit_sma_fast") or 10)
+        slow_n = int(self.params.get("exit_sma_slow") or 30)
+        c = ctx.close
+        if len(c) < max(fast_n, slow_n) + 1:
+            return None
+        fast = c.rolling(fast_n).mean()
+        slow = c.rolling(slow_n).mean()
+        prev_diff = float(fast.iloc[-2] - slow.iloc[-2])
+        diff = float(fast.iloc[-1] - slow.iloc[-1])
+        tag = f"SMA{fast_n}/{slow_n}"
+        if ctx.position.is_long and prev_diff >= 0 > diff:
+            return Signal("EXIT", reason=f"決済: {tag} デッドクロス")
+        if ctx.position.is_short and prev_diff <= 0 < diff:
+            return Signal("EXIT", reason=f"決済: {tag} ゴールデンクロス")
+        return None
+
     def decide(self, ctx: Context) -> Signal | None:
         """エンジン（backtest / live）が呼ぶ入口。on_bar の結果から売買方向に合わない
-        新規建てを捨てる（手仕舞いは常に通す）。各戦略は BUY/SHORT を気にせず書いてよい。"""
+        新規建てを捨てる（手仕舞いは常に通す）。各戦略は BUY/SHORT を気にせず書いてよい。
+
+        決済条件（exit_rule）が SMAクロス なら、建玉があるときは SMA のクロスで手仕舞い、
+        on_bar が出す手仕舞い（EXIT/SELL/COVER）は使わない。損切り・利確・大引け手仕舞いは
+        エンジン側（stops.py / eod.py）なので決済条件に関係なく効く。
+        """
+        sma_exit = self.exit_rule == "sma_cross"
+        if sma_exit and not ctx.position.is_flat:
+            hit = self._sma_cross_exit(ctx)
+            if hit is not None:
+                return hit
         sig = self.on_bar(ctx)
         if sig is None:
+            return None
+        if sma_exit and not ctx.position.is_flat and sig.side in CLOSE_SIDES:
             return None
         if sig.side == "BUY" and not self.allow_long:
             return None

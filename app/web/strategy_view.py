@@ -8,11 +8,13 @@ from __future__ import annotations
 import json
 
 from app.models import BacktestRun, Strategy
+from app.strategy.base import exit_rule_of
 from app.strategy.registry import BUILTIN, UNIVERSAL_DEFAULTS, builtin_param_meta, builtin_params
 
 LOGIC_LABELS = {cp: label for label, cp in BUILTIN.items()}
 MODE_LABELS = {"notify": "通知のみ", "paper": "ペーパー", "live": "実発注"}
 DIRECTION_LABELS = {"long": "買いのみ", "short": "売りのみ", "both": "買い・売り"}
+LEGACY_KEYS = ("allow_short",)  # 旧パラメータ（direction に置き換え済み）
 
 
 def load_params(st: Strategy | BacktestRun) -> dict:
@@ -60,7 +62,7 @@ def describe(st: Strategy | BacktestRun) -> dict:
         logic_params.append((m.get("label", key), _fmt(merged.get(key)), m.get("help", "")))
     # 既定値に無いキー（手で JSON に足したもの等）も落とさず出す
     for key, v in params.items():
-        if key not in defaults and key not in UNIVERSAL_DEFAULTS and key != "allow_short":
+        if key not in defaults and key not in UNIVERSAL_DEFAULTS and key not in LEGACY_KEYS:
             logic_params.append((key, _fmt(v), ""))
 
     direction = merged.get("direction") or ("both" if merged.get("allow_short") else "long")
@@ -70,12 +72,17 @@ def describe(st: Strategy | BacktestRun) -> dict:
         hold = hold.strip().lower() not in ("false", "0", "no", "off", "")
     stop, take = _pct(merged.get("stop_loss_pct")), _pct(merged.get("take_profit_pct"))
     qty = merged.get("qty", 100)
+    exit_rule = exit_rule_of(merged)
+    exit_fast, exit_slow = _fmt(merged.get("exit_sma_fast") or 10), _fmt(merged.get("exit_sma_slow") or 30)
+    exit_text = (f"SMAクロス（{exit_fast}/{exit_slow}）" if exit_rule == "sma_cross"
+                 else "エントリー条件の反転シグナル")
 
     common = [
         ("株数", f"{_fmt(qty)} 株", "1回のエントリーで売買する株数"),
         ("売買方向", DIRECTION_LABELS.get(direction, direction), ""),
         ("取引区分", "信用" if trade_type == "margin" else "現物", ""),
         ("大引けをまたぐ", "またぐ（持ち越す）" if hold else "またがない（大引け前に手仕舞い）", ""),
+        ("決済条件", exit_text, "損切り・利確・大引け手仕舞いはこれとは別に効く"),
         ("損切り", stop or "なし", "建値からこの%逆行したら成行で手仕舞い"),
         ("利確", take or "なし", "建値からこの%進んだら成行で手仕舞い"),
     ]
@@ -88,6 +95,8 @@ def describe(st: Strategy | BacktestRun) -> dict:
              DIRECTION_LABELS.get(direction, direction), "信用" if trade_type == "margin" else "現物"]
     if not hold:
         parts.append("デイトレ")
+    if exit_rule == "sma_cross":
+        parts.append(f"決済SMA{exit_fast}/{exit_slow}")
     if stop:
         parts.append(f"損切り{stop}")
     if take:

@@ -18,15 +18,19 @@ BUILTIN = {
 }
 
 
-# どの戦略にも共通で持たせるパラメータ（損切り/利確/大引けをまたぐか/空売り/取引区分）。
+# どの戦略にも共通で持たせるパラメータ（損切り/利確/大引けをまたぐか/売買方向/取引区分/決済条件）。
 # app/engine/stops.py・eod.py・live.py 等が strategy.params から読む。既定は従来どおりの挙動
 # （損切り/利確は None＝無効、hold_overnight は True＝持ち越す、空売りしない、現物）。
+# 並び順がそのまま入力欄の順（戦略固有のパラメータ → 株数 のあと）
 UNIVERSAL_DEFAULTS = {
-    "stop_loss_pct": None,
-    "take_profit_pct": None,
-    "hold_overnight": True,
     "direction": "long",
     "trade_type": "cash",
+    "hold_overnight": True,
+    "exit_rule": "signal",
+    "exit_sma_fast": 10,
+    "exit_sma_slow": 30,
+    "stop_loss_pct": None,
+    "take_profit_pct": None,
 }
 UNIVERSAL_META = {
     "stop_loss_pct": {
@@ -59,6 +63,23 @@ UNIVERSAL_META = {
     },
 }
 
+UNIVERSAL_META["exit_rule"] = {
+    "label": "決済条件", "choices": ["signal", "sma_cross"], "wide": True,
+    "choice_labels": {"signal": "エントリー条件の反転シグナル", "sma_cross": "SMAクロス"},
+    "help": "反転シグナル: 戦略のエントリー条件の逆が出たら手仕舞い（従来どおり）。"
+            "SMAクロス: 買建は短期SMAが長期SMAを下抜けたら、売建は上抜けたら手仕舞い"
+            "（戦略の手仕舞いシグナルは使わない）。"
+            "損切り・利確・大引け手仕舞いはどちらでも効く",
+}
+UNIVERSAL_META["exit_sma_fast"] = {
+    "label": "決済SMA短期", "type": "number", "show_if": {"exit_rule": "sma_cross"},
+    "help": "決済条件=SMAクロスのときの短期SMAの本数",
+}
+UNIVERSAL_META["exit_sma_slow"] = {
+    "label": "決済SMA長期", "type": "number", "show_if": {"exit_rule": "sma_cross"},
+    "help": "決済条件=SMAクロスのときの長期SMAの本数",
+}
+
 # 株数の入力欄: 上下の矢印で 100 株（国内株の売買単位）ずつ増減、最小 100
 QTY_META = {"step": 100, "min": 100}
 
@@ -79,7 +100,10 @@ def builtin_params() -> dict[str, dict]:
     out: dict[str, dict] = {}
     for cp in BUILTIN.values():
         try:
-            out[cp] = {**dict(load_strategy_class(cp).default_params), **UNIVERSAL_DEFAULTS}
+            own = dict(load_strategy_class(cp).default_params)
+            qty = {"qty": own.pop("qty")} if "qty" in own else {}
+            # 入力欄の順: 戦略固有 → 株数 → 共通パラメータ
+            out[cp] = {**own, **qty, **UNIVERSAL_DEFAULTS}
         except Exception:  # noqa: BLE001
             out[cp] = dict(UNIVERSAL_DEFAULTS)
     return out

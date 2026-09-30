@@ -13,20 +13,13 @@
    allow_short をオンにすると建玉を見て、買いシグナルで「売建なら買戻し / ノーポジなら買い」、
    売りシグナルで「買建なら手仕舞い / ノーポジなら売建（SHORT）」を出す。
 
-exit_on_trend_flip（トレンド反転で決済）を ON にすると、建玉とトレンドが逆になった足で
-RSI の条件を待たずに手仕舞う（買建で短期MA<中期MA / 売建で短期MA>中期MA）。
-OFF（既定）なら従来どおり反対側のシグナル（トレンド反転＋RSI のライン割れ/回復）まで持つ。
+決済は既定で反対側のシグナル（トレンド反転＋RSI のライン割れ/回復）。全戦略共通の「決済条件」を
+SMAクロス にすると SMA のクロスで手仕舞う（app/strategy/base.py の Strategy.decide）。
 """
 from __future__ import annotations
 
 from app.strategy.base import Context, Signal, Strategy
 from app.strategy.indicators import ema, rsi, sma
-
-
-def _truthy(v) -> bool:
-    if isinstance(v, str):
-        return v.strip().lower() not in ("false", "0", "no", "off", "")
-    return bool(v)
 
 
 class TrendRsiReclaim(Strategy):
@@ -39,7 +32,6 @@ class TrendRsiReclaim(Strategy):
         "rsi_period": 14,
         "rsi_buy_level": 40.0,
         "rsi_sell_level": 60.0,
-        "exit_on_trend_flip": False,
         "qty": 100,
     }
     param_meta = {
@@ -51,11 +43,6 @@ class TrendRsiReclaim(Strategy):
                            "help": "短期MA>中期MAのとき、このラインを下から上に回復したら買い"},
         "rsi_sell_level": {"label": "売りのRSIライン",
                             "help": "短期MA<中期MAのとき、このラインを上から下に割ったら売り"},
-        "exit_on_trend_flip": {
-            "label": "トレンド反転で決済", "type": "bool",
-            "help": "ON: 買建は短期MA<中期MAになった足、売建は短期MA>中期MAになった足で、"
-                    "RSI の条件を待たずに手仕舞う。OFF: 反対側のシグナル（トレンド反転＋RSI）まで持つ",
-        },
         "qty": {"label": "株数", "help": "1回のエントリーで売買する株数"},
     }
 
@@ -86,12 +73,6 @@ class TrendRsiReclaim(Strategy):
         up_reason = f"上昇({tag}) RSI {r_prev:.0f}→{r_now:.0f} が{buy_lv:.0f}回復"
         down_reason = f"下降({tag}) RSI {r_prev:.0f}→{r_now:.0f} が{sell_lv:.0f}割れ"
         pos = ctx.position
-
-        if _truthy(p.get("exit_on_trend_flip", False)):
-            if pos.is_long and down_trend:
-                return Signal("EXIT", reason=f"トレンド反転({tag}) 短期MA<中期MA で手仕舞い")
-            if pos.is_short and up_trend:
-                return Signal("EXIT", reason=f"トレンド反転({tag}) 短期MA>中期MA で手仕舞い")
 
         if self.allow_short:
             if up and pos.is_short:

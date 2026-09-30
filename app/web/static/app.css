@@ -261,6 +261,8 @@ section.block { margin-top: 1.6rem; }
 .pf-field { font-size: .85rem; color: var(--c-sub); }
 .pf-field input, .pf-field select { margin-top: .2rem; }
 .pf-hint { color: var(--c-muted); }
+.pf-field.pf-wide { grid-column: span 2; }
+.pf-field[hidden] { display: none; }
 /* 選ばれている値で色を変える select（param_form.js の choice_classes、戦略編集のモード）。
  * どれを選んでいるか一目で分かるように。リスクの大きい方（信用・実発注）ほど強い色 */
 select.pf-choice { font-weight: 700; }

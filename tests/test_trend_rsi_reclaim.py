@@ -58,25 +58,3 @@ def test_trend_filter_blocks_opposite():
 
 def test_warmup_guard():
     assert _sig([100.0] * 20) is None
-
-
-# 上昇のあと、ゆるやかに下げて短期MA<中期MAになった足（RSI はまだ 60 を割った瞬間ではない）
-FLIP_DOWN = list(np.arange(100, 100 + 60 * 1.2, 1.2)) + list(100 + 59 * 1.2 + np.cumsum([-0.8] * 15))
-FLIP_UP = list(np.arange(220, 220 - 60 * 1.2, -1.2)) + list(220 - 59 * 1.2 + np.cumsum([0.8] * 15))
-
-
-def test_trend_flip_exit_is_off_by_default():
-    assert _sig(FLIP_DOWN, position=Position(qty=100, avg_price=150)) is None
-    assert _sig(FLIP_UP, position=Position(qty=-100, avg_price=150), params={"direction": "both"}) is None
-
-
-def test_trend_flip_exit_closes_long_and_short():
-    on = {"exit_on_trend_flip": True}
-    sig = _sig(FLIP_DOWN, params=on, position=Position(qty=100, avg_price=150))
-    assert sig is not None and sig.side == "EXIT" and "トレンド反転" in sig.reason
-    sig = _sig(FLIP_UP, params={**on, "direction": "both"}, position=Position(qty=-100, avg_price=150))
-    assert sig is not None and sig.side == "EXIT"
-    # 建玉が無ければ何もしない（新規建てはこれまでどおり RSI の条件で）
-    assert _sig(FLIP_DOWN, params=on) is None
-    # 建玉とトレンドが同じ向きなら手仕舞わない
-    assert _sig(FLIP_UP, params=on, position=Position(qty=100, avg_price=150)) is None

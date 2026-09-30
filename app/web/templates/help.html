@@ -127,7 +127,7 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
   <tbody>
     <tr><td>SMAクロス</td><td>トレンドフォロー</td><td>短期/長期SMAのゴールデン/デッドクロス</td></tr>
     <tr><td>移動平均+RSI</td><td>トレンドフォロー</td><td>終値とMAの関係 + 傾き + RSI帯でエントリー</td></tr>
-    <tr><td>トレンド×RSI出戻り</td><td>押し目・戻り</td><td>短期MA/中期MAの上下 × RSIの40/60出戻りで建てる。決済は反対側のシグナル、または「トレンド反転で決済」ON ならMAの上下が逆になった時点</td></tr>
+    <tr><td>トレンド×RSI出戻り</td><td>押し目・戻り</td><td>短期MA/中期MAの上下 × RSIの40/60出戻りで建てる。決済は反対側のシグナル（トレンド反転＋RSI）</td></tr>
     <tr><td>MACDクロス</td><td>モメンタム</td><td>MACD線がシグナル線を上抜け/下抜け</td></tr>
     <tr><td>MACDクロス＋上位足トレンド</td><td>フィルタ付きトレンド</td><td>上位足（15分足など）の EMA トレンドと同じ向きのときだけ MACD クロスで建てる</td></tr>
     <tr><td>ボリンジャー逆張り</td><td>逆張り</td><td>下限バンド反発で買い、中心線/上限で手仕舞い</td></tr>
@@ -139,6 +139,11 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
 <code>paper</code>（擬似約定して<a href="/performance">成績</a>に反映）/
 <code>live</code>（実発注。<a href="#risk">自動売買</a>で発注許可を ON にしない限り発注されない）。</p>
 
+<h4>決済条件</h4>
+<p>パラメータ欄の <strong>決済条件</strong> で手仕舞いの仕方を全戦略共通で選べる。
+<strong>エントリー条件の反転シグナル</strong>（既定）は各戦略の手仕舞いシグナルで決済。
+<strong>SMAクロス</strong> は、買建は短期SMA（決済SMA短期）が長期SMA（決済SMA長期）を下抜けた足、
+売建は上抜けた足で決済する（戦略の手仕舞いシグナルは使わない）。損切り・利確・大引け手仕舞いはどちらでも効く。</p>
 <h4>損切り / 利確</h4>
 <p>パラメータ欄の一番下に <strong>損切り(%)</strong> ・ <strong>利確(%)</strong> が全戦略共通で出る
 （<code>/backtest</code> <code>/strategies</code> <code>/optimize</code> どこでも）。建値からその%
