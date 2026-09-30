@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import trade_chart with context %}
 {% block content %}
 <p><a href="/backtests">← 履歴</a></p>
 <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap">
@@ -38,6 +39,8 @@
 </div>
 {% else %}<p>{{ metrics.get('note') or metrics.get('error') or '約定なし' }}</p>{% endif %}
 
+{{ trade_chart("bt-chart", "/api/chart/backtest/" ~ run.id, "チャート", "下の取引の行をクリックすると、その取引の位置に移動します。") }}
+
 {% if trades %}
 <table style="margin-top:1rem">
   <thead><tr>
@@ -47,7 +50,7 @@
   </tr></thead>
   <tbody>
   {% for t in trades %}
-    <tr>
+    <tr data-chart-from="{{ t.entry_ts | chart_time }}" data-chart-to="{{ t.exit_ts | chart_time }}">
       <td>{{ t.entry_ts | jst }}</td><td>{{ '%.1f'|format(t.entry_price) }}</td>
       <td>{{ t.exit_ts | jst }}</td><td>{{ '%.1f'|format(t.exit_price) }}</td>
       <td>{{ '売' if t.side == 'SHORT' else '買' }} {{ t.qty }}</td>

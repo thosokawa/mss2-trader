@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_tabs.html" import backtest_tabs with context %}
+{% from "_macros.html" import trade_chart with context %}
 {% block content %}
 {{ backtest_tabs() }}
 <h2>バックテスト</h2>
@@ -76,6 +77,7 @@
     <div><div class="k gloss" title="{{ 'PF'|gloss }}">PF</div><div class="v">{{ result.metrics.profit_factor }}</div></div>
     <div><div class="k gloss" title="{{ '最大DD'|gloss }}">最大DD</div><div class="v dn">{{ '{:,.0f}'.format(result.metrics.max_drawdown) }}</div></div>
   </div>
+  {{ trade_chart("bt-chart", "/api/chart/backtest/" ~ run_id, "チャート", "下の取引の行をクリックすると、その取引の位置に移動します。") }}
   <table style="margin-top:1rem">
     <thead><tr>
       <th class="gloss" title="{{ '建'|gloss }}">建</th><th class="gloss" title="{{ '建値'|gloss }}">建値</th>
@@ -85,7 +87,7 @@
     </tr></thead>
     <tbody>
     {% for t in result.trades %}
-      <tr>
+      <tr data-chart-from="{{ t.entry_ts | chart_time }}" data-chart-to="{{ t.exit_ts | chart_time }}">
         <td>{{ t.entry_ts | jst }}</td><td>{{ '%.1f'|format(t.entry_price) }}</td>
         <td>{{ t.exit_ts | jst }}</td><td>{{ '%.1f'|format(t.exit_price) }}</td>
         <td>{{ '売' if t.side == 'SHORT' else '買' }} {{ t.qty }}</td>

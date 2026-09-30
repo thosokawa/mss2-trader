@@ -8,3 +8,28 @@
 {% macro autorefresh(id, sec=5) -%}
 id="{{ id }}" hx-get="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}" hx-select="#{{ id }}" hx-target="this" hx-swap="outerHTML" hx-trigger="every {{ sec }}s [canRefresh(this)]"
 {%- endmacro %}
+
+
+{#
+  trade_chart(id, url, title): ローソク足＋エントリー/決済の印のチャート（static/chart.js）。
+  取引の表の行に data-chart-from / data-chart-to を付けると、行クリックでその取引を表示する。
+  controls: チャート上に置く入力欄（銘柄・期間の切り替えなど）の HTML。
+#}
+{% macro trade_chart(id, url, title="チャート", note="", controls="") -%}
+<section class="card chart-card">
+  <div class="card-head"><h2>{{ title }}</h2>{% if controls %}<div class="chart-controls">{{ controls }}</div>{% endif %}</div>
+  <div id="{{ id }}-legend" class="chart-legend mono">読み込み中…</div>
+  <div id="{{ id }}" class="chart-box"></div>
+  <small class="muted">▲買（赤）▼売（青）で建て、● で決済（損益がプラスなら赤・マイナスなら青）。
+    ドラッグで移動、ホイールで拡大縮小。{{ note }}</small>
+</section>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<script src="{{ static('chart.js') }}"></script>
+<script>
+  window["{{ id }}"] = TradeChart.mount(document.getElementById("{{ id }}"), "{{ url }}",
+                                        { legendEl: document.getElementById("{{ id }}-legend") });
+  // 取引の表はチャートより後ろにあるので、ページを読み終えてから行にクリックを付ける
+  document.addEventListener("DOMContentLoaded", () =>
+    TradeChart.bindRows(window["{{ id }}"], document.getElementById("{{ id }}")));
+</script>
+{%- endmacro %}

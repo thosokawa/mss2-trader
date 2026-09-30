@@ -713,12 +713,13 @@ def test_direction_and_mode_are_colored(client):
 
 
 def test_pnl_colors_follow_marketspeed(client):
-    """金額はプラス=赤(up)・マイナス=緑(dn)。OK/エラー表示の pos/neg とは別のクラス。"""
+    """金額はプラス=赤(up)・マイナス=青(dn)。OK/エラー表示の pos/neg とは別のクラス。"""
     from app.web.routes import _pnl_cls
 
     assert (_pnl_cls(1250), _pnl_cls(-500), _pnl_cls(0), _pnl_cls(None)) == ("up", "dn", "muted", "muted")
     css = client.get("/static/app.css").text
     assert "--c-up: #FF5A5A" in css and ".up { color: var(--c-up); }" in css
+    assert "--c-dn: #5AA9FF" in css  # マイナスは青
 
 
 def test_strategies_are_listed_in_trading_overview(client):

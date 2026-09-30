@@ -27,7 +27,7 @@
   --c-bad: #FF6161;
   --c-bad-soft: #FF8A8A;
   --c-up: #FF5A5A;
-  --c-dn: #34D399;
+  --c-dn: #5AA9FF;
   --c-live: #FF8A73;
   --c-paper: #7DBBFF;
   --font-sans: "IBM Plex Sans JP", system-ui, -apple-system, "Hiragino Sans", sans-serif;
@@ -83,7 +83,7 @@ small, .sub { color: var(--c-muted); }
 .err { background: rgba(255, 97, 97, .10); border: 1px solid var(--c-bad); color: var(--c-bad-soft);
   padding: .7rem 1rem; border-radius: 10px; font-weight: 600; }
 .pos { color: var(--c-good); } .neg { color: var(--c-bad); }
-/* 金額のプラス/マイナス（pnl_cls）。MarketSpeed II に合わせてプラス=赤・マイナス=緑 */
+/* 金額のプラス/マイナス（pnl_cls）。プラス=赤・マイナス=青 */
 .up { color: var(--c-up); } .dn { color: var(--c-dn); } .muted { color: var(--c-muted); }
 .gloss { border-bottom: 1px dotted var(--c-muted); cursor: help; }
 
@@ -301,3 +301,14 @@ details.dropdown summary + ul { border: 1px solid var(--c-line); }
   .arm-panel form { width: 100%; }
   .bignum { font-size: 2rem; }
 }
+
+/* ---- チャート（static/chart.js） ---- */
+.chart-card { margin: 1rem 0; }
+.chart-box { height: 460px; width: 100%; border-radius: 8px; overflow: hidden; }
+.chart-box.is-loading { opacity: .5; }
+.chart-legend { font-size: .78rem; color: var(--c-sub); min-height: 1.3rem; margin: .2rem 0 .4rem; white-space: normal; }
+.chart-controls { display: flex; gap: .6rem; align-items: center; margin-left: auto; }
+.chart-controls select { width: auto; margin: 0; padding: .25rem 2rem .25rem .6rem; font-size: .85rem; }
+tr.chart-row { cursor: pointer; }
+tr.chart-row:hover td { background: rgba(255, 176, 32, .08); }
+@media (max-width: 640px) { .chart-box { height: 340px; } }

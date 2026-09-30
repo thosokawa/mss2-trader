@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
@@ -37,6 +37,7 @@ from app.models import (
     Tick,
 )
 from app.strategy.registry import BUILTIN, builtin_param_meta, builtin_params, load_strategy_class
+from app.web import chart as chart_mod
 from app.web import status as status_mod
 from app.web import strategy_view
 from app.web.glossary import GLOSSARY, gloss
@@ -103,12 +104,13 @@ def _pnl(v, unit: str = "") -> str:
 def _pnl_cls(v) -> str:
     if v is None:
         return "muted"
-    # 金額の色は MarketSpeed II に合わせてプラス=赤(up)・マイナス=緑(dn)。OK/エラーの pos/neg とは別
+    # 金額の色はプラス=赤(up)・マイナス=青(dn)。OK/エラーの pos/neg（緑/赤）とは別
     return "up" if v > 0 else "dn" if v < 0 else "muted"
 
 
 templates.env.filters["pnl"] = _pnl
 templates.env.filters["pnl_cls"] = _pnl_cls
+templates.env.filters["chart_time"] = chart_mod.to_time
 
 
 def _now_utc() -> datetime:
@@ -500,6 +502,92 @@ def backtest_detail(run_id: int, request: Request, s: Session = Depends(get_sess
         _ctx(request, run=run, metrics=json.loads(run.metrics_json or "{}"), trades=trades,
              d=strategy_view.describe(run), symbol_name=name, register_url=register_strategy_url(run, name)),
     )
+
+
+# ---- チャート（ローソク足＋エントリー/決済の印。描画は static/chart.js） -------------
+
+
+@router.get("/api/chart/backtest/{run_id}")
+def api_chart_backtest(run_id: int, s: Session = Depends(get_session)):
+    run = s.get(BacktestRun, run_id)
+    if not run:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    tf = run.timeframe
+    bars = load_bars(s, run.symbol_code, tf, start=run.start, end=run.end)
+    trades = s.exec(select(BacktestTrade).where(BacktestTrade.run_id == run_id)).all()
+    markers = []
+    for t in trades:
+        markers.append(chart_mod.entry_marker(t.entry_ts, tf, t.side, t.entry_price))
+        markers.append(chart_mod.exit_marker(t.exit_ts, tf, t.side == "SHORT", t.pnl, t.exit_price))
+    try:
+        params = json.loads(run.params_json or "{}")
+    except ValueError:
+        params = {}
+    return {"title": f"{run.symbol_code} {tf}", **chart_mod.bars_payload(bars),
+            "markers": chart_mod.sort_markers(markers),
+            "overlays": chart_mod.overlays(run.class_path, params, bars), "initial_bars": 300}
+
+
+@router.get("/api/chart/strategy/{strategy_id}")
+def api_chart_strategy(strategy_id: int, code: str = "", days: int = 5, s: Session = Depends(get_session)):
+    """戦略の実際の売買をチャートに。実発注=発注履歴、ペーパー=擬似約定、通知のみ=シグナル。"""
+    st = _get_strategy(s, strategy_id)
+    if not st:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    code = code or (symbols.parse_codes(st.symbols) or [""])[0]
+    tf = st.timeframe
+    days = max(1, min(int(days), 120))
+    start = _now_utc() - timedelta(days=days * 2 + 4)
+    bars = load_bars(s, code, tf, start=start)
+    if not bars.empty:  # 直近 days 営業日（JST の日付）だけに絞る
+        jst_dates = (bars.index + timedelta(hours=9)).normalize()
+        keep = sorted(set(jst_dates))[-days:]
+        bars = bars[jst_dates.isin(keep)]
+    since = bars.index[0].to_pydatetime() if not bars.empty else _now_utc()
+    markers = []
+    if st.mode == "live":
+        trips = orders_engine.round_trips(s, st.id)
+        pnl_by_exit = {(t["symbol_code"], t["exit_ts"]): t["pnl"] for t in trips}
+        orders = s.exec(select(Order).where(Order.strategy_id == st.id, Order.symbol_code == code,
+                                            Order.ts >= since).order_by(Order.ts)).all()
+        last_open = ""  # 決済の印をどちら側に付けるか（売建の決済は足の下）
+        for o in orders:
+            px = o.avg_price or o.ref_price or None
+            if o.status in orders_engine.TERMINAL_FAILURE:
+                side_ja = {"BUY": "買", "SHORT": "売"}.get(o.side, "決済")
+                m = chart_mod.entry_marker(o.ts, tf, o.side, px, label=f"×{side_ja}（{o.status}）")
+                m.update(color=chart_mod.C_MUTED, shape="square")
+                markers.append(m)
+            elif o.side in orders_engine.OPEN_SIDES:
+                last_open = o.side
+                markers.append(chart_mod.entry_marker(o.ts, tf, o.side, px))
+            elif o.side in orders_engine.CLOSE_SIDES:
+                label = "手動決済" if o.status == orders_engine.MANUAL else ""
+                was_short = o.side == "COVER" or last_open == "SHORT"
+                pnl = pnl_by_exit.get((code, o.ts))
+                markers.append(chart_mod.exit_marker(o.ts, tf, was_short, pnl, px, label))
+    elif st.mode == "paper":
+        trades = s.exec(select(PaperTrade).where(PaperTrade.strategy_id == st.id,
+                                                 PaperTrade.symbol_code == code)).all()
+        for t in trades:
+            if t.entry_ts >= since:
+                markers.append(chart_mod.entry_marker(t.entry_ts, tf, t.side, t.entry_price))
+            if t.exit_ts and t.exit_ts >= since:
+                markers.append(chart_mod.exit_marker(t.exit_ts, tf, t.side == "SHORT", t.pnl, t.exit_price))
+    else:
+        sigs = s.exec(select(Signal).where(Signal.strategy_id == st.id, Signal.symbol_code == code,
+                                           Signal.ts >= since)).all()
+        for g in sigs:
+            if g.side in ("BUY", "SHORT", "SELL"):
+                side = "BUY" if g.side == "BUY" else "SHORT"
+                label = "買" if g.side == "BUY" else "売"
+                markers.append(chart_mod.entry_marker(g.ts, tf, side, g.price, label=label))
+            else:
+                markers.append(chart_mod.exit_marker(g.ts, tf, False, None, g.price, label="決済"))
+    return {"title": f"{code} {tf}", **chart_mod.bars_payload(bars),
+            "markers": chart_mod.sort_markers(markers),
+            "overlays": chart_mod.overlays(st.class_path, strategy_view.load_params(st), bars),
+            "initial_bars": 0}
 
 
 # ---- 最適化（グリッドサーチ + ウォークフォワード検証） -----------------------

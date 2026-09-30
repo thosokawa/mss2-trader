@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_tabs.html" import trading_tabs with context %}
-{% from "_macros.html" import autorefresh with context %}
+{% from "_macros.html" import autorefresh, trade_chart with context %}
 {% block content %}
 {% set st = state.st %}
 {{ trading_tabs() }}
@@ -27,6 +27,40 @@
 </div>
 <p style="color: var(--c-sub); margin: .2rem 0 1rem">{{ d.summary }}</p>
 {% if error_msg %}<p class="err">{{ error_msg }}</p>{% endif %}
+
+{# チャートは自動更新の領域の外（5秒ごとに作り直されないように）。銘柄・期間は下の選択で切り替え #}
+{% set codes = state.rows | map(attribute='code') | list %}
+{# 既定の期間: 1分足は1日（5日分だと印が重なって見づらい）、5分・15分足は5日 #}
+{% set default_days = 1 if st.timeframe == '1m' else 5 %}
+{% set controls %}
+  {% if codes | length > 1 %}
+  <select id="st-chart-code" aria-label="銘柄">
+    {% for r in state.rows %}<option value="{{ r.code }}">{{ r.code }} {{ r.name }}</option>{% endfor %}
+  </select>
+  {% endif %}
+  <select id="st-chart-days" aria-label="期間">
+    {% for dd, label in [(1, '1日'), (5, '5日'), (20, '20日'), (60, '60日')] %}
+    <option value="{{ dd }}" {% if dd == default_days %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <button type="button" class="small outline" id="st-chart-reload">更新</button>
+{% endset %}
+{% set src = {'live': '実際の発注', 'paper': 'ペーパートレードの擬似約定', 'notify': 'シグナル'}[st.mode] %}
+{{ trade_chart("st-chart", "/api/chart/strategy/" ~ st.id ~ "?days=" ~ default_days ~ ("&code=" ~ codes[0] if codes else ""),
+               "チャート — " ~ st.timeframe, "印は" ~ src ~ "（×は発注が通らなかったもの）。", controls) }}
+<script>
+  (() => {
+    const code = document.getElementById("st-chart-code"), days = document.getElementById("st-chart-days");
+    const reload = () => {
+      const q = new URLSearchParams({ days: days.value });
+      const c = code ? code.value : "{{ codes[0] if codes else '' }}";
+      if (c) q.set("code", c);
+      window["st-chart"].load("/api/chart/strategy/{{ st.id }}?" + q.toString());
+    };
+    if (code) code.addEventListener("change", reload);
+    days.addEventListener("change", reload);
+    document.getElementById("st-chart-reload").addEventListener("click", reload);
+  })();
+</script>
 
 <div {{ autorefresh("strat-detail-live", 5) }}>
 {# ---- 今の状況: 銘柄ごとの現在値・建玉・含み損益（建玉があればアンバー枠） ---- #}
