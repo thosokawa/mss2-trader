@@ -25,7 +25,7 @@
       <td class="num mono">0</td><td class="num muted">—</td>
       <td class="num"><small class="muted">{{ m.get('error') or m.get('note') or '約定なし' }}</small></td>
       {% endif %}
-      <td style="white-space: nowrap"><a href="/backtests/{{ r.id }}">詳細</a> ・ <a href="{{ reg }}" title="この設定で自動売買の戦略に登録">登録</a></td>
+      <td style="white-space: nowrap"><a href="/backtests/{{ r.id }}">詳細</a>{% if r.class_path in builtin.values() %} ・ <a href="/backtest?run={{ r.id }}" title="この設定を読み込んで、変えて再テスト">再テスト</a> ・ <a href="{{ reg }}" title="この設定で自動売買の戦略に登録">登録</a>{% endif %}</td>
     </tr>
   {% endfor %}
   </tbody>

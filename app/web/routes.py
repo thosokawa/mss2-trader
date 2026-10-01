@@ -363,10 +363,17 @@ def live_redirect():
 
 
 @router.get("/backtest", response_class=HTMLResponse)
-def backtest_form(request: Request, s: Session = Depends(get_session)):
+def backtest_form(request: Request, run: int | None = None, s: Session = Depends(get_session)):
+    """バックテストの入力画面。?run=履歴の番号 なら、その回の戦略・銘柄・足・パラメータを入れた状態で開く
+    （履歴から設定を少し変えて再テストするため）。"""
     symbols = s.exec(select(Symbol).order_by(Symbol.code)).all()
+    src = s.get(BacktestRun, run) if run else None
+    extra = {"class_path": None}
+    if src:
+        extra = dict(class_path=src.class_path, selected=src.symbol_code, selected_timeframe=src.timeframe,
+                     params_json=src.params_json, rerun_of=src.id)
     return templates.TemplateResponse(
-        request, "backtest.html", _ctx(request, symbols=symbols, result=None, class_path=None)
+        request, "backtest.html", _ctx(request, symbols=symbols, result=None, **extra)
     )
 
 

@@ -836,3 +836,54 @@ def test_indexes_for_latest_rows_exist(client):
     want = {"ix_tick_symbol_ts", "ix_tick_received_at", "ix_bar_symbol_tf_ts", "ix_signal_strategy_ts"}
     assert want <= names
     assert "TEMP B-TREE" not in " ".join(str(r) for r in plan)  # 全件並べ替えをしない
+
+
+def test_backtest_history_can_be_reopened_for_retest(client):
+    """履歴の回の戦略・銘柄・足・パラメータを入れた状態でバックテスト画面を開ける（?run=番号）。"""
+    import json
+
+    from sqlmodel import Session
+
+    from app.db import engine
+    from app.models import BacktestRun, Symbol
+
+    cp = "app.strategy.examples.gap_breakout:GapBreakout"
+    with Session(engine) as s:
+        if not s.get(Symbol, "5801"):
+            s.add(Symbol(code="5801", name="古河電気工業"))
+        run = BacktestRun(strategy_name="GapBreakout", class_path=cp, symbol_code="5801", timeframe="15m",
+                          params_json=json.dumps({"gap_min_pct": 1.5, "direction": "long"}),
+                          metrics_json="{}")
+        s.add(run)
+        s.commit()
+        rid = run.id
+    html = client.get(f"/backtest?run={rid}").text
+    assert f"バックテスト #{rid}</a> の設定を読み込みました" in html
+    assert f'<option value="{cp}" selected>' in html
+    assert '<option value="5801" selected>' in html and "<option selected>15m</option>" in html
+    assert "gap_min_pct&#34;: 1.5" in html or '"gap_min_pct": 1.5' in html
+    assert f'href="/backtest?run={rid}"' in client.get(f"/backtests/{rid}").text
+    assert f'href="/backtest?run={rid}"' in client.get("/backtests").text
+    assert "設定を読み込みました" not in client.get("/backtest").text
+
+
+def test_backtest_of_removed_logic_still_opens(client):
+    """廃止したロジック（MACDクロス＋上位足トレンド）の履歴も見られる。再テスト・登録は出さない。"""
+    from sqlmodel import Session
+
+    from app.db import engine
+    from app.models import BacktestRun
+
+    with Session(engine) as s:
+        run = BacktestRun(strategy_name="MacdTrendFilter",
+                          class_path="app.strategy.examples.macd_trend:MacdTrendFilter",
+                          symbol_code="9984", timeframe="5m", params_json='{"trend_tf": "15m"}',
+                          metrics_json="{}")
+        s.add(run)
+        s.commit()
+        rid = run.id
+    r = client.get(f"/backtests/{rid}")
+    assert r.status_code == 200 and "廃止したため" in r.text
+    assert f'href="/backtest?run={rid}"' not in r.text
+    assert f'href="/backtest?run={rid}"' not in client.get("/backtests").text
+    assert client.get(f"/api/chart/backtest/{rid}").status_code == 200

@@ -4,7 +4,10 @@
 <p><a href="/backtests">← 履歴</a></p>
 <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap">
   <h2 style="margin: 0">バックテスト #{{ run.id }}</h2>
-  <a href="{{ register_url }}" role="button" class="small" style="margin-left: auto">この設定で自動売買の戦略に登録</a>
+  {% if run.class_path in builtin.values() %}
+  <a href="/backtest?run={{ run.id }}" role="button" class="small outline" style="margin-left: auto">設定を変えて再テスト</a>
+  <a href="{{ register_url }}" role="button" class="small">この設定で自動売買の戦略に登録</a>
+  {% else %}<small class="muted" style="margin-left: auto">このロジック（{{ d.logic }}）は廃止したため、再テスト・登録はできません</small>{% endif %}
 </div>
 <p><strong>{{ d.logic }}</strong> — <span class="mono">{{ run.symbol_code }}</span>{% if symbol_name %} {{ symbol_name }}{% endif %} / <span class="mono">{{ run.timeframe }}</span><br>
 <small class="muted">実行 {{ run.created_at | jst('%Y-%m-%d %H:%M') }} ・ 期間 {{ run.start | jst('%Y-%m-%d %H:%M') }} 〜 {{ run.end | jst('%Y-%m-%d %H:%M') }}（JST）</small></p>

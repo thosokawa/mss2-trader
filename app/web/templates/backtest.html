@@ -4,6 +4,7 @@
 {% block content %}
 {{ backtest_tabs() }}
 <h2>バックテスト</h2>
+{% if rerun_of %}<p class="muted"><small><a href="/backtests/{{ rerun_of }}">バックテスト #{{ rerun_of }}</a> の設定を読み込みました。変えたい所を直して「実行」してください（結果は新しい番号で保存されます）。</small></p>{% endif %}
 <article>
   <form method="post" action="/backtest">
     <div class="grid">
