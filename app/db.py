@@ -42,6 +42,22 @@ def _ensure_indexes() -> None:
     with engine.begin() as conn:
         for name, table, cols in _INDEXES:
             conn.exec_driver_sql(f'CREATE INDEX IF NOT EXISTS {name} ON "{table}" ({cols})')
+        _ensure_unique_bars(conn)
+
+
+def _ensure_unique_bars(conn) -> None:
+    """同じ (銘柄, 足, 時刻) の足は1本だけにする（一意インデックス）。
+
+    2026-10-01、過去データの取得が同時に2回走って 5801 の5分足が全部2本ずつになり、チャートが出ず
+    バックテストも同じ足を2回数えていた。作る前に重複を消す（同じキーで一番新しく書いた行を残す）。
+    """
+    exists = conn.exec_driver_sql(
+        "SELECT 1 FROM sqlite_master WHERE type='index' AND name='ux_bar_key'").fetchone()
+    if exists:
+        return
+    conn.exec_driver_sql(
+        "DELETE FROM bar WHERE id NOT IN (SELECT MAX(id) FROM bar GROUP BY symbol_code, timeframe, ts)")
+    conn.exec_driver_sql("CREATE UNIQUE INDEX ux_bar_key ON bar (symbol_code, timeframe, ts)")
 
 
 # create_all() は新規テーブルは作るが、既存テーブルへの列追加はしない。

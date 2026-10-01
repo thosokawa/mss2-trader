@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 
 import pandas as pd
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlmodel import Session, select
 
 from app.models import Bar
@@ -58,30 +59,31 @@ def load_bars(
         ]
     ).set_index("ts")
     df.index = pd.to_datetime(df.index)
-    return df
+    # 念のため同じ時刻の足は1本に（一意インデックスを作る前の DB でも、足が2回数えられないように）
+    return df[~df.index.duplicated(keep="last")]
 
 
 def upsert_bars(session: Session, symbol_code: str, timeframe: str, df: pd.DataFrame, source: str) -> int:
-    """(symbol, timeframe, ts) をキーに Bar を upsert。追加/更新した件数を返す。"""
-    existing = {
-        b.ts: b
-        for b in session.exec(
-            select(Bar).where(Bar.symbol_code == symbol_code, Bar.timeframe == timeframe)
-        ).all()
-    }
-    n = 0
-    for ts, row in df.iterrows():
-        ts = pd.Timestamp(ts).to_pydatetime()
-        b = existing.get(ts)
-        if b is None:
-            b = Bar(symbol_code=symbol_code, timeframe=timeframe, ts=ts, open=0, high=0, low=0, close=0)
-        b.open = float(row["open"])
-        b.high = float(row["high"])
-        b.low = float(row["low"])
-        b.close = float(row["close"])
-        b.volume = float(row.get("volume", 0) or 0)
-        b.source = source
-        session.add(b)
-        n += 1
+    """(symbol, timeframe, ts) をキーに Bar を upsert。追加/更新した件数を返す。
+
+    SQLite の INSERT ... ON CONFLICT DO UPDATE で1行ずつ原子的に書く（一意インデックス ux_bar_key）。
+    以前は「既存の足を読んでから足りない分を追加」だったので、同時に2回走ると同じ足が2本ずつできた。
+    """
+    if df.empty:
+        return 0
+    rows = [
+        {
+            "symbol_code": symbol_code, "timeframe": timeframe, "ts": pd.Timestamp(ts).to_pydatetime(),
+            "open": float(r["open"]), "high": float(r["high"]), "low": float(r["low"]),
+            "close": float(r["close"]), "volume": float(r.get("volume", 0) or 0), "source": source,
+        }
+        for ts, r in df.iterrows()
+    ]
+    stmt = sqlite_insert(Bar.__table__)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["symbol_code", "timeframe", "ts"],
+        set_={k: stmt.excluded[k] for k in ("open", "high", "low", "close", "volume", "source")},
+    )
+    session.exec(stmt, params=rows)
     session.commit()
-    return n
+    return len(rows)
