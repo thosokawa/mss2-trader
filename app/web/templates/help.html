@@ -120,7 +120,7 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
 <a href="/optimizations">履歴</a> から見返せる。</p>
 
 <h3 id="strategy">戦略</h3>
-<p>作れるロジックはトレンドフォロー・逆張り・ブレイクアウトなど9種類（<code>on_bar()</code> を実装するだけで
+<p>作れるロジックはトレンドフォロー・逆張り・ブレイクアウトなど8種類（<code>on_bar()</code> を実装するだけで
 自作も可能。詳しくはリポジトリの <code>app/strategy/README.md</code>）。</p>
 <table>
   <thead><tr><th>戦略</th><th>系統</th><th>概要</th></tr></thead>
@@ -128,8 +128,7 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
     <tr><td>SMAクロス</td><td>トレンドフォロー</td><td>短期/長期SMAのゴールデン/デッドクロス</td></tr>
     <tr><td>移動平均+RSI</td><td>トレンドフォロー</td><td>終値とMAの関係 + 傾き + RSI帯でエントリー</td></tr>
     <tr><td>トレンド×RSI出戻り</td><td>押し目・戻り</td><td>短期MA/中期MAの上下 × RSIの40/60出戻りで建てる。決済は反対側のシグナル（トレンド反転＋RSI）。「ギャップの向きにだけ建てる」「押し目の最低の深さ」で絞り込める</td></tr>
-    <tr><td>MACDクロス</td><td>モメンタム</td><td>MACD線がシグナル線を上抜け/下抜け</td></tr>
-    <tr><td>MACDクロス＋上位足トレンド</td><td>フィルタ付きトレンド</td><td>上位足（15分足など）の EMA トレンドと同じ向きのときだけ MACD クロスで建てる</td></tr>
+    <tr><td>MACDクロス</td><td>モメンタム</td><td>MACD線がシグナル線を上抜け/下抜け。「ギャップの向きにだけ建てる」で絞り込める</td></tr>
     <tr><td>ボリンジャー逆張り</td><td>逆張り</td><td>下限バンド反発で買い、中心線/上限で手仕舞い</td></tr>
     <tr><td>ドンチャンブレイクアウト</td><td>ブレイクアウト</td><td>N本高値ブレイクで買い、M本安値割れで手仕舞い</td></tr>
     <tr><td>ADXフィルタ+MAクロス</td><td>フィルタ付きトレンド</td><td>ADXでトレンドの強さを確認してからSMAクロスに従う</td></tr>

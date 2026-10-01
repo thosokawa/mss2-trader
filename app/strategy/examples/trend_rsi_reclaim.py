@@ -24,8 +24,6 @@ SMAクロス にすると SMA のクロスで手仕舞う（app/strategy/base.py
 """
 from __future__ import annotations
 
-import pandas as pd
-
 from app.strategy.base import Context, Signal, Strategy
 from app.strategy.indicators import ema, rsi, sma
 
@@ -69,26 +67,6 @@ class TrendRsiReclaim(Strategy):
 
     PULLBACK_LOOKBACK = 12  # 押し目の深さを見る本数
 
-    def _gap(self, ctx: Context) -> int:
-        """当日のギャップの向き: +1=ギャップアップ / -1=ギャップダウン / 0=なし・前日の足が無い。
-        1日1回だけ計算して使い回す（バックテストで毎足計算すると遅いため）。"""
-        idx = ctx.bars.index
-        day = (pd.Timestamp(idx[-1]) + JST).normalize()
-        cache = getattr(self, "_gap_cache", None)
-        if cache and cache[0] == day:
-            return cache[1]
-        jst_days = (idx + JST).normalize()
-        today = jst_days == day
-        gap = 0
-        if today.any() and not today.all():
-            first = int(today.argmax())
-            prev_close = float(ctx.bars["close"].iloc[first - 1]) if first > 0 else None
-            today_open = float(ctx.bars["open"].iloc[first])
-            if prev_close:
-                gap = (today_open > prev_close) - (today_open < prev_close)
-        self._gap_cache = (day, gap)
-        return gap
-
     def on_bar(self, ctx: Context) -> Signal | None:
         p = self.params
         c = ctx.close
@@ -124,10 +102,8 @@ class TrendRsiReclaim(Strategy):
             recent = r.iloc[-self.PULLBACK_LOOKBACK:]
             can_buy = float(recent.min()) <= buy_lv - depth
             can_short = float(recent.max()) >= sell_lv + depth
-        if _truthy(p.get("gap_filter", False)):
-            gap = self._gap(ctx)
-            can_buy = can_buy and gap >= 0
-            can_short = can_short and gap <= 0
+        gap_buy, gap_short = self.gap_allows(ctx)
+        can_buy, can_short = can_buy and gap_buy, can_short and gap_short
 
         if self.allow_short:
             if up and pos.is_short:
@@ -146,11 +122,3 @@ class TrendRsiReclaim(Strategy):
             return Signal("SELL", int(p["qty"]), reason=down_reason)
         return None
 
-
-JST = pd.Timedelta(hours=9)
-
-
-def _truthy(v) -> bool:
-    if isinstance(v, str):
-        return v.strip().lower() not in ("false", "0", "no", "off", "")
-    return bool(v)

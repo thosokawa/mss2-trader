@@ -54,3 +54,35 @@ def test_exit_on_macd_cross_down():
 
 def test_warmup_guard():
     assert _sig([100.0] * 10) is None
+
+
+def test_gap_filter_limits_entries_to_gap_direction():
+    """ギャップの向きにだけ建てる（トレンド×RSI出戻りと同じ Strategy.gap_allows）。"""
+    import pandas as pd
+
+    from app.strategy.base import Context, Position
+    from app.strategy.examples.macd_cross import MacdCross
+
+    n = 80
+    closes = [100 - i * 0.3 for i in range(n - 6)] + [100 - (n - 6) * 0.3 + i * 1.5 for i in range(1, 7)]
+    i1 = pd.date_range("2026-09-29 00:00", periods=n - 30, freq="5min")
+    i2 = pd.date_range("2026-09-30 00:00", periods=30, freq="5min")
+    c = pd.Series(closes, index=i1.append(i2), dtype=float)
+    bars = pd.DataFrame({"open": c, "high": c + 0.2, "low": c - 0.2, "close": c, "volume": 1000.0})
+
+    def first_buy(params, day2_open):
+        b = bars.copy()
+        b.iloc[n - 30, b.columns.get_loc("open")] = day2_open
+        st = MacdCross(params)
+        st.timeframe = "5m"
+        for k in range(n - 30, n):
+            w = b.iloc[: k + 1]
+            sig = st.decide(Context(symbol="X", now=w.index[-1].to_pydatetime(), bars=w, position=Position()))
+            if sig is not None and sig.side == "BUY":
+                return k
+        return None
+
+    prev_close = float(bars["close"].iloc[n - 31])
+    assert first_buy({}, prev_close - 5) is not None                       # 既定は絞らない
+    assert first_buy({"gap_filter": True}, prev_close + 5) is not None     # ギャップアップの日は買える
+    assert first_buy({"gap_filter": True}, prev_close - 5) is None         # ギャップダウンの日は買わない

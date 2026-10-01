@@ -36,7 +36,7 @@ def _ctx(closes, pos):
 def test_default_is_signal():
     assert exit_rule_of({}) == "signal"
     assert exit_rule_of({"exit_rule": "sma_cross"}) == "sma_cross"
-    # MACD＋上位足トレンドの独自パラメータ exit_on_trend_flip は決済条件とは無関係
+    # 旧パラメータ exit_on_trend_flip（廃止）は決済条件とは無関係
     assert exit_rule_of({"exit_on_trend_flip": True}) == "signal"
     assert UNIVERSAL_DEFAULTS["exit_rule"] == "signal"
 

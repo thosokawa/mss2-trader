@@ -130,8 +130,7 @@ Signal(side, qty=None, reason="", order_type="MKT", limit_price=None)
 | `sma_cross.py` | トレンドフォロー | 短期/長期 SMA のゴールデン/デッドクロス |
 | `ma_rsi.py` | トレンドフォロー | 終値とMAの関係（上抜け/上方）+ 傾き + RSI帯でエントリー |
 | `trend_rsi_reclaim.py` | 押し目・戻り | 短期MA>中期MAでRSIが40回復→買い / 短期MA<中期MAでRSIが60割れ→売り。決済は反対側のシグナル（トレンド反転＋RSI）。任意の絞り込み: `gap_filter`（ギャップの向きにだけ建てる）・`min_pullback`（直近12本の RSI がライン±この値まで行ってからだけ建てる） |
-| `macd_cross.py` | モメンタム | MACD線がシグナル線を上抜け/下抜け |
-| `macd_trend.py` | モメンタム＋上位足フィルタ | 上位足（例 15分足）の EMA トレンドと同じ向きのときだけ MACD クロスで建てる。上位足は売買する足を戦略内でまとめ直して作る（`indicators.resample_completed`。形成中の上位足は使わない） |
+| `macd_cross.py` | モメンタム | MACD線がシグナル線を上抜け/下抜け。`gap_filter`（ギャップの向きにだけ建てる）で絞り込める |
 | `bollinger_reversion.py` | **逆張り** | ボリンジャー下限を割れてから反発で買い、中心線/上限で手仕舞い |
 | `donchian_breakout.py` | ブレイクアウト | 直近N本の高値ブレイクで買い、より短いM本の安値割れで手仕舞い（タートル風） |
 | `adx_ma_cross.py` | フィルタ付きトレンド | ADXでトレンドの強さを確認してから SMAクロスに従う（レンジ相場のダマシ回避） |

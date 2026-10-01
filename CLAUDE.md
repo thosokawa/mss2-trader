@@ -26,7 +26,7 @@ Mac（開発）・Windows（本番稼働）どちらで開いても、まずこ�
 
 P0〜P3 済（雛形・バックテスト・RSSブリッジ・tick→足集約・ライブ気配・Slack通知・
 ペーパートレード）。UI改善（用語集・パラメータ入力フォームの自動生成）、損切り/利確
-（stop_loss_pct/take_profit_pct、全戦略共通）も実装済み。戦略は9種類
+（stop_loss_pct/take_profit_pct、全戦略共通）も実装済み。戦略は8種類
 （トレンドフォロー/逆張り/ブレイクアウト/フィルタ付き、詳細 `app/strategy/README.md`）。
 
 **P4（実発注）は実機でステージ1まで確認済み（2026-09-28）。** MarketSpeed II の

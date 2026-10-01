@@ -180,6 +180,41 @@ class Strategy:
             return None
         return sig
 
+    def gap_direction(self, ctx: Context) -> int:
+        """当日のギャップの向き: +1=ギャップアップ（始値＞前日終値）/ -1=ギャップダウン /
+        0=なし・前日の足が無い。
+
+        各戦略の「ギャップの向きにだけ建てる」（gap_filter）用。日付は JST。
+        1日1回だけ計算して使い回す（バックテストで毎足計算すると遅いため）。
+        """
+        idx = ctx.bars.index
+        if len(idx) == 0:
+            return 0
+        jst = pd.Timedelta(hours=9)
+        day = (pd.Timestamp(idx[-1]) + jst).normalize()
+        cache = getattr(self, "_gap_cache", None)
+        if cache and cache[0] == day:
+            return cache[1]
+        today = (idx + jst).normalize() == day
+        gap = 0
+        if today.any() and not today.all():
+            first = int(today.argmax())
+            if first > 0:
+                prev_close = float(ctx.bars["close"].iloc[first - 1])
+                today_open = float(ctx.bars["open"].iloc[first])
+                gap = (today_open > prev_close) - (today_open < prev_close)
+        self._gap_cache = (day, gap)
+        return gap
+
+    def gap_allows(self, ctx: Context) -> tuple[bool, bool]:
+        """(買ってよいか, 売建ててよいか)。パラメータ gap_filter が ON のときだけ、ギャップの向きで絞る。"""
+        v = self.params.get("gap_filter", False)
+        on = v.strip().lower() not in ("false", "0", "no", "off", "") if isinstance(v, str) else bool(v)
+        if not on:
+            return True, True
+        gap = self.gap_direction(ctx)
+        return gap >= 0, gap <= 0
+
     def in_entry_window(self, ctx: Context) -> bool:
         """エントリー時間帯（entry_windows）の中か。判定は足が確定した時刻（＝発注する時刻）の JST。
         時間帯が空欄なら終日 True。日足は時刻が無いので常に True。手仕舞いはこれに関係なく出す。"""
