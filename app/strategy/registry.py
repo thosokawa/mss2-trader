@@ -12,6 +12,7 @@ BUILTIN = {
     "トレンド×RSI出戻り": "app.strategy.examples.trend_rsi_reclaim:TrendRsiReclaim",
     "MACDクロス": "app.strategy.examples.macd_cross:MacdCross",
     "ボリンジャー逆張り": "app.strategy.examples.bollinger_reversion:BollingerReversion",
+    "ボリンジャー（拡大で順張り・縮小で逆張り）": "app.strategy.examples.bollinger_regime:BollingerRegime",
     "ドンチャンブレイクアウト": "app.strategy.examples.donchian_breakout:DonchianBreakout",
     "ADXフィルタ+MAクロス": "app.strategy.examples.adx_ma_cross:AdxMaCross",
     "ギャップ後の高値更新": "app.strategy.examples.gap_breakout:GapBreakout",
