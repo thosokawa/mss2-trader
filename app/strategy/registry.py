@@ -15,6 +15,7 @@ BUILTIN = {
     "ボリンジャー逆張り": "app.strategy.examples.bollinger_reversion:BollingerReversion",
     "ドンチャンブレイクアウト": "app.strategy.examples.donchian_breakout:DonchianBreakout",
     "ADXフィルタ+MAクロス": "app.strategy.examples.adx_ma_cross:AdxMaCross",
+    "ギャップ後の高値更新": "app.strategy.examples.gap_breakout:GapBreakout",
 }
 
 
