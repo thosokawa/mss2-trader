@@ -532,7 +532,8 @@ def api_chart_backtest(run_id: int, s: Session = Depends(get_session)):
         params = {}
     return {"title": f"{run.symbol_code} {tf}", **chart_mod.bars_payload(bars),
             "markers": chart_mod.sort_markers(markers),
-            "overlays": chart_mod.overlays(run.class_path, params, bars), "initial_bars": 300}
+            "overlays": chart_mod.overlays(run.class_path, params, bars),
+            "rsi": chart_mod.rsi_panel(run.class_path, params, bars), "initial_bars": 300}
 
 
 @router.get("/api/chart/strategy/{strategy_id}")
@@ -594,6 +595,7 @@ def api_chart_strategy(strategy_id: int, code: str = "", days: int = 5, s: Sessi
     return {"title": f"{code} {tf}", **chart_mod.bars_payload(bars),
             "markers": chart_mod.sort_markers(markers),
             "overlays": chart_mod.overlays(st.class_path, strategy_view.load_params(st), bars),
+            "rsi": chart_mod.rsi_panel(st.class_path, strategy_view.load_params(st), bars),
             "initial_bars": 0}
 
 

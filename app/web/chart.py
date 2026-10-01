@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 
-from app.strategy.indicators import ema, sma
+from app.strategy.indicators import ema, rsi, sma
 
 JST = timedelta(hours=9)
 TF_MINUTES = {"1m": 1, "5m": 5, "15m": 15, "1d": 1440}
@@ -124,3 +124,38 @@ def overlays(class_path: str, params: dict, bars: pd.DataFrame) -> list[dict]:
         pts = [{"time": to_time(ts), "value": round(float(v), 2)} for ts, v in s.items() if pd.notna(v)]
         out.append({"name": label, "color": MA_COLORS[i % len(MA_COLORS)], "data": pts})
     return out
+
+
+# ---- RSI（チャートの下の小さな枠） ----------------------------------------------
+
+
+def rsi_panel(class_path: str, params: dict, bars: pd.DataFrame) -> dict | None:
+    """RSI の線と目安の横線。期間とラインは戦略のパラメータに合わせる（無ければ 14 と 30/70）。
+
+    ローソク足と同じ時刻の並びで返す（計算前の最初の数本は値なし＝時刻だけ）。チャート側が
+    2つの枠を「何本目か」で連動させるので、本数を揃える必要がある。
+    """
+    if bars.empty:
+        return None
+
+    def num(key, default):
+        try:
+            return float(params.get(key, default))
+        except (TypeError, ValueError):
+            return float(default)
+
+    n = int(num("rsi_period", 14))
+    name = class_path.rsplit(":", 1)[-1]
+    if name == "TrendRsiReclaim":
+        buy, sell = num("rsi_buy_level", 40), num("rsi_sell_level", 60)
+        levels = [(buy, f"買い {buy:g}", C_BUY), (sell, f"売り {sell:g}", C_SHORT)]
+    elif name == "MaRsi":
+        levels = [(num("rsi_min", 45), "下限", C_MUTED), (num("rsi_max", 70), "上限", C_MUTED),
+                  (num("rsi_exit", 78), "手仕舞い", C_UP)]
+    else:
+        levels = [(30.0, "30", C_MUTED), (70.0, "70", C_MUTED)]
+    r = rsi(bars["close"].astype(float), n)
+    data = [{"time": to_time(ts), "value": round(float(v), 1)} if pd.notna(v) else {"time": to_time(ts)}
+            for ts, v in r.items()]
+    return {"name": f"RSI{n}", "data": data,
+            "levels": [{"value": v, "label": label, "color": color} for v, label, color in levels]}

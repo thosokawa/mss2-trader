@@ -78,3 +78,20 @@ def test_strategy_chart_uses_real_orders_for_live():
     assert texts == ["買", "決済 +600", "×売（rejected）"]
     assert d["markers"][0]["time"] == to_time(BASE + timedelta(minutes=3))  # 発注時刻を含む足
     assert [o["name"] for o in d["overlays"]] == ["SMA5（短期）", "SMA20（長期）"]
+
+
+def test_rsi_panel_follows_strategy_settings():
+    """RSI の枠: 期間・ラインは戦略のパラメータ（無ければ 14 と 30/70）。ローソク足と本数を揃える。"""
+    import pandas as pd
+
+    from app.web.chart import rsi_panel
+
+    idx = pd.date_range("2026-09-29 00:00", periods=40, freq="5min")
+    c = pd.Series([100 + (i % 7) for i in range(40)], index=idx, dtype=float)
+    bars = pd.DataFrame({"open": c, "high": c, "low": c, "close": c, "volume": 1.0})
+    trend = rsi_panel("app.strategy.examples.trend_rsi_reclaim:TrendRsiReclaim",
+                      {"rsi_period": 9, "rsi_buy_level": 45, "rsi_sell_level": 55}, bars)
+    assert trend["name"] == "RSI9" and [lv["label"] for lv in trend["levels"]] == ["買い 45", "売り 55"]
+    assert len(trend["data"]) == 40 and "value" not in trend["data"][0] and "value" in trend["data"][-1]
+    other = rsi_panel("app.strategy.examples.sma_cross:SmaCross", {}, bars)
+    assert other["name"] == "RSI14" and [lv["value"] for lv in other["levels"]] == [30.0, 70.0]

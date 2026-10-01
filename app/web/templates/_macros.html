@@ -20,6 +20,7 @@ id="{{ id }}" hx-get="{{ request.url.path }}{% if request.url.query %}?{{ reques
   <div class="card-head"><h2>{{ title }}</h2>{% if controls %}<div class="chart-controls">{{ controls }}</div>{% endif %}</div>
   <div id="{{ id }}-legend" class="chart-legend mono">読み込み中…</div>
   <div id="{{ id }}" class="chart-box"></div>
+  <div id="{{ id }}-rsi" class="chart-sub"></div>
   <small class="muted">▲買（赤）▼売（青）で建て、● で決済（損益がプラスなら赤・マイナスなら青）。
     ドラッグで移動、ホイールで拡大縮小。{{ note }}</small>
 </section>
@@ -27,7 +28,8 @@ id="{{ id }}" hx-get="{{ request.url.path }}{% if request.url.query %}?{{ reques
 <script src="{{ static('chart.js') }}"></script>
 <script>
   window["{{ id }}"] = TradeChart.mount(document.getElementById("{{ id }}"), "{{ url }}",
-                                        { legendEl: document.getElementById("{{ id }}-legend") });
+                                        { legendEl: document.getElementById("{{ id }}-legend"),
+                                          rsiEl: document.getElementById("{{ id }}-rsi") });
   // 取引の表はチャートより後ろにあるので、ページを読み終えてから行にクリックを付ける
   document.addEventListener("DOMContentLoaded", () =>
     TradeChart.bindRows(window["{{ id }}"], document.getElementById("{{ id }}")));
