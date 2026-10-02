@@ -16,6 +16,7 @@ BUILTIN = {
     "ドンチャンブレイクアウト": "app.strategy.examples.donchian_breakout:DonchianBreakout",
     "ADXフィルタ+MAクロス": "app.strategy.examples.adx_ma_cross:AdxMaCross",
     "ギャップ後の高値更新": "app.strategy.examples.gap_breakout:GapBreakout",
+    "新高値ブレイク": "app.strategy.examples.new_high_breakout:NewHighBreakout",
 }
 
 

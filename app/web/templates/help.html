@@ -120,7 +120,7 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
 <a href="/optimizations">履歴</a> から見返せる。</p>
 
 <h3 id="strategy">戦略</h3>
-<p>作れるロジックはトレンドフォロー・逆張り・ブレイクアウトなど9種類（<code>on_bar()</code> を実装するだけで
+<p>作れるロジックはトレンドフォロー・逆張り・ブレイクアウトなど10種類（<code>on_bar()</code> を実装するだけで
 自作も可能。詳しくはリポジトリの <code>app/strategy/README.md</code>）。</p>
 <table>
   <thead><tr><th>戦略</th><th>系統</th><th>概要</th></tr></thead>
@@ -134,6 +134,7 @@ Get-Content .\logs\bridge-$(Get-Date -Format yyyyMMdd).log -Tail 30</code></pre>
     <tr><td>ドンチャンブレイクアウト</td><td>ブレイクアウト</td><td>N本高値ブレイクで買い、M本安値割れで手仕舞い</td></tr>
     <tr><td>ADXフィルタ+MAクロス</td><td>フィルタ付きトレンド</td><td>ADXでトレンドの強さを確認してからSMAクロスに従う</td></tr>
     <tr><td>ギャップ後の高値更新</td><td>ギャップ・デイトレ</td><td>ギャップアップの日に押してから当日高値を更新したら買い（ギャップダウンの日は戻してから安値更新で売り）</td></tr>
+    <tr><td>新高値ブレイク</td><td>ブレイクアウト</td><td>過去N日の高値を終値で更新したら買い、過去M日の安値割れで手仕舞い（日足ならスイング、日中足ならデイトレ）</td></tr>
   </tbody>
 </table>
 <p>登録は <a href="/risk#strategies">自動売買 › 概要の「＋ 戦略を追加」</a>から。モードは <code>notify</code>（通知のみ）/
