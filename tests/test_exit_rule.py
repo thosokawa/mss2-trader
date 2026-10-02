@@ -82,8 +82,9 @@ def test_every_strategy_gets_exit_rule_select():
     metas = builtin_param_meta()
     for cp in BUILTIN.values():
         m = metas[cp]["exit_rule"]
-        assert m["label"] == "決済条件" and m["choices"] == ["signal", "sma_cross"]
-        assert m["choice_labels"] == {"signal": "エントリー条件の反転シグナル", "sma_cross": "SMAクロス"}
+        assert m["label"] == "決済条件" and m["choices"] == ["signal", "sma_cross", "both"]
+        assert m["choice_labels"]["signal"] == "エントリー条件の反転シグナル"
+        assert m["choice_labels"]["sma_cross"] == "SMAクロス"
 
 
 def test_exit_sma_fields_only_shown_for_sma_cross():
@@ -91,7 +92,7 @@ def test_exit_sma_fields_only_shown_for_sma_cross():
     for cp in BUILTIN.values():
         assert metas[cp]["exit_rule"].get("wide") is True
         for k in ("exit_sma_fast", "exit_sma_slow"):
-            assert metas[cp][k]["show_if"] == {"exit_rule": "sma_cross"}
+            assert metas[cp][k]["show_if"] == {"exit_rule": ["sma_cross", "both"]}
 
 
 def test_param_fields_keep_defined_order():
@@ -111,3 +112,33 @@ def test_param_fields_keep_defined_order():
     seg = line[line.index(f'"{cp}"'):]
     pos = [seg.index(f'"{k}"') for k in ("ma_type", "qty", "direction", "exit_rule", "stop_loss_pct")]
     assert pos == sorted(pos)
+
+
+def test_both_rule_exits_on_whichever_comes_first():
+    """決済条件=両方: SMA のデッドクロスでも、戦略の反転シグナルでも手仕舞う。"""
+    st = _ExitEveryBar({"exit_rule": "both", "exit_sma_fast": 5, "exit_sma_slow": 20})
+    long_pos = Position(qty=100, avg_price=150)
+    sig = st.decide(_ctx(UP_DOWN[:62], long_pos))   # まだクロスしていない → 戦略の反転シグナルが通る
+    assert sig.side == "EXIT" and sig.reason == "反転"
+    fired = [n for n in range(62, len(UP_DOWN) + 1)
+             if "デッドクロス" in (st.decide(_ctx(UP_DOWN[:n], long_pos)) or Signal("X")).reason]
+    assert fired  # クロスした足は SMA の手仕舞いが先
+
+
+def test_stop_signal_passes_even_when_exit_rule_is_sma_cross():
+    """戦略が損切りとして出した手仕舞い（is_stop）は、決済条件=SMAクロスでも止めない。"""
+
+    class _Stopper(Strategy):
+        def on_bar(self, ctx):
+            if ctx.position.is_flat:
+                return None
+            return Signal("EXIT", reason="損切り", is_stop=True)
+
+    class _Plain(Strategy):
+        def on_bar(self, ctx):
+            return None if ctx.position.is_flat else Signal("EXIT", reason="反転")
+
+    long_pos = Position(qty=100, avg_price=150)
+    params = {"exit_rule": "sma_cross", "exit_sma_fast": 5, "exit_sma_slow": 20}
+    assert _Stopper(params).decide(_ctx(UP_DOWN[:62], long_pos)).reason == "損切り"
+    assert _Plain(params).decide(_ctx(UP_DOWN[:62], long_pos)) is None

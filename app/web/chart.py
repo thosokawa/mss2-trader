@@ -115,7 +115,7 @@ def overlays(class_path: str, params: dict, bars: pd.DataFrame) -> list[dict]:
     elif name == "SmaCross":
         add("短期", "sma", params.get("fast", 5))
         add("長期", "sma", params.get("slow", 20))
-    if str(params.get("exit_rule", "")).lower() == "sma_cross":
+    if str(params.get("exit_rule", "")).lower() in ("sma_cross", "both"):
         add("決済短期", "sma", params.get("exit_sma_fast", 10))
         add("決済長期", "sma", params.get("exit_sma_slow", 30))
 

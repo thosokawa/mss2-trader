@@ -16,13 +16,14 @@ import pandas as pd
 
 from app.strategy.indicators import TIMEFRAME_MINUTES
 
-EXIT_RULES = ("signal", "sma_cross")
+EXIT_RULES = ("signal", "sma_cross", "both")
 CLOSE_SIDES = ("EXIT", "SELL", "COVER")
 
 
 def exit_rule_of(params: dict) -> str:
     """全戦略共通パラメータ exit_rule（決済条件）:
-    "signal"=エントリー条件の反転シグナル（on_bar の手仕舞い。既定）/ "sma_cross"=SMAクロス。
+    "signal"=エントリー条件の反転シグナル（on_bar の手仕舞い。既定）/ "sma_cross"=SMAクロス /
+    "both"=反転シグナルと SMAクロスのどちらか早い方。
     """
     v = str(params.get("exit_rule") or "").strip().lower()
     return v if v in EXIT_RULES else "signal"
@@ -81,6 +82,9 @@ class Signal:
     reason: str = ""
     order_type: str = "MKT"  # "MKT" | "LMT"
     limit_price: float | None = None
+    # 損切りとして出す手仕舞い（例: トレンド×RSI出戻りの「RSIの出戻り失敗」）。決済条件が SMAクロス でも
+    # 止めない（決済条件が止めるのは「反転シグナル」の手仕舞いだけ）
+    is_stop: bool = False
 
 
 @dataclass
@@ -158,19 +162,21 @@ class Strategy:
         """エンジン（backtest / live）が呼ぶ入口。on_bar の結果から売買方向に合わない
         新規建てを捨てる（手仕舞いは常に通す）。各戦略は BUY/SHORT を気にせず書いてよい。
 
-        決済条件（exit_rule）が SMAクロス なら、建玉があるときは SMA のクロスで手仕舞い、
-        on_bar が出す手仕舞い（EXIT/SELL/COVER）は使わない。損切り・利確・大引け手仕舞いは
-        エンジン側（stops.py / eod.py）なので決済条件に関係なく効く。
+        決済条件（exit_rule）が SMAクロス / 両方 なら、建玉があるときは SMA のクロスで手仕舞う。
+        SMAクロス だけのときは on_bar が出す反転シグナルの手仕舞い（EXIT/SELL/COVER）は使わない
+        （ただし損切りとして出した手仕舞い＝Signal.is_stop は通す）。損切り%・利確%・大引け手仕舞いは
+        エンジン側（stops.py / eod.py）なので決済条件に関係なく効く。どれかに当たった時点で手仕舞う。
         """
-        sma_exit = self.exit_rule == "sma_cross"
-        if sma_exit and not ctx.position.is_flat:
+        rule = self.exit_rule
+        if rule in ("sma_cross", "both") and not ctx.position.is_flat:
             hit = self._sma_cross_exit(ctx)
             if hit is not None:
                 return hit
         sig = self.on_bar(ctx)
         if sig is None:
             return None
-        if sma_exit and not ctx.position.is_flat and sig.side in CLOSE_SIDES:
+        if (rule == "sma_cross" and not ctx.position.is_flat and sig.side in CLOSE_SIDES
+                and not sig.is_stop):
             return None
         if sig.side == "BUY" and not self.allow_long:
             return None
@@ -205,6 +211,10 @@ class Strategy:
                 gap = (today_open > prev_close) - (today_open < prev_close)
         self._gap_cache = (day, gap)
         return gap
+
+    def _truthy_param(self, key: str, default: bool = False) -> bool:
+        v = self.params.get(key, default)
+        return v.strip().lower() not in ("false", "0", "no", "off", "") if isinstance(v, str) else bool(v)
 
     def gap_allows(self, ctx: Context) -> tuple[bool, bool]:
         """(買ってよいか, 売建ててよいか)。パラメータ gap_filter が ON のときだけ、ギャップの向きで絞る。"""

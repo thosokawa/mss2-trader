@@ -76,8 +76,9 @@ def describe(st: Strategy | BacktestRun) -> dict:
     windows = parse_entry_windows(merged.get("entry_windows"))
     windows_text = " ".join(f"{a:%H:%M}-{b:%H:%M}" for a, b in windows)
     exit_fast, exit_slow = _fmt(merged.get("exit_sma_fast") or 10), _fmt(merged.get("exit_sma_slow") or 30)
-    exit_text = (f"SMAクロス（{exit_fast}/{exit_slow}）" if exit_rule == "sma_cross"
-                 else "エントリー条件の反転シグナル")
+    exit_text = {"sma_cross": f"SMAクロス（{exit_fast}/{exit_slow}）",
+                 "both": f"反転シグナル＋SMAクロス（{exit_fast}/{exit_slow}）"}.get(
+        exit_rule, "エントリー条件の反転シグナル")
 
     common = [
         ("株数", f"{_fmt(qty)} 株", "1回のエントリーで売買する株数"),
@@ -101,7 +102,7 @@ def describe(st: Strategy | BacktestRun) -> dict:
         parts.append("デイトレ")
     if windows_text:
         parts.append(f"時間帯 {windows_text}")
-    if exit_rule == "sma_cross":
+    if exit_rule in ("sma_cross", "both"):
         parts.append(f"決済SMA{exit_fast}/{exit_slow}")
     if stop:
         parts.append(f"損切り{stop}")

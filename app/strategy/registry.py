@@ -73,19 +73,20 @@ UNIVERSAL_META["entry_windows"] = {
             "最適化ではカンマで候補を区切る（例 9:00-11:30, 9:00-10:00 13:30-14:30）",
 }
 UNIVERSAL_META["exit_rule"] = {
-    "label": "決済条件", "choices": ["signal", "sma_cross"], "wide": True,
-    "choice_labels": {"signal": "エントリー条件の反転シグナル", "sma_cross": "SMAクロス"},
+    "label": "決済条件", "choices": ["signal", "sma_cross", "both"], "wide": True,
+    "choice_labels": {"signal": "エントリー条件の反転シグナル", "sma_cross": "SMAクロス",
+                      "both": "反転シグナル＋SMAクロス（早い方）"},
     "help": "反転シグナル: 戦略のエントリー条件の逆が出たら手仕舞い（従来どおり）。"
             "SMAクロス: 買建は短期SMAが長期SMAを下抜けたら、売建は上抜けたら手仕舞い"
-            "（戦略の手仕舞いシグナルは使わない）。"
-            "損切り・利確・大引け手仕舞いはどちらでも効く",
+            "（戦略の反転シグナルの手仕舞いは使わない）。両方: どちらか早い方で手仕舞い。"
+            "損切り%・利確%・大引け手仕舞い・戦略の損切り条件（RSIの出戻り失敗など）はどれを選んでも効く",
 }
 UNIVERSAL_META["exit_sma_fast"] = {
-    "label": "決済SMA短期", "type": "number", "show_if": {"exit_rule": "sma_cross"},
+    "label": "決済SMA短期", "type": "number", "show_if": {"exit_rule": ["sma_cross", "both"]},
     "help": "決済条件=SMAクロスのときの短期SMAの本数",
 }
 UNIVERSAL_META["exit_sma_slow"] = {
-    "label": "決済SMA長期", "type": "number", "show_if": {"exit_rule": "sma_cross"},
+    "label": "決済SMA長期", "type": "number", "show_if": {"exit_rule": ["sma_cross", "both"]},
     "help": "決済条件=SMAクロスのときの長期SMAの本数",
 }
 

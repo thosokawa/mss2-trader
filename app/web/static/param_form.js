@@ -83,7 +83,7 @@ const ParamForm = (() => {
 
         const wrap = document.createElement("label");
         wrap.className = "pf-field" + (m.wide ? " pf-wide" : "");
-        // show_if: {他のキー: 値} のときだけ表示（例: 決済SMAの期間は 決済条件=SMAクロス のときだけ）
+        // show_if: {他のキー: 値 or [値, ...]} のときだけ表示（例: 決済SMAの期間は 決済条件=SMAクロス/両方 のときだけ）
         if (m.show_if) wrap.dataset.showIf = JSON.stringify(m.show_if);
         wrap.textContent = (m.label ? `${m.label} ` : "") + `(${key})`;
         if (m.help) wrap.title = m.help;
@@ -133,7 +133,8 @@ const ParamForm = (() => {
         const cond = JSON.parse(wrap.dataset.showIf);
         const ok = Object.entries(cond).every(([k, v]) => {
           const el = containerEl.querySelector(`[data-key="${k}"]`);
-          return !el || String(el.value) === String(v);
+          if (!el) return true;
+          return Array.isArray(v) ? v.map(String).includes(String(el.value)) : String(el.value) === String(v);
         });
         wrap.hidden = !ok;
       });

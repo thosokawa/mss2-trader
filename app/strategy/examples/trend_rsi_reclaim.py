@@ -19,6 +19,11 @@
 - min_pullback（押し目の最低の深さ）: 直近12本の RSI が 買いライン−この値 以下（売りは 売りライン＋この値
   以上）まで行ってからの回復・割れだけで建てる。0 なら従来どおり（ラインを跨げば建てる）。
 
+損切り条件（2026-10-02）:
+- exit_on_rsi_fail（RSIの出戻り失敗で損切り）: 買建は RSI が買いラインを再び下抜けたら、売建は売りラインを
+  再び上抜けたら手仕舞う（エントリーの根拠が崩れた）。Signal.is_stop なので、決済条件が SMAクロス でも効く。
+  損切り%・利確%・大引け手仕舞い・決済条件とは同時に使え、どれかに当たった時点で手仕舞う。
+
 決済は既定で反対側のシグナル（トレンド反転＋RSI のライン割れ/回復）。全戦略共通の「決済条件」を
 SMAクロス にすると SMA のクロスで手仕舞う（app/strategy/base.py の Strategy.decide）。
 """
@@ -40,6 +45,7 @@ class TrendRsiReclaim(Strategy):
         "rsi_sell_level": 60.0,
         "gap_filter": False,
         "min_pullback": 0.0,
+        "exit_on_rsi_fail": False,
         "qty": 100,
     }
     param_meta = {
@@ -61,6 +67,11 @@ class TrendRsiReclaim(Strategy):
             "help": "直近12本の RSI が 買いライン−この値 以下（売りは 売りライン＋この値 以上）まで"
                     "行ってからの回復・割れだけで建てる。例 4 なら買いは RSI 36 以下まで押してから 40 回復。"
                     "0 で制限なし",
+        },
+        "exit_on_rsi_fail": {
+            "label": "RSIの出戻り失敗で損切り", "type": "bool",
+            "help": "ON: 買建は RSI が買いラインを再び下抜けたら、売建は売りラインを再び上抜けたら手仕舞う。"
+                    "損切り%・決済条件（SMAクロスでも）と同時に効き、早く当たった方で手仕舞う",
         },
         "qty": {"label": "株数", "help": "1回のエントリーで売買する株数"},
     }
@@ -94,6 +105,14 @@ class TrendRsiReclaim(Strategy):
         up_reason = f"上昇({tag}) RSI {r_prev:.0f}→{r_now:.0f} が{buy_lv:.0f}回復"
         down_reason = f"下降({tag}) RSI {r_prev:.0f}→{r_now:.0f} が{sell_lv:.0f}割れ"
         pos = ctx.position
+
+        # 損切り: RSI の出戻り失敗（建てた根拠のラインを逆に抜け直した）
+        if self._truthy_param("exit_on_rsi_fail"):
+            move = f"RSI出戻り失敗 {r_prev:.0f}→{r_now:.0f}"
+            if pos.is_long and r_prev >= buy_lv > r_now:
+                return Signal("EXIT", reason=f"{move} が{buy_lv:.0f}を再び割れ", is_stop=True)
+            if pos.is_short and r_prev <= sell_lv < r_now:
+                return Signal("EXIT", reason=f"{move} が{sell_lv:.0f}を再び超え", is_stop=True)
 
         # エントリーの絞り込み（手仕舞いには使わない）
         can_buy = can_short = True

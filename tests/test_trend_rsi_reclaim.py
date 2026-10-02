@@ -96,3 +96,32 @@ def test_min_pullback_requires_deeper_rsi_dip():
     assert _sig(BUY_CLOSES, {"min_pullback": enough}).side == "BUY"
     assert _sig(BUY_CLOSES, {"min_pullback": too_deep}) is None
     assert _sig(BUY_CLOSES, {"min_pullback": 0}).side == "BUY"
+
+
+def test_rsi_fail_stop_exits_when_rsi_crosses_back():
+    """RSIの出戻り失敗で損切り: 買建は RSI が買いラインを再び下抜けたら、売建は売りラインを再び上抜けたら。"""
+    import app.strategy.indicators as ind
+
+    # 買い（40 回復）の後、また下げて RSI が 40 を割る足を探す
+    after = BUY_CLOSES + [BUY_CLOSES[-1] - 3.0 * k for k in range(1, 6)]
+    r = ind.rsi(pd.Series(after, dtype=float), 14)
+    k = next(i for i in range(len(BUY_CLOSES), len(after)) if r.iloc[i - 1] >= 40 > r.iloc[i])
+    pos = Position(qty=100, avg_price=BUY_CLOSES[-1])
+    sig = _sig(after[: k + 1], {"exit_on_rsi_fail": True}, position=pos)
+    assert sig is not None and sig.side == "EXIT" and sig.is_stop and "出戻り失敗" in sig.reason
+    off = _sig(after[: k + 1], {}, position=pos)
+    assert off is None or not off.is_stop  # 既定（OFF）では損切りとしては出ない
+    # 決済条件=SMAクロスでも効く（decide 経由。この足で SMA の手仕舞いが先に当たらないよう SMA 側は止める）
+    st = TrendRsiReclaim({"exit_on_rsi_fail": True, "exit_rule": "sma_cross"})
+    st._sma_cross_exit = lambda ctx: None
+    b = _bars(after[: k + 1])
+    got = st.decide(Context(symbol="X", now=b.index[-1].to_pydatetime(), bars=b, position=pos))
+    assert got is not None and got.is_stop
+
+    # 売り（60 割れ）の後に戻して RSI が 60 を超える
+    after_s = SELL_CLOSES + [SELL_CLOSES[-1] + 3.0 * k for k in range(1, 6)]
+    rs = ind.rsi(pd.Series(after_s, dtype=float), 14)
+    k2 = next(i for i in range(len(SELL_CLOSES), len(after_s)) if rs.iloc[i - 1] <= 60 < rs.iloc[i])
+    sig = _sig(after_s[: k2 + 1], {"exit_on_rsi_fail": True, "direction": "both"},
+               position=Position(qty=-100, avg_price=SELL_CLOSES[-1]))
+    assert sig is not None and sig.side == "EXIT" and sig.is_stop
