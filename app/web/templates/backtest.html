@@ -4,6 +4,7 @@
 {% block content %}
 {{ backtest_tabs() }}
 <h2>バックテスト</h2>
+{% if from_strategy %}<p class="muted"><small>自動売買の戦略 <a href="/strategies/{{ from_strategy.id }}">{{ from_strategy.name }}</a> と同じロジック・足・パラメータを読み込みました。{% if strategy_codes | length > 1 %}この戦略の対象銘柄は {{ strategy_codes | join('・') }} です（銘柄は上で切り替えられます）。{% endif %}変えたい所を直して「実行」してください。</small></p>{% endif %}
 {% if rerun_of %}<p class="muted"><small><a href="/backtests/{{ rerun_of }}">バックテスト #{{ rerun_of }}</a> の設定を読み込みました。変えたい所を直して「実行」してください（結果は新しい番号で保存されます）。</small></p>{% endif %}
 <article>
   <form method="post" action="/backtest">

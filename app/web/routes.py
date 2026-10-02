@@ -363,17 +363,27 @@ def live_redirect():
 
 
 @router.get("/backtest", response_class=HTMLResponse)
-def backtest_form(request: Request, run: int | None = None, s: Session = Depends(get_session)):
-    """バックテストの入力画面。?run=履歴の番号 なら、その回の戦略・銘柄・足・パラメータを入れた状態で開く
-    （履歴から設定を少し変えて再テストするため）。"""
-    symbols = s.exec(select(Symbol).order_by(Symbol.code)).all()
+def backtest_form(request: Request, run: int | None = None, strategy: int | None = None, code: str = "",
+                  s: Session = Depends(get_session)):
+    """バックテストの入力画面。入れた状態で開ける:
+    - ?run=履歴の番号 … その回の戦略・銘柄・足・パラメータ（履歴から設定を少し変えて再テスト）
+    - ?strategy=自動売買の戦略の番号[&code=銘柄] … その戦略と同じロジック・足・パラメータ（銘柄は code、
+      無ければ戦略の最初の対象銘柄）
+    """
     src = s.get(BacktestRun, run) if run else None
+    st = _get_strategy(s, strategy) if strategy else None
+    st_codes = symbols.parse_codes(st.symbols) if st else []
+    symbol_rows = s.exec(select(Symbol).order_by(Symbol.code)).all()
     extra = {"class_path": None}
     if src:
         extra = dict(class_path=src.class_path, selected=src.symbol_code, selected_timeframe=src.timeframe,
                      params_json=src.params_json, rerun_of=src.id)
+    elif st:
+        extra = dict(class_path=st.class_path, selected=code or (st_codes[0] if st_codes else ""),
+                     selected_timeframe=st.timeframe, params_json=st.params_json, from_strategy=st,
+                     strategy_codes=st_codes)
     return templates.TemplateResponse(
-        request, "backtest.html", _ctx(request, symbols=symbols, result=None, **extra)
+        request, "backtest.html", _ctx(request, symbols=symbol_rows, result=None, **extra)
     )
 
 

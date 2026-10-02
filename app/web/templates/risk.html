@@ -86,6 +86,7 @@
               {% if not st.enabled and st.mode == 'live' %}onclick="return confirm('実発注モードの戦略を有効にします。発注許可が ON なら実際に発注されます。よろしいですか？')"{% endif %}>
               {{ '停止' if st.enabled else '有効化' }}</button>
           </form>
+          <a href="/backtest?strategy={{ st.id }}" role="button" class="outline small" title="この戦略と同じ設定でバックテスト">バックテスト</a>
           <a href="/strategies/{{ st.id }}/edit" role="button" class="outline small">編集</a>
         </td>
       </tr>

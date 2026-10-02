@@ -887,3 +887,32 @@ def test_backtest_of_removed_logic_still_opens(client):
     assert f'href="/backtest?run={rid}"' not in r.text
     assert f'href="/backtest?run={rid}"' not in client.get("/backtests").text
     assert client.get(f"/api/chart/backtest/{rid}").status_code == 200
+
+
+def test_backtest_link_from_trading_strategy(client):
+    """自動売買の戦略と同じロジック・足・パラメータでバックテスト画面を開ける（?strategy=番号）。"""
+    import json
+
+    from sqlmodel import Session
+
+    from app.db import engine
+    from app.models import Strategy, Symbol
+
+    cp = "app.strategy.examples.trend_rsi_reclaim:TrendRsiReclaim"
+    with Session(engine) as s:
+        for code in ("5801", "5016"):
+            if not s.get(Symbol, code):
+                s.add(Symbol(code=code))
+        st = Strategy(name="BTリンク確認", class_path=cp, symbols="5801,5016", timeframe="15m", mode="paper",
+                      params_json=json.dumps({"rsi_period": 8, "stop_loss_pct": 0.5}))
+        s.add(st)
+        s.commit()
+        sid = st.id
+    assert f'href="/backtest?strategy={sid}"' in client.get("/risk").text
+    assert f'href="/backtest?strategy={sid}"' in client.get(f"/strategies/{sid}").text
+    html = client.get(f"/backtest?strategy={sid}").text
+    assert "BTリンク確認</a> と同じロジック・足・パラメータを読み込みました" in html and "5801・5016" in html
+    assert f'<option value="{cp}" selected>' in html and "<option selected>15m</option>" in html
+    assert '<option value="5801" selected>' in html
+    assert "rsi_period&#34;: 8" in html or '"rsi_period": 8' in html
+    assert '<option value="5016" selected>' in client.get(f"/backtest?strategy={sid}&code=5016").text

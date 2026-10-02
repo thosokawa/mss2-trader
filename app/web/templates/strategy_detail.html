@@ -18,6 +18,7 @@
         {% if not st.enabled and st.mode == 'live' %}onclick="return confirm('実発注モードの戦略を有効にします。発注許可が ON なら実際に発注されます。よろしいですか？')"{% endif %}>
         {{ '停止する' if st.enabled else '有効にする' }}</button>
     </form>
+    <a href="/backtest?strategy={{ st.id }}" role="button" class="outline" title="この戦略と同じ設定でバックテスト">バックテスト</a>
     <a href="/strategies/{{ st.id }}/edit" role="button">編集</a>
     <form method="post" action="/strategies/{{ st.id }}/delete" class="inline"
           onsubmit="return confirm('この戦略を削除しますか？（シグナル・発注の記録は残ります）')">
